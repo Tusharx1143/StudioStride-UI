@@ -1,0 +1,134 @@
+@import "tailwindcss";
+
+@theme {
+  --color-volt: #F4E409;
+  --color-volt-press: #CFC207;
+  --color-volt-dim: rgba(244,228,9,0.16);
+  --color-ink: #000000;
+  --color-surface: #101010;
+  --color-surface-raised: #1A1A1A;
+  --color-hairline: rgba(255,255,255,0.08);
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #9E9E9E;
+  --color-text-tertiary: #6B6B6B;
+  --color-scrim: rgba(0,0,0,0.45);
+  --color-danger: #FF4D3D;
+
+  --font-display: "Archivo", sans-serif;
+  --font-ui: "Inter", sans-serif;
+
+  --spacing-screen-gutter: 20px;
+  --spacing-section-v-rhythm: 32px;
+  --spacing-card-stack-gap: 12px;
+  --spacing-safe: env(safe-area-inset-bottom);
+
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-text-primary);
+    font-family: var(--font-ui);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Custom Typography Utilities */
+@utility text-wordmark {
+  font-family: var(--font-display);
+  font-size: 64px;
+  font-weight: 800;
+  line-height: 60px;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+  font-stretch: 125%; /* To mimic expanded */
+}
+
+@utility text-metric-xl {
+  font-family: var(--font-display);
+  font-size: 88px;
+  font-weight: 800;
+  line-height: 84px;
+  letter-spacing: -0.04em;
+}
+
+@utility text-metric-lg {
+  font-family: var(--font-display);
+  font-size: 48px;
+  font-weight: 800;
+  line-height: 48px;
+  letter-spacing: -0.03em;
+}
+
+@utility text-metric-md {
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 42px;
+  letter-spacing: -0.02em;
+}
+
+@utility text-screen-title {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 34px;
+  letter-spacing: -0.02em;
+}
+
+@utility text-section-header {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+}
+
+@utility text-body {
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+@utility text-stat-value {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+@utility text-label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0.01em;
+}
+
+@utility text-tool-caption {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+  letter-spacing: 0.02em;
+}
+
+@utility hairline-border {
+  border-width: 1px;
+  border-color: var(--color-hairline);
+}
+
+@utility hairline-border-t {
+  border-top-width: 1px;
+  border-color: var(--color-hairline);
+}
+
+@utility hairline-border-b {
+  border-bottom-width: 1px;
+  border-color: var(--color-hairline);
+}
+
+@utility hairline-border-y {
+  border-top-width: 1px;
+  border-bottom-width: 1px;
+  border-color: var(--color-hairline);
+}

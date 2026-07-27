@@ -1,0 +1,6 @@
+{
+  "name": "Stride Studio",
+  "description": "Strava activity story editor with interactive Snapchat-like workout lens camera and templates.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
