@@ -5,933 +5,2394 @@ import {
   Type,
   PenTool,
   StickyNote,
-  Music,
-  PlusCircle,
   Download,
   Send,
   Undo,
-  Trash2,
-  Check,
-  Camera,
-  Image as ImageIcon,
+  Redo,
   Sparkles,
-  Smile,
-  Sliders,
+  Crop,
+  Info,
+  Check,
+  Trash2,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Maximize2,
+  Search,
+  Award,
   Flame,
-  Activity,
-  ChevronRight,
-  Share2,
-  CheckCircle2,
-  Volume2,
-  FolderKanban,
-  Wand2,
-  Palette,
+  MapPin,
+  Smile,
+  RotateCw,
+  RotateCcw,
+  FlipHorizontal,
+  FlipVertical,
+  RefreshCw,
+  Eraser,
+  Highlighter,
+  Layers,
   Eye,
+  EyeOff,
   Lock,
   Unlock,
+  ArrowUp,
+  ArrowDown,
   Copy,
-  Layers,
-  RotateCw,
-  Search,
-  Heart,
-  SlidersHorizontal,
-  ChevronDown,
-  Maximize2
+  Plus,
+  Image as ImageIcon
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LENS_TEMPLATES_EXPANDED, ALL_METRICS, STOCK_PHOTOS } from "../data/mockData";
-import { EditableLensElement, LensTemplate, MetricOption } from "../types";
+import { STOCK_PHOTOS } from "../data/mockData";
+import GestureSwipeCarousel from "./GestureSwipeCarousel";
+import ExportModal from "./ExportModal";
 
-// Quick Style Presets
-const STYLE_PRESETS = [
-  { id: "p_minimal", name: "Minimal", color: "#FFFFFF", bgFill: "#000000", opacity: 0.6, font: "Plus Jakarta Sans" },
-  { id: "p_neon", name: "Volt Neon", color: "#F4E409", bgFill: "#101010", opacity: 0.9, font: "Space Grotesk" },
-  { id: "p_strava", name: "Strava Orange", color: "#FFFFFF", bgFill: "#FC4C02", opacity: 0.95, font: "Plus Jakarta Sans" },
-  { id: "p_cyber", name: "Cyber HUD", color: "#22D3EE", bgFill: "#0f172a", opacity: 0.9, font: "Courier New" },
-  { id: "p_gold", name: "PR Champion", color: "#18181B", bgFill: "#FACC15", opacity: 0.95, font: "Plus Jakarta Sans" },
-  { id: "p_vintage", name: "Vintage Film", color: "#18181B", bgFill: "#FEF3C7", opacity: 0.9, font: "Playfair Display" },
+// Text Overlay item model
+interface TextOverlay {
+  id: string;
+  text: string;
+  x: number; // relative position in px or offset
+  y: number;
+  color: string;
+  fontStyle: "Classic" | "Modern" | "Bold" | "Neon" | "Serif" | "Typewriter";
+  bgStyle: "none" | "solid" | "semi" | "outline";
+  align: "left" | "center" | "right";
+  fontSize: number; // in px
+  rotation?: number; // in degrees
+  scale?: number; // scale multiplier
+  hidden?: boolean;
+  locked?: boolean;
+  zIndex?: number;
+}
+
+// Sticker Overlay item model
+interface StickerOverlay {
+  id: string;
+  content: string; // Emoji, SVG badge text, or image URL
+  type: "emoji" | "badge" | "metric" | "location";
+  scale: number;
+  rotation: number;
+  x: number;
+  y: number;
+  bgGradient?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  zIndex?: number;
+}
+
+// Pre-defined Sticker Item interface
+interface StickerItem {
+  id: string;
+  content: string;
+  label: string;
+  category: "Badges" | "Emojis" | "Metrics" | "Locations";
+  type: "emoji" | "badge" | "metric" | "location";
+  bgGradient?: string;
+}
+
+const STICKER_LIBRARY: StickerItem[] = [
+  // Badges & Milestones
+  { id: "st_1", content: "PR 5K 🏆", label: "PR 5K", category: "Badges", type: "badge", bgGradient: "from-amber-500 to-yellow-400" },
+  { id: "st_2", content: "BEAST MODE 🔥", label: "Beast Mode", category: "Badges", type: "badge", bgGradient: "from-orange-600 to-red-500" },
+  { id: "st_3", content: "10K CLUB 🏅", label: "10K Club", category: "Badges", type: "badge", bgGradient: "from-emerald-500 to-teal-400" },
+  { id: "st_4", content: "NO PAIN NO GAIN 💪", label: "No Pain No Gain", category: "Badges", type: "badge", bgGradient: "from-purple-600 to-indigo-500" },
+  { id: "st_5", content: "RUNNER'S HIGH ⚡", label: "Runner's High", category: "Badges", type: "badge", bgGradient: "from-cyan-500 to-blue-600" },
+  { id: "st_6", content: "STRAVA VERIFIED ✔️", label: "Verified", category: "Badges", type: "badge", bgGradient: "from-orange-500 to-amber-500" },
+  { id: "st_7", content: "FINISHER 2026 🥇", label: "Finisher", category: "Badges", type: "badge", bgGradient: "from-yellow-400 to-amber-600" },
+
+  // Metrics
+  { id: "st_m1", content: "🏃 8.42 KM", label: "8.42 KM", category: "Metrics", type: "metric", bgGradient: "from-volt to-lime-400 text-ink" },
+  { id: "st_m2", content: "⏱️ 5:12 /KM PACE", label: "5:12 Pace", category: "Metrics", type: "metric", bgGradient: "from-sky-500 to-blue-600" },
+  { id: "st_m3", content: "❤️ 154 BPM", label: "154 BPM", category: "Metrics", type: "metric", bgGradient: "from-rose-500 to-pink-600" },
+  { id: "st_m4", content: "🔥 640 KCAL", label: "640 Kcal", category: "Metrics", type: "metric", bgGradient: "from-amber-500 to-orange-600" },
+  { id: "st_m5", content: "⛰️ +142M ELEVATION", label: "+142m Elev", category: "Metrics", type: "metric", bgGradient: "from-emerald-600 to-teal-500" },
+  { id: "st_m6", content: "🕒 05:30 AM DAWN", label: "Dawn Miles", category: "Metrics", type: "metric", bgGradient: "from-indigo-600 to-purple-600" },
+
+  // Locations
+  { id: "st_l1", content: "📍 CENTRAL PARK 🌲", label: "Central Park", category: "Locations", type: "location", bgGradient: "from-emerald-600 to-green-500" },
+  { id: "st_l2", content: "🏙️ SEOUL TRAIL", label: "Seoul Trail", category: "Locations", type: "location", bgGradient: "from-indigo-600 to-blue-500" },
+  { id: "st_l3", content: "🌊 PACIFIC COAST ☀️", label: "Pacific Coast", category: "Locations", type: "location", bgGradient: "from-sky-400 to-cyan-500" },
+  { id: "st_l4", content: "🌉 GOLDEN GATE 🏃", label: "Golden Gate", category: "Locations", type: "location", bgGradient: "from-rose-600 to-orange-500" },
+
+  // Emojis
+  { id: "st_e1", content: "🏃‍♂️", label: "Runner M", category: "Emojis", type: "emoji" },
+  { id: "st_e2", content: "🏃‍♀️", label: "Runner F", category: "Emojis", type: "emoji" },
+  { id: "st_e3", content: "🔥", label: "Fire", category: "Emojis", type: "emoji" },
+  { id: "st_e4", content: "⚡", label: "Lightning", category: "Emojis", type: "emoji" },
+  { id: "st_e5", content: "🏅", label: "Medal", category: "Emojis", type: "emoji" },
+  { id: "st_e6", content: "🏆", label: "Trophy", category: "Emojis", type: "emoji" },
+  { id: "st_e7", content: "👟", label: "Sneaker", category: "Emojis", type: "emoji" },
+  { id: "st_e8", content: "💪", label: "Flex", category: "Emojis", type: "emoji" },
+  { id: "st_e9", content: "💯", label: "100", category: "Emojis", type: "emoji" },
+  { id: "st_e10", content: "🚀", label: "Rocket", category: "Emojis", type: "emoji" },
+  { id: "st_e11", content: "🚴‍♂️", label: "Cyclist", category: "Emojis", type: "emoji" },
+  { id: "st_e12", content: "⌚", label: "Smartwatch", category: "Emojis", type: "emoji" },
+  { id: "st_e13", content: "💧", label: "Sweat", category: "Emojis", type: "emoji" },
+  { id: "st_e14", content: "🎯", label: "Target", category: "Emojis", type: "emoji" },
+  { id: "st_e15", content: "🌟", label: "Star", category: "Emojis", type: "emoji" },
+  { id: "st_e16", content: "🍌", label: "Banana", category: "Emojis", type: "emoji" },
+  { id: "st_e17", content: "🥤", label: "Smoothie", category: "Emojis", type: "emoji" },
+  { id: "st_e18", content: "🌶️", label: "Spicy", category: "Emojis", type: "emoji" },
 ];
 
-// Color palette
+// Available Fonts
+const FONT_STYLES: { id: TextOverlay["fontStyle"]; label: string; className: string }[] = [
+  { id: "Classic", label: "Classic", className: "font-sans font-semibold tracking-normal" },
+  { id: "Modern", label: "Modern", className: "font-mono tracking-wider text-transform uppercase" },
+  { id: "Bold", label: "Bold", className: "font-black tracking-tighter uppercase font-display" },
+  { id: "Neon", label: "Neon", className: "font-sans font-extrabold tracking-wide drop-shadow-[0_0_12px_rgba(255,255,255,0.9)]" },
+  { id: "Serif", label: "Serif", className: "font-serif italic font-medium" },
+  { id: "Typewriter", label: "Typewriter", className: "font-mono font-medium tracking-tight" },
+];
+
+// Vibrant Snapchat style color palette
 const COLOR_PALETTE = [
-  "#F4E409", // Volt
-  "#FC4C02", // Strava Orange
-  "#22D3EE", // Cyber Cyan
-  "#F472B6", // Pink
-  "#34D399", // Emerald
-  "#FACC15", // Gold
-  "#FFFFFF", // White
-  "#18181B", // Dark
+  { hex: "#FFFFFF", name: "White" },
+  { hex: "#F4E409", name: "Volt Yellow" },
+  { hex: "#FF2A6D", name: "Hot Pink" },
+  { hex: "#05D9E8", name: "Cyan" },
+  { hex: "#FF9F1C", name: "Orange" },
+  { hex: "#2EC4B6", name: "Mint" },
+  { hex: "#9B5DE5", name: "Purple" },
+  { hex: "#FF4D3D", name: "Red" },
+  { hex: "#000000", name: "Black" },
 ];
 
-const FONTS = [
-  "Plus Jakarta Sans",
-  "Space Grotesk",
-  "Playfair Display",
-  "Courier New",
-  "Impact"
-];
-
-// Social Story Preview Devices
-const SOCIAL_FORMATS = [
-  { id: "ig_story", name: "Instagram Story", ratio: "9:16", frameStyle: "aspect-[9/16] rounded-[2rem]" },
-  { id: "ig_post", name: "Instagram Post", ratio: "1:1", frameStyle: "aspect-square rounded-2xl" },
-  { id: "threads", name: "Threads", ratio: "4:5", frameStyle: "aspect-[4/5] rounded-2xl" },
-  { id: "whatsapp", name: "WhatsApp Status", ratio: "9:16", frameStyle: "aspect-[9/16] rounded-[2rem]" },
+// Background Styles
+const BG_STYLES: { id: TextOverlay["bgStyle"]; label: string }[] = [
+  { id: "none", label: "Transparent" },
+  { id: "solid", label: "Solid" },
+  { id: "semi", label: "Translucent" },
+  { id: "outline", label: "Outline" },
 ];
 
 export default function EditorScreen() {
   const navigate = useNavigate();
   const location = useLocation();
+  const canvasRef = useRef<HTMLDivElement>(null);
 
-  // Initial State from Camera
-  const initialCapturedImage = location.state?.capturedImage || STOCK_PHOTOS[0].url;
-  const initialLensId = location.state?.selectedLensId || "minimal";
+  // Image source captured from camera or gallery
+  const capturedImage =
+    location.state?.capturedImage ||
+    sessionStorage.getItem("temp_captured_image") ||
+    STOCK_PHOTOS[0].url;
 
-  // Main Canvas & Image state
-  const [bgImage, setBgImage] = useState<string>(initialCapturedImage);
-  const [activeLensId, setActiveLensId] = useState<string>(initialLensId);
-
-  // Active Lens Elements
-  const initialLensObj =
-    LENS_TEMPLATES_EXPANDED.find((l) => l.id === initialLensId) || LENS_TEMPLATES_EXPANDED[0];
-
-  const [elements, setElements] = useState<EditableLensElement[]>(initialLensObj.defaultElements);
-  const [selectedElementId, setSelectedElementId] = useState<string | null>(
-    initialLensObj.defaultElements[0]?.id || null
-  );
-
-  // Bottom Sheet Context state
-  const [activeSheet, setActiveSheet] = useState<
-    "none" | "lens" | "stats" | "typography" | "color" | "presets" | "preview" | "stock"
-  >("none");
-
-  // Search filter for metric picker
-  const [metricSearchQuery, setMetricSearchQuery] = useState<string>("");
-  const [metricCategoryFilter, setMetricCategoryFilter] = useState<string>("All");
-
-  // Undo / Redo history
-  const [history, setHistory] = useState<EditableLensElement[][]>([]);
-
-  // Toast / Modals state
+  const [activeTool, setActiveTool] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [showSendModal, setShowSendModal] = useState<boolean>(false);
-  const [selectedSocialFormat, setSelectedSocialFormat] = useState<string>("ig_story");
 
-  // Selected element helper
-  const selectedElement = elements.find((e) => e.id === selectedElementId);
+  // Text Overlays state
+  const [textOverlays, setTextOverlays] = useState<TextOverlay[]>([]);
+  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
 
-  // Save history state before changes
-  const saveHistory = () => {
-    setHistory((prev) => [...prev.slice(-10), JSON.parse(JSON.stringify(elements))]);
+  // Sticker Overlays state
+  const [stickerOverlays, setStickerOverlays] = useState<StickerOverlay[]>([]);
+  const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
+
+  // Sticker Picker Modal state
+  const [isStickerModalOpen, setIsStickerModalOpen] = useState<boolean>(false);
+  const [stickerSearch, setStickerSearch] = useState<string>("");
+  const [selectedStickerCategory, setSelectedStickerCategory] = useState<string>("All");
+
+  // Export Modal state
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+
+  // Image Layer Selection, Perspective & Shadow State
+  const [isImageSelected, setIsImageSelected] = useState<boolean>(false);
+  const [imageSubTab, setImageSubTab] = useState<"crop" | "perspective" | "shadow">("crop");
+  const [imagePerspectiveX, setImagePerspectiveX] = useState<number>(0); // -45 to 45 deg
+  const [imagePerspectiveY, setImagePerspectiveY] = useState<number>(0); // -45 to 45 deg
+  const [imageShadowBlur, setImageShadowBlur] = useState<number>(0); // 0 to 50 px
+  const [imageShadowOffsetY, setImageShadowOffsetY] = useState<number>(10); // 0 to 30 px
+  const [imageShadowColor, setImageShadowColor] = useState<string>("#000000");
+
+  // Text Editor modal state
+  const [isEditingText, setIsEditingText] = useState<boolean>(false);
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [currentText, setCurrentText] = useState<string>("");
+  const [selectedFont, setSelectedFont] = useState<TextOverlay["fontStyle"]>("Bold");
+  const [selectedColor, setSelectedColor] = useState<string>("#FFFFFF");
+  const [selectedBgStyle, setSelectedBgStyle] = useState<TextOverlay["bgStyle"]>("solid");
+  const [selectedAlign, setSelectedAlign] = useState<TextOverlay["align"]>("center");
+  const [selectedFontSize, setSelectedFontSize] = useState<number>(32);
+
+  // Unified Editor Snapshot interface for full Undo/Redo history
+  interface EditorSnapshot {
+    textOverlays: TextOverlay[];
+    stickerOverlays: StickerOverlay[];
+    committedCrop: {
+      ratio: string;
+      rotation: number;
+      flipH: boolean;
+      flipV: boolean;
+    };
+    isBaseImageHidden: boolean;
+    isBaseImageLocked: boolean;
+    baseImageZIndex: number;
+    imagePerspectiveX: number;
+    imagePerspectiveY: number;
+    imageShadowBlur: number;
+    imageShadowOffsetY: number;
+    imageShadowColor: string;
+    isDrawingHidden: boolean;
+    isDrawingLocked: boolean;
+    drawingZIndex: number;
+    drawingCanvasImageData?: ImageData | null;
+    hasDrawnStrokes: boolean;
+  }
+
+  // Drawing Tool State
+  const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState<boolean>(false);
+  const [brushType, setBrushType] = useState<"pen" | "neon" | "highlighter" | "eraser">("pen");
+  const [brushColor, setBrushColor] = useState<string>("#F4E409"); // Volt Yellow
+  const [brushSize, setBrushSize] = useState<number>(8); // In px
+  const [historyStack, setHistoryStack] = useState<EditorSnapshot[]>([]);
+  const [redoHistoryStack, setRedoHistoryStack] = useState<EditorSnapshot[]>([]);
+  const [hasDrawnStrokes, setHasDrawnStrokes] = useState<boolean>(false);
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Helper to snapshot current canvas & editor state
+  const getCurrentSnapshot = (): EditorSnapshot => {
+    let drawingData: ImageData | null = null;
+    const canvas = drawingCanvasRef.current;
+    if (canvas && canvas.width > 0 && canvas.height > 0) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        try {
+          drawingData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    return {
+      textOverlays: JSON.parse(JSON.stringify(textOverlays)),
+      stickerOverlays: JSON.parse(JSON.stringify(stickerOverlays)),
+      committedCrop: { ...committedCrop },
+      isBaseImageHidden,
+      isBaseImageLocked,
+      baseImageZIndex,
+      imagePerspectiveX,
+      imagePerspectiveY,
+      imageShadowBlur,
+      imageShadowOffsetY,
+      imageShadowColor,
+      isDrawingHidden,
+      isDrawingLocked,
+      drawingZIndex,
+      drawingCanvasImageData: drawingData,
+      hasDrawnStrokes,
+    };
   };
 
-  const handleUndo = () => {
-    if (history.length > 0) {
-      const prev = history[history.length - 1];
-      setHistory((h) => h.slice(0, h.length - 1));
-      setElements(prev);
-      showToast("Action undone ↩️");
+  // Push snapshot before making any state mutation
+  const pushHistorySnapshot = () => {
+    const snapshot = getCurrentSnapshot();
+    setHistoryStack((prev) => [...prev.slice(-30), snapshot]); // Store up to 30 history states
+    setRedoHistoryStack([]); // Clear redo stack on new action
+  };
+
+  // Restore snapshot state
+  const applySnapshot = (snapshot: EditorSnapshot) => {
+    setTextOverlays(snapshot.textOverlays);
+    setStickerOverlays(snapshot.stickerOverlays);
+    setCommittedCrop(snapshot.committedCrop);
+    setIsBaseImageHidden(snapshot.isBaseImageHidden);
+    setIsBaseImageLocked(snapshot.isBaseImageLocked);
+    setBaseImageZIndex(snapshot.baseImageZIndex);
+    setImagePerspectiveX(snapshot.imagePerspectiveX ?? 0);
+    setImagePerspectiveY(snapshot.imagePerspectiveY ?? 0);
+    setImageShadowBlur(snapshot.imageShadowBlur ?? 0);
+    setImageShadowOffsetY(snapshot.imageShadowOffsetY ?? 10);
+    setImageShadowColor(snapshot.imageShadowColor ?? "#000000");
+    setIsDrawingHidden(snapshot.isDrawingHidden);
+    setIsDrawingLocked(snapshot.isDrawingLocked);
+    setDrawingZIndex(snapshot.drawingZIndex);
+    setHasDrawnStrokes(snapshot.hasDrawnStrokes);
+
+    const canvas = drawingCanvasRef.current;
+    if (canvas && canvas.width > 0 && canvas.height > 0) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (snapshot.drawingCanvasImageData) {
+          ctx.putImageData(snapshot.drawingCanvasImageData, 0, 0);
+        }
+      }
     }
+  };
+
+  // Global Undo Handler
+  const handleGlobalUndo = () => {
+    if (historyStack.length === 0) return;
+    const currentSnapshot = getCurrentSnapshot();
+    const previousSnapshot = historyStack[historyStack.length - 1];
+
+    setHistoryStack((prev) => prev.slice(0, -1));
+    setRedoHistoryStack((prev) => [...prev, currentSnapshot]);
+
+    applySnapshot(previousSnapshot);
+    showToast("Undo applied");
+  };
+
+  // Global Redo Handler
+  const handleGlobalRedo = () => {
+    if (redoHistoryStack.length === 0) return;
+    const currentSnapshot = getCurrentSnapshot();
+    const nextSnapshot = redoHistoryStack[redoHistoryStack.length - 1];
+
+    setRedoHistoryStack((prev) => prev.slice(0, -1));
+    setHistoryStack((prev) => [...prev, currentSnapshot]);
+
+    applySnapshot(nextSnapshot);
+    showToast("Redo applied");
+  };
+
+  // Crop & Orientation Tool State
+  const [cropRatio, setCropRatio] = useState<string>("free"); // "free", "9:16", "1:1", "4:5", "16:9"
+  const [cropRotation, setCropRotation] = useState<number>(0);
+  const [cropFlipH, setCropFlipH] = useState<boolean>(false);
+  const [cropFlipV, setCropFlipV] = useState<boolean>(false);
+
+  const [committedCrop, setCommittedCrop] = useState<{
+    ratio: string;
+    rotation: number;
+    flipH: boolean;
+    flipV: boolean;
+  }>({
+    ratio: "free",
+    rotation: 0,
+    flipH: false,
+    flipV: false,
+  });
+
+  // Layer Manager States
+  const [isBaseImageHidden, setIsBaseImageHidden] = useState<boolean>(false);
+  const [isBaseImageLocked, setIsBaseImageLocked] = useState<boolean>(false);
+  const [baseImageZIndex, setBaseImageZIndex] = useState<number>(0);
+
+  const [isDrawingHidden, setIsDrawingHidden] = useState<boolean>(false);
+  const [isDrawingLocked, setIsDrawingLocked] = useState<boolean>(false);
+  const [drawingZIndex, setDrawingZIndex] = useState<number>(15);
+
+  // Global Keyboard Shortcuts for Undo/Redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleGlobalRedo();
+        } else {
+          handleGlobalUndo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        handleGlobalRedo();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [historyStack, redoHistoryStack, textOverlays, stickerOverlays, committedCrop, isBaseImageHidden, isBaseImageLocked, baseImageZIndex, isDrawingHidden, isDrawingLocked, drawingZIndex, hasDrawnStrokes]);
+
+  // Get list of all active layers sorted by zIndex descending (topmost first)
+  const getAllLayers = () => {
+    const items = [
+      {
+        id: "layer_base_image",
+        type: "image" as const,
+        name: "Background Photo",
+        subtext: "Base captured photo",
+        hidden: isBaseImageHidden,
+        locked: isBaseImageLocked,
+        zIndex: baseImageZIndex,
+      },
+      ...(hasDrawnStrokes
+        ? [
+            {
+              id: "layer_draw",
+              type: "draw" as const,
+              name: "Drawn Strokes",
+              subtext: "Pen & glow brush strokes",
+              hidden: isDrawingHidden,
+              locked: isDrawingLocked,
+              zIndex: drawingZIndex,
+            },
+          ]
+        : []),
+      ...textOverlays.map((t, idx) => ({
+        id: t.id,
+        type: "text" as const,
+        name: `Text: "${t.text.length > 18 ? t.text.slice(0, 18) + "..." : t.text}"`,
+        subtext: `${t.fontStyle} • ${t.fontSize}px`,
+        hidden: !!t.hidden,
+        locked: !!t.locked,
+        zIndex: t.zIndex ?? (20 + idx),
+      })),
+      ...stickerOverlays.map((s, idx) => ({
+        id: s.id,
+        type: "sticker" as const,
+        name: `Sticker: ${s.content}`,
+        subtext: `${s.type} badge`,
+        hidden: !!s.hidden,
+        locked: !!s.locked,
+        zIndex: s.zIndex ?? (30 + idx),
+      })),
+    ];
+
+    return items.sort((a, b) => b.zIndex - a.zIndex);
+  };
+
+  // Toggle Visibility
+  const toggleLayerVisibility = (id: string, type: string) => {
+    pushHistorySnapshot();
+    if (type === "image") {
+      setIsBaseImageHidden((prev) => !prev);
+    } else if (type === "draw") {
+      setIsDrawingHidden((prev) => !prev);
+    } else if (type === "text") {
+      setTextOverlays((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, hidden: !t.hidden } : t))
+      );
+    } else if (type === "sticker") {
+      setStickerOverlays((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, hidden: !s.hidden } : s))
+      );
+    }
+  };
+
+  // Toggle Lock
+  const toggleLayerLock = (id: string, type: string) => {
+    pushHistorySnapshot();
+    if (type === "image") {
+      setIsBaseImageLocked((prev) => !prev);
+    } else if (type === "draw") {
+      setIsDrawingLocked((prev) => !prev);
+    } else if (type === "text") {
+      setTextOverlays((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, locked: !t.locked } : t))
+      );
+    } else if (type === "sticker") {
+      setStickerOverlays((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, locked: !s.locked } : s))
+      );
+    }
+  };
+
+  // Reorder Layer: Swap zIndex with target layer up/down in stack
+  const reorderLayer = (id: string, direction: "up" | "down") => {
+    const sorted = getAllLayers(); // sorted top (highest zIndex) to bottom
+    const currentIndex = sorted.findIndex((item) => item.id === id);
+    if (currentIndex === -1) return;
+
+    const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= sorted.length) return;
+
+    pushHistorySnapshot();
+
+    const currentLayer = sorted[currentIndex];
+    const targetLayer = sorted[targetIndex];
+
+    const currentZ = currentLayer.zIndex;
+    const targetZ = targetLayer.zIndex;
+
+    // Helper to update zIndex for a layer
+    const setLayerZ = (layerId: string, layerType: string, newZ: number) => {
+      if (layerType === "image") setBaseImageZIndex(newZ);
+      else if (layerType === "draw") setDrawingZIndex(newZ);
+      else if (layerType === "text") {
+        setTextOverlays((prev) =>
+          prev.map((t) => (t.id === layerId ? { ...t, zIndex: newZ } : t))
+        );
+      } else if (layerType === "sticker") {
+        setStickerOverlays((prev) =>
+          prev.map((s) => (s.id === layerId ? { ...s, zIndex: newZ } : s))
+        );
+      }
+    };
+
+    setLayerZ(currentLayer.id, currentLayer.type, targetZ);
+    setLayerZ(targetLayer.id, targetLayer.type, currentZ);
+    showToast(`Layer moved ${direction}`);
+  };
+
+  // Duplicate Layer
+  const duplicateLayer = (id: string, type: string) => {
+    pushHistorySnapshot();
+    if (type === "text") {
+      const original = textOverlays.find((t) => t.id === id);
+      if (!original) return;
+      const dup: TextOverlay = {
+        ...original,
+        id: `text_${Date.now()}`,
+        x: original.x + 20,
+        y: original.y + 20,
+        zIndex: (original.zIndex ?? 20) + 1,
+      };
+      setTextOverlays((prev) => [...prev, dup]);
+      setSelectedTextId(dup.id);
+      showToast("Text layer duplicated");
+    } else if (type === "sticker") {
+      const original = stickerOverlays.find((s) => s.id === id);
+      if (!original) return;
+      const dup: StickerOverlay = {
+        ...original,
+        id: `sticker_${Date.now()}`,
+        x: original.x + 20,
+        y: original.y + 20,
+        zIndex: (original.zIndex ?? 30) + 1,
+      };
+      setStickerOverlays((prev) => [...prev, dup]);
+      setSelectedStickerId(dup.id);
+      showToast("Sticker layer duplicated");
+    }
+  };
+
+  // Delete Layer
+  const deleteLayerItem = (id: string, type: string) => {
+    if (type === "text") {
+      handleDeleteText(id);
+    } else if (type === "sticker") {
+      handleDeleteSticker(id);
+    } else if (type === "draw") {
+      handleClearDraw();
+      showToast("Drawing layer cleared");
+    } else if (type === "image") {
+      showToast("Cannot delete base image");
+    }
+  };
+
+  // Select Layer
+  const handleSelectLayer = (id: string, type: string) => {
+    if (type === "text") {
+      setSelectedTextId(id);
+      setSelectedStickerId(null);
+    } else if (type === "sticker") {
+      setSelectedStickerId(id);
+      setSelectedTextId(null);
+    } else if (type === "draw") {
+      setActiveTool("draw");
+    } else if (type === "image") {
+      setActiveTool("crop");
+    }
+  };
+
+  // Resize listener for drawing canvas
+  useEffect(() => {
+    const canvas = drawingCanvasRef.current;
+    if (!canvas) return;
+
+    const updateCanvasSize = () => {
+      const parent = canvas.parentElement;
+      if (!parent) return;
+
+      const ctx = canvas.getContext("2d");
+      let tempImageData: ImageData | null = null;
+      if (ctx && canvas.width > 0 && canvas.height > 0) {
+        try {
+          tempImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        } catch {
+          // ignore
+        }
+      }
+
+      canvas.width = parent.clientWidth;
+      canvas.height = parent.clientHeight;
+
+      if (ctx && tempImageData) {
+        ctx.putImageData(tempImageData, 0, 0);
+      }
+    };
+
+    updateCanvasSize();
+    window.addEventListener("resize", updateCanvasSize);
+    return () => window.removeEventListener("resize", updateCanvasSize);
+  }, []);
+
+  // Save current canvas state to undo stack
+  const saveCanvasState = () => {
+    pushHistorySnapshot();
+    setHasDrawnStrokes(true);
+  };
+
+  // Apply current brush settings to 2D context
+  const applyBrushStyle = (ctx: CanvasRenderingContext2D) => {
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = brushSize;
+
+    if (brushType === "eraser") {
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.strokeStyle = "rgba(0,0,0,1)";
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = "transparent";
+      ctx.globalAlpha = 1.0;
+    } else if (brushType === "neon") {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.strokeStyle = "#FFFFFF"; // bright white center
+      ctx.shadowColor = brushColor;
+      ctx.shadowBlur = brushSize * 2.5;
+      ctx.globalAlpha = 1.0;
+    } else if (brushType === "highlighter") {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.strokeStyle = brushColor;
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = "transparent";
+      ctx.globalAlpha = 0.45;
+    } else {
+      // Standard pen
+      ctx.globalCompositeOperation = "source-over";
+      ctx.strokeStyle = brushColor;
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = "transparent";
+      ctx.globalAlpha = 1.0;
+    }
+  };
+
+  // Start stroke
+  const startDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (activeTool !== "draw" || isDrawingLocked || isDrawingHidden) return;
+    const canvas = drawingCanvasRef.current;
+    if (!canvas) return;
+
+    pushHistorySnapshot();
+    setIsDrawing(true);
+    setHasDrawnStrokes(true);
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    lastPointRef.current = { x, y };
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + 0.1, y + 0.1);
+    applyBrushStyle(ctx);
+    ctx.stroke();
+  };
+
+  // Draw stroke
+  const draw = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || activeTool !== "draw") return;
+    const canvas = drawingCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (lastPointRef.current) {
+      ctx.beginPath();
+      ctx.moveTo(lastPointRef.current.x, lastPointRef.current.y);
+      ctx.lineTo(x, y);
+      applyBrushStyle(ctx);
+      ctx.stroke();
+    }
+
+    lastPointRef.current = { x, y };
+  };
+
+  // Stop stroke
+  const stopDrawing = () => {
+    setIsDrawing(false);
+    lastPointRef.current = null;
+  };
+
+  // Clear draw canvas
+  const handleClearDraw = () => {
+    const canvas = drawingCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    pushHistorySnapshot();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasDrawnStrokes(false);
+    showToast("Drawing cleared");
   };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 2200);
-  };
-
-  // Switch Lens Template
-  const handleSwitchLens = (lens: LensTemplate) => {
-    saveHistory();
-    setActiveLensId(lens.id);
-    setElements(JSON.parse(JSON.stringify(lens.defaultElements)));
-    if (lens.defaultElements.length > 0) {
-      setSelectedElementId(lens.defaultElements[0].id);
-    }
-    showToast(`Applied ${lens.name} Lens ✨`);
-  };
-
-  // Drag element on Canvas
-  const handleDragElement = (id: string, deltaXPercent: number, deltaYPercent: number) => {
-    setElements((prev) =>
-      prev.map((el) => {
-        if (el.id === id && !el.isLocked) {
-          const newX = Math.max(0, Math.min(80, el.x + deltaXPercent));
-          const newY = Math.max(0, Math.min(85, el.y + deltaYPercent));
-          return { ...el, x: newX, y: newY };
-        }
-        return el;
-      })
-    );
-  };
-
-  // Dynamic Metric Binding Handler
-  const handleBindMetric = (metric: MetricOption) => {
-    if (!selectedElementId) return;
-    saveHistory();
-    setElements((prev) =>
-      prev.map((el) => {
-        if (el.id === selectedElementId) {
-          return {
-            ...el,
-            metricId: metric.id,
-            content: `${metric.label}: ${metric.value} ${metric.unit}`,
-          };
-        }
-        return el;
-      })
-    );
-    setActiveSheet("none");
-    showToast(`Bound to ${metric.label}! ⚡`);
-  };
-
-  // AI Auto Layout: automatically recalculates element positions
-  const handleAIAutoLayout = () => {
-    saveHistory();
-    setElements((prev) =>
-      prev.map((el, idx) => ({
-        ...el,
-        x: 10,
-        y: 20 + idx * 18,
-        textAlign: "left",
-        fontSize: idx === 0 ? 42 : 20,
-      }))
-    );
-    showToast("AI Auto Layout Applied! 🪄");
-  };
-
-  // Smart Color Extraction from Background Image
-  const handleSmartColorExtract = () => {
-    saveHistory();
-    setElements((prev) =>
-      prev.map((el) => ({
-        ...el,
-        color: "#F4E409",
-        bgFill: "#101010",
-        bgOpacity: 0.85,
-      }))
-    );
-    showToast("Extracted Volt & Slate Palette 🌈");
-  };
-
-  // Apply Quick Style Preset
-  const handleApplyPreset = (preset: typeof STYLE_PRESETS[0]) => {
-    saveHistory();
-    setElements((prev) =>
-      prev.map((el) => ({
-        ...el,
-        color: preset.color,
-        bgFill: preset.bgFill,
-        bgOpacity: preset.opacity,
-        fontFamily: preset.font,
-      }))
-    );
-    showToast(`Style: ${preset.name} Applied 🎨`);
-  };
-
-  // Duplicate Element
-  const handleDuplicateElement = () => {
-    if (!selectedElement) return;
-    saveHistory();
-    const newEl: EditableLensElement = {
-      ...JSON.parse(JSON.stringify(selectedElement)),
-      id: "el_" + Date.now(),
-      x: Math.min(80, selectedElement.x + 5),
-      y: Math.min(85, selectedElement.y + 5),
-    };
-    setElements((prev) => [...prev, newEl]);
-    setSelectedElementId(newEl.id);
-    showToast("Element Duplicated 👯");
-  };
-
-  // Delete Element
-  const handleDeleteElement = () => {
-    if (!selectedElementId) return;
-    saveHistory();
-    setElements((prev) => prev.filter((el) => el.id !== selectedElementId));
-    setSelectedElementId(null);
-    showToast("Element Removed 🗑️");
-  };
-
-  // Add New Custom Text/Metric Box
-  const handleAddNewElement = () => {
-    saveHistory();
-    const newEl: EditableLensElement = {
-      id: "el_" + Date.now(),
-      type: "text",
-      content: "Custom Stride Stat ⚡",
-      x: 20,
-      y: 50,
-      fontSize: 24,
-      fontFamily: "Plus Jakarta Sans",
-      fontWeight: "800",
-      fontStyle: "normal",
-      textAlign: "left",
-      color: "#F4E409",
-      bgFill: "#000000",
-      bgOpacity: 0.7,
-      borderRadius: 12,
-    };
-    setElements((prev) => [...prev, newEl]);
-    setSelectedElementId(newEl.id);
-    showToast("Added New Element ➕");
-  };
-
-  // Save Project to Projects screen
-  const handleSaveProject = () => {
-    const existing = localStorage.getItem("stride_projects");
-    const list = existing ? JSON.parse(existing) : [];
-
-    const projectId = location.state?.projectId || "proj_" + Date.now();
-    const projectTitle =
-      location.state?.title ||
-      "Snap Story " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-    const newProject = {
-      id: projectId,
-      title: projectTitle,
-      activityType: "Running",
-      date: "Just now",
-      bgImage: bgImage,
-      lensId: activeLensId,
-      elements: elements,
-      distance: "8.42 km",
-      pace: "6:12 /km",
-      time: "52:18",
-      updatedAt: "Just now",
-      placedTextsCount: elements.length,
-    };
-
-    const filtered = list.filter((p: any) => p.id !== projectId);
-    localStorage.setItem("stride_projects", JSON.stringify([newProject, ...filtered]));
-
-    showToast("Saved to My Projects! 📁");
     setTimeout(() => {
-      navigate("/projects");
-    }, 900);
+      setToastMessage(null);
+    }, 2000);
+  };
+
+  // Add Sticker to canvas
+  const handleAddSticker = (item: StickerItem) => {
+    pushHistorySnapshot();
+    const newSticker: StickerOverlay = {
+      id: `sticker_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      content: item.content,
+      type: item.type,
+      scale: 1.0,
+      rotation: 0,
+      x: 0,
+      y: 0,
+      bgGradient: item.bgGradient,
+    };
+    setStickerOverlays((prev) => [...prev, newSticker]);
+    setSelectedStickerId(newSticker.id);
+    setSelectedTextId(null);
+    setIsStickerModalOpen(false);
+    showToast(`Added ${item.label}`);
+  };
+
+  // Delete Sticker
+  const handleDeleteSticker = (id: string) => {
+    pushHistorySnapshot();
+    setStickerOverlays((prev) => prev.filter((s) => s.id !== id));
+    if (selectedStickerId === id) {
+      setSelectedStickerId(null);
+    }
+    showToast("Sticker removed");
+  };
+
+  // Open Text Editor for creating new text or editing existing text
+  const openTextEditor = (existingOverlay?: TextOverlay) => {
+    if (existingOverlay) {
+      setEditingTextId(existingOverlay.id);
+      setCurrentText(existingOverlay.text);
+      setSelectedFont(existingOverlay.fontStyle);
+      setSelectedColor(existingOverlay.color);
+      setSelectedBgStyle(existingOverlay.bgStyle);
+      setSelectedAlign(existingOverlay.align);
+      setSelectedFontSize(existingOverlay.fontSize);
+    } else {
+      setEditingTextId(null);
+      setCurrentText("");
+      setSelectedFont("Bold");
+      setSelectedColor("#FFFFFF");
+      setSelectedBgStyle("solid");
+      setSelectedAlign("center");
+      setSelectedFontSize(32);
+    }
+    setIsEditingText(true);
+    setActiveTool("text");
+  };
+
+  // Save text overlay
+  const handleSaveText = () => {
+    pushHistorySnapshot();
+    if (!currentText.trim()) {
+      // If text is empty, remove existing if editing, or cancel
+      if (editingTextId) {
+        setTextOverlays((prev) => prev.filter((item) => item.id !== editingTextId));
+        showToast("Text removed");
+      }
+      setIsEditingText(false);
+      return;
+    }
+
+    if (editingTextId) {
+      // Update existing
+      setTextOverlays((prev) =>
+        prev.map((item) =>
+          item.id === editingTextId
+            ? {
+                ...item,
+                text: currentText,
+                fontStyle: selectedFont,
+                color: selectedColor,
+                bgStyle: selectedBgStyle,
+                align: selectedAlign,
+                fontSize: selectedFontSize,
+              }
+            : item
+        )
+      );
+      showToast("Text updated");
+    } else {
+      // Create new text overlay centered
+      const newOverlay: TextOverlay = {
+        id: `text_${Date.now()}`,
+        text: currentText,
+        x: 0,
+        y: 0,
+        color: selectedColor,
+        fontStyle: selectedFont,
+        bgStyle: selectedBgStyle,
+        align: selectedAlign,
+        fontSize: selectedFontSize,
+      };
+      setTextOverlays((prev) => [...prev, newOverlay]);
+      setSelectedTextId(newOverlay.id);
+      showToast("Text added");
+    }
+
+    setIsEditingText(false);
+  };
+
+  // Delete text overlay
+  const handleDeleteText = (id: string) => {
+    pushHistorySnapshot();
+    setTextOverlays((prev) => prev.filter((item) => item.id !== id));
+    if (editingTextId === id) {
+      setIsEditingText(false);
+    }
+    if (selectedTextId === id) {
+      setSelectedTextId(null);
+    }
+    showToast("Text deleted");
+  };
+
+  // Floating toolbar tools list (only implemented features)
+  const tools = [
+    { id: "layers", label: "Layers", icon: Layers },
+    { id: "text", label: "Text", icon: Type },
+    { id: "draw", label: "Draw", icon: PenTool },
+    { id: "stickers", label: "Stickers", icon: StickyNote },
+    { id: "crop", label: "Crop", icon: Crop },
+  ];
+
+  const handleToolClick = (toolId: string) => {
+    if (toolId === "layers") {
+      setActiveTool(activeTool === "layers" ? null : "layers");
+      showToast(activeTool === "layers" ? "Layers closed" : "Layer Manager opened");
+    } else if (toolId === "text") {
+      openTextEditor();
+    } else if (toolId === "stickers") {
+      setIsStickerModalOpen(true);
+      setActiveTool("stickers");
+    } else if (toolId === "crop") {
+      setCropRatio(committedCrop.ratio);
+      setCropRotation(committedCrop.rotation);
+      setCropFlipH(committedCrop.flipH);
+      setCropFlipV(committedCrop.flipV);
+      setActiveTool(activeTool === "crop" ? null : "crop");
+      showToast(activeTool === "crop" ? "Crop tool closed" : "Crop & Perspective active");
+    } else if (toolId === "draw") {
+      setActiveTool(activeTool === "draw" ? null : "draw");
+      showToast(activeTool === "draw" ? "Drawing mode closed" : "Drawing mode active");
+    }
+  };
+
+  // Filtered stickers for the picker modal
+  const filteredStickers = STICKER_LIBRARY.filter((item) => {
+    const matchesCategory =
+      selectedStickerCategory === "All" || item.category === selectedStickerCategory;
+    const matchesSearch =
+      !stickerSearch.trim() ||
+      item.label.toLowerCase().includes(stickerSearch.toLowerCase()) ||
+      item.content.toLowerCase().includes(stickerSearch.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  // Helper function to get text styling classes/styles
+  const getTextCssStyles = (
+    color: string,
+    bgStyle: TextOverlay["bgStyle"],
+    fontSize: number
+  ) => {
+    let bgCss = "";
+    let textCss = "";
+    let borderCss = "";
+
+    if (bgStyle === "solid") {
+      if (color.toLowerCase() === "#ffffff") {
+        bgCss = "bg-white text-black px-3.5 py-1.5 rounded-lg shadow-xl";
+        textCss = "text-black";
+      } else {
+        bgCss = "px-3.5 py-1.5 rounded-lg shadow-xl";
+        textCss = "text-white";
+      }
+    } else if (bgStyle === "semi") {
+      bgCss = "bg-black/60 backdrop-blur-md px-3.5 py-1.5 rounded-lg shadow-lg";
+    } else if (bgStyle === "outline") {
+      bgCss = "px-3.5 py-1.5 rounded-lg border-2 border-white/80 bg-black/40";
+    } else {
+      bgCss = "px-1 py-0.5";
+    }
+
+    return { bgCss, textCss, borderCss, fontSizeStyle: { fontSize: `${fontSize}px` } };
+  };
+
+  // Effective crop values (draft when tool is active, committed when done)
+  const currentRotation = activeTool === "crop" ? cropRotation : committedCrop.rotation;
+  const currentFlipH = activeTool === "crop" ? cropFlipH : committedCrop.flipH;
+  const currentFlipV = activeTool === "crop" ? cropFlipV : committedCrop.flipV;
+  const currentRatio = activeTool === "crop" ? cropRatio : committedCrop.ratio;
+
+  const getAspectRatioContainerStyle = (ratio: string): React.CSSProperties => {
+    switch (ratio) {
+      case "1:1":
+        return { aspectRatio: "1 / 1", maxHeight: "82vh", maxWidth: "82vw" };
+      case "9:16":
+        return { aspectRatio: "9 / 16", maxHeight: "88vh", maxWidth: "88vw" };
+      case "4:5":
+        return { aspectRatio: "4 / 5", maxHeight: "82vh", maxWidth: "82vw" };
+      case "16:9":
+        return { aspectRatio: "16 / 9", maxHeight: "70vh", maxWidth: "92vw" };
+      default:
+        return { width: "100%", height: "100%" };
+    }
   };
 
   return (
-    <div className="bg-ink text-text-primary h-[100dvh] w-full overflow-hidden flex flex-col relative font-ui select-none">
-      {/* Toast Notification */}
+    <div className="relative w-full h-screen bg-black text-white overflow-hidden flex flex-col justify-between select-none">
+      {/* 1. FULL-SCREEN CANVAS DISPLAYING CAPTURED IMAGE & OVERLAYS */}
+      <div
+        ref={canvasRef}
+        onClick={() => {
+          setSelectedTextId(null);
+          setSelectedStickerId(null);
+          setIsImageSelected(false);
+        }}
+        className="absolute inset-0 z-0 bg-neutral-950 flex items-center justify-center overflow-hidden"
+      >
+        {/* IMAGE CONTAINER WITH ASPECT RATIO, 3D PERSPECTIVE & SHADOW */}
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            if (isBaseImageLocked) {
+              showToast("Image layer is locked");
+              return;
+            }
+            setIsImageSelected(true);
+            setSelectedTextId(null);
+            setSelectedStickerId(null);
+          }}
+          className={`relative transition-all duration-300 flex items-center justify-center ${
+            currentRatio !== "free" ? "rounded-2xl shadow-2xl border border-white/20 overflow-hidden" : "w-full h-full"
+          } ${isBaseImageHidden ? "opacity-0 pointer-events-none" : "opacity-100"} ${
+            isImageSelected ? "ring-2 ring-blue-500 ring-offset-4 ring-offset-black/90 shadow-[0_0_20px_rgba(59,130,246,0.6)]" : ""
+          }`}
+          style={{
+            ...getAspectRatioContainerStyle(currentRatio),
+            transform: `perspective(800px) rotateX(${imagePerspectiveY}deg) rotateY(${imagePerspectiveX}deg)`,
+            filter: imageShadowBlur > 0 ? `drop-shadow(0px ${imageShadowOffsetY}px ${imageShadowBlur}px ${imageShadowColor})` : "none",
+            zIndex: baseImageZIndex,
+          }}
+        >
+          {/* Blue Corner Handles for Image when Selected */}
+          {isImageSelected && (
+            <>
+              <div className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-blue-500 border-2 border-white rounded-full z-30 shadow-md" />
+              <div className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-blue-500 border-2 border-white rounded-full z-30 shadow-md" />
+              <div className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-blue-500 border-2 border-white rounded-full z-30 shadow-md" />
+              <div className="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-blue-500 border-2 border-white rounded-full z-30 shadow-md" />
+            </>
+          )}
+
+          <img
+            src={capturedImage}
+            alt="Captured preview"
+            style={{
+              transform: `rotate(${currentRotation}deg) scaleX(${currentFlipH ? -1 : 1}) scaleY(${
+                currentFlipV ? -1 : 1
+              })`,
+              transition: "transform 0.3s ease",
+            }}
+            className="w-full h-full object-cover select-none pointer-events-none"
+          />
+
+          {/* CROP OVERLAY GRID (Rule of Thirds + Corner Handles) */}
+          {activeTool === "crop" && (
+            <div className="absolute inset-0 pointer-events-none z-20 border-2 border-volt shadow-[0_0_0_9999px_rgba(0,0,0,0.65)] rounded-2xl">
+              {/* 3x3 Grid Lines */}
+              <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
+                <div className="border-r border-b border-white/40" />
+                <div className="border-r border-b border-white/40" />
+                <div className="border-b border-white/40" />
+                <div className="border-r border-b border-white/40" />
+                <div className="border-r border-b border-white/40" />
+                <div className="border-b border-white/40" />
+                <div className="border-r border-white/40" />
+                <div className="border-r border-white/40" />
+                <div className="" />
+              </div>
+
+              {/* Corner Accent Handles */}
+              <div className="absolute -top-1 -left-1 w-5 h-5 border-t-4 border-l-4 border-volt rounded-tl-md" />
+              <div className="absolute -top-1 -right-1 w-5 h-5 border-t-4 border-r-4 border-volt rounded-tr-md" />
+              <div className="absolute -bottom-1 -left-1 w-5 h-5 border-b-4 border-l-4 border-volt rounded-bl-md" />
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 border-b-4 border-r-4 border-volt rounded-br-md" />
+            </div>
+          )}
+        </div>
+
+        {/* DRAGGABLE TEXT OVERLAYS ON CANVAS */}
+        {textOverlays.map((overlay) => {
+          if (overlay.hidden) return null;
+          const fontConfig =
+            FONT_STYLES.find((f) => f.id === overlay.fontStyle) || FONT_STYLES[0];
+          const isSelected = selectedTextId === overlay.id;
+
+          const isSolidBg = overlay.bgStyle === "solid";
+          const isSemiBg = overlay.bgStyle === "semi";
+          const isOutlineBg = overlay.bgStyle === "outline";
+
+          return (
+            <motion.div
+              key={overlay.id}
+              drag={!overlay.locked}
+              dragConstraints={canvasRef}
+              dragElastic={0.1}
+              dragMomentum={false}
+              onDragStart={() => pushHistorySnapshot()}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (overlay.locked) {
+                  showToast("Layer is locked");
+                  return;
+                }
+                setSelectedTextId(overlay.id);
+                setSelectedStickerId(null);
+                setIsImageSelected(false);
+              }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                if (!overlay.locked) {
+                  openTextEditor(overlay);
+                }
+              }}
+              style={{
+                transform: `rotate(${overlay.rotation || 0}deg) scale(${overlay.scale || 1})`,
+                zIndex: overlay.zIndex ?? 20,
+              }}
+              className={`absolute touch-none flex items-center group transition-all ${
+                overlay.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
+              } ${
+                isSelected
+                  ? "p-2 border-2 border-blue-500 rounded-2xl shadow-[0_0_15px_rgba(59,130,246,0.6)] relative z-30"
+                  : "p-1"
+              }`}
+            >
+              {/* Blue Corner Handles for Selected Text */}
+              {isSelected && (
+                <>
+                  <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full z-30" />
+                  <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full z-30" />
+                  <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full z-30" />
+                  <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full z-30" />
+                </>
+              )}
+
+              <div
+                style={{
+                  color: isSolidBg && overlay.color.toLowerCase() === "#ffffff" ? "#000000" : overlay.color,
+                  backgroundColor: isSolidBg
+                    ? overlay.color.toLowerCase() === "#ffffff"
+                      ? "#FFFFFF"
+                      : overlay.color
+                    : isSemiBg
+                    ? "rgba(0, 0, 0, 0.65)"
+                    : "transparent",
+                  fontSize: `${overlay.fontSize}px`,
+                  textAlign: overlay.align,
+                }}
+                className={`max-w-[85vw] whitespace-pre-wrap break-words transition-all ${
+                  fontConfig.className
+                } ${
+                  isSolidBg || isSemiBg ? "px-4 py-2 rounded-xl shadow-2xl" : "px-2 py-1 drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]"
+                } ${isOutlineBg ? "border-2 border-white/90 rounded-xl bg-black/40 backdrop-blur-xs" : ""}`}
+              >
+                {overlay.text}
+              </div>
+
+              {/* Text Layer Floating Blue Action Toolbar */}
+              {isSelected && !overlay.locked && (
+                <motion.div
+                  initial={{ scale: 0, y: -10 }}
+                  animate={{ scale: 1, y: 0 }}
+                  className="absolute -top-12 left-1/2 -translate-x-1/2 bg-blue-600/95 backdrop-blur-md text-white border border-blue-400/50 rounded-full px-2 py-1 flex items-center gap-1.5 shadow-2xl z-40 whitespace-nowrap"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    onClick={() => openTextEditor(overlay)}
+                    className="p-1 hover:bg-white/20 rounded-full text-white transition-colors"
+                    title="Edit Text"
+                  >
+                    <Type className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      pushHistorySnapshot();
+                      setTextOverlays((prev) =>
+                        prev.map((t) =>
+                          t.id === overlay.id ? { ...t, rotation: ((t.rotation || 0) + 15) % 360 } : t
+                        )
+                      );
+                    }}
+                    className="p-1 hover:bg-white/20 rounded-full text-white transition-colors"
+                    title="Rotate (+15°)"
+                  >
+                    <RotateCw className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      pushHistorySnapshot();
+                      setTextOverlays((prev) =>
+                        prev.map((t) =>
+                          t.id === overlay.id ? { ...t, fontSize: Math.max(14, t.fontSize - 4) } : t
+                        )
+                      );
+                    }}
+                    className="px-1.5 py-0.5 hover:bg-white/20 rounded-full text-white font-bold transition-colors text-[11px]"
+                    title="Scale Down"
+                  >
+                    A-
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      pushHistorySnapshot();
+                      setTextOverlays((prev) =>
+                        prev.map((t) =>
+                          t.id === overlay.id ? { ...t, fontSize: Math.min(120, t.fontSize + 4) } : t
+                        )
+                      );
+                    }}
+                    className="px-1.5 py-0.5 hover:bg-white/20 rounded-full text-white font-bold transition-colors text-[11px]"
+                    title="Scale Up"
+                  >
+                    A+
+                  </button>
+
+                  <button
+                    onClick={() => duplicateLayer(overlay.id, "text")}
+                    className="p-1 hover:bg-white/20 rounded-full text-white transition-colors"
+                    title="Duplicate Text Layer"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteText(overlay.id)}
+                    className="p-1 hover:bg-rose-500/80 rounded-full text-rose-200 hover:text-white transition-colors"
+                    title="Delete Text Layer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </motion.div>
+              )}
+            </motion.div>
+          );
+        })}
+
+        {/* DRAGGABLE STICKER OVERLAYS ON CANVAS */}
+        {stickerOverlays.map((sticker) => {
+          if (sticker.hidden) return null;
+          const isSelected = selectedStickerId === sticker.id;
+          return (
+            <motion.div
+              key={sticker.id}
+              drag={!sticker.locked}
+              dragConstraints={canvasRef}
+              dragElastic={0.1}
+              dragMomentum={false}
+              onDragStart={() => pushHistorySnapshot()}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (sticker.locked) {
+                  showToast("Layer is locked");
+                  return;
+                }
+                setSelectedStickerId(sticker.id);
+                setSelectedTextId(null);
+                setIsImageSelected(false);
+              }}
+              style={{
+                transform: `scale(${sticker.scale}) rotate(${sticker.rotation}deg)`,
+                zIndex: sticker.zIndex ?? 30,
+              }}
+              className={`absolute touch-none flex items-center justify-center p-2 rounded-2xl transition-all ${
+                sticker.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
+              } ${
+                isSelected
+                  ? "border-2 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.6)] bg-black/30 backdrop-blur-xs relative z-30"
+                  : ""
+              }`}
+            >
+              {/* Blue Corner Handles for Selected Sticker */}
+              {isSelected && (
+                <>
+                  <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full z-30" />
+                  <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full z-30" />
+                  <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full z-30" />
+                  <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full z-30" />
+                </>
+              )}
+
+              {sticker.type === "emoji" ? (
+                <span className="text-6xl drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)] select-none">
+                  {sticker.content}
+                </span>
+              ) : (
+                <div
+                  className={`px-4 py-2 rounded-2xl bg-gradient-to-r ${
+                    sticker.bgGradient || "from-amber-500 to-yellow-400"
+                  } text-white font-extrabold text-lg tracking-wider uppercase shadow-2xl border border-white/30 flex items-center gap-2 select-none`}
+                >
+                  {sticker.content}
+                </div>
+              )}
+
+              {/* Sticker Layer Floating Blue Action Toolbar */}
+              {isSelected && (
+                <motion.div
+                  initial={{ scale: 0, y: -10 }}
+                  animate={{ scale: 1, y: 0 }}
+                  className="absolute -top-12 left-1/2 -translate-x-1/2 bg-blue-600/95 backdrop-blur-md text-white border border-blue-400/50 rounded-full px-2 py-1 flex items-center gap-1.5 shadow-2xl z-40 whitespace-nowrap"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    onClick={() => {
+                      pushHistorySnapshot();
+                      setStickerOverlays((prev) =>
+                        prev.map((s) =>
+                          s.id === sticker.id ? { ...s, rotation: (s.rotation + 15) % 360 } : s
+                        )
+                      );
+                    }}
+                    className="p-1 hover:bg-white/20 rounded-full text-white transition-colors"
+                    title="Rotate (+15°)"
+                  >
+                    <RotateCw className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      pushHistorySnapshot();
+                      setStickerOverlays((prev) =>
+                        prev.map((s) =>
+                          s.id === sticker.id ? { ...s, scale: Math.max(0.4, Number((s.scale - 0.2).toFixed(1))) } : s
+                        )
+                      );
+                    }}
+                    className="p-1 hover:bg-white/20 rounded-full text-white transition-colors"
+                    title="Scale Down"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5 rotate-180" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      pushHistorySnapshot();
+                      setStickerOverlays((prev) =>
+                        prev.map((s) =>
+                          s.id === sticker.id ? { ...s, scale: Math.min(3.5, Number((s.scale + 0.2).toFixed(1))) } : s
+                        )
+                      );
+                    }}
+                    className="p-1 hover:bg-white/20 rounded-full text-white transition-colors"
+                    title="Scale Up"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      pushHistorySnapshot();
+                      setStickerOverlays((prev) =>
+                        prev.map((s) =>
+                          s.id === sticker.id ? { ...s, locked: !s.locked } : s
+                        )
+                      );
+                      showToast(sticker.locked ? "Sticker unlocked" : "Sticker locked");
+                    }}
+                    className="p-1 hover:bg-white/20 rounded-full text-white transition-colors"
+                    title={sticker.locked ? "Unlock Sticker" : "Lock Sticker"}
+                  >
+                    {sticker.locked ? <Lock className="w-3.5 h-3.5 text-amber-300" /> : <Unlock className="w-3.5 h-3.5" />}
+                  </button>
+
+                  <button
+                    onClick={() => duplicateLayer(sticker.id, "sticker")}
+                    className="p-1 hover:bg-white/20 rounded-full text-white transition-colors"
+                    title="Duplicate Sticker Layer"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteSticker(sticker.id)}
+                    className="p-1 hover:bg-rose-500/80 rounded-full text-rose-200 hover:text-white transition-colors"
+                    title="Delete Sticker Layer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </motion.div>
+              )}
+            </motion.div>
+          );
+        })}
+
+        {/* DRAWING CANVAS LAYER */}
+        <canvas
+          ref={drawingCanvasRef}
+          onPointerDown={startDrawing}
+          onPointerMove={draw}
+          onPointerUp={stopDrawing}
+          onPointerLeave={stopDrawing}
+          style={{
+            zIndex: drawingZIndex,
+            opacity: isDrawingHidden ? 0 : 1,
+          }}
+          className={`absolute inset-0 touch-none ${
+            activeTool === "draw" && !isDrawingLocked && !isDrawingHidden
+              ? "cursor-crosshair pointer-events-auto"
+              : "pointer-events-none"
+          }`}
+        />
+
+        {/* Subtle dark gradient overlay for top/bottom bars legibility */}
+        <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/80 via-black/40 to-transparent pointer-events-none z-0" />
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none z-0" />
+      </div>
+
+      {/* 2. TOP BAR */}
+      <div className="relative z-20 flex items-center justify-between px-4 pt-12 pb-3 w-full">
+        {/* Close / Back to Camera */}
+        <button
+          onClick={() => navigate("/")}
+          className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-95 transition-transform"
+          aria-label="Close Editor"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        {/* Center Title or Indicator */}
+        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-xs font-semibold text-white/90">
+          <span>Editor</span>
+        </div>
+
+        {/* Right Actions: Undo, Redo, Save */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleGlobalUndo}
+            disabled={historyStack.length === 0}
+            className="w-9 h-9 rounded-full bg-black/50 backdrop-blur-md border border-white/15 flex items-center justify-center text-white/80 hover:text-white active:scale-95 transition-transform disabled:opacity-30"
+            aria-label="Undo"
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleGlobalRedo}
+            disabled={redoHistoryStack.length === 0}
+            className="w-9 h-9 rounded-full bg-black/50 backdrop-blur-md border border-white/15 flex items-center justify-center text-white/80 hover:text-white active:scale-95 transition-transform disabled:opacity-30"
+            aria-label="Redo"
+            title="Redo (Ctrl+Y)"
+          >
+            <Redo className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setIsExportModalOpen(true)}
+            className="w-9 h-9 rounded-full bg-black/50 backdrop-blur-md border border-white/15 flex items-center justify-center text-white/80 hover:text-white active:scale-95 transition-transform"
+            aria-label="Export / Save"
+            title="Export / Save Creation"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* 3. FLOATING TOOLBAR (RIGHT SIDE) */}
+      <div className="absolute right-4 top-28 z-20 flex flex-col gap-3.5">
+        {tools.map((tool) => {
+          const Icon = tool.icon;
+          const isActive =
+            activeTool === tool.id ||
+            (tool.id === "layers" && activeTool === "layers") ||
+            (tool.id === "text" && textOverlays.length > 0) ||
+            (tool.id === "draw" && (hasDrawnStrokes || activeTool === "draw")) ||
+            (tool.id === "stickers" && (stickerOverlays.length > 0 || isStickerModalOpen)) ||
+            (tool.id === "crop" &&
+              (committedCrop.ratio !== "free" ||
+                committedCrop.rotation !== 0 ||
+                committedCrop.flipH ||
+                committedCrop.flipV ||
+                activeTool === "crop"));
+          return (
+            <button
+              key={tool.id}
+              onClick={() => handleToolClick(tool.id, tool.label)}
+              className={`flex flex-col items-center gap-1 group relative transition-all duration-200 active:scale-90`}
+            >
+              <div
+                className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md transition-all shadow-lg relative ${
+                  isActive
+                    ? "bg-volt text-ink border-2 border-volt shadow-[0_0_20px_rgba(244,228,9,0.5)] scale-105"
+                    : "bg-black/60 text-white border border-white/20 hover:bg-black/80"
+                }`}
+              >
+                <Icon className="w-5 h-5" />
+                {tool.id === "layers" && getAllLayers().length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-volt text-ink text-[9px] font-black flex items-center justify-center border border-black shadow">
+                    {getAllLayers().length}
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] font-medium text-white/90 drop-shadow-md">
+                {tool.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* TOAST NOTIFICATION FOR TOOLS */}
       <AnimatePresence>
         {toastMessage && (
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed top-12 left-1/2 -translate-x-1/2 z-50 bg-volt text-ink font-extrabold px-5 py-2 rounded-full text-xs shadow-2xl flex items-center gap-2"
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            className="absolute top-24 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-full bg-black/80 backdrop-blur-md border border-white/20 text-xs text-white font-medium shadow-xl flex items-center gap-2"
           >
-            <CheckCircle2 className="w-4 h-4 stroke-[3]" />
+            <Info className="w-3.5 h-3.5 text-volt" />
             <span>{toastMessage}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Main Full-Screen Canvas Area */}
-      <div
-        className="relative flex-1 w-full h-full bg-cover bg-center flex flex-col justify-between overflow-hidden"
-        style={{ backgroundImage: `url("${bgImage}")` }}
-        onClick={() => setSelectedElementId(null)}
-      >
-        {/* Dark Vignette Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/70 pointer-events-none"></div>
-
-        {/* Top Header Controls */}
-        <div className="relative z-30 flex justify-between items-center p-screen-gutter pt-8">
-          <button
-            onClick={() => navigate("/camera")}
-            className="w-10 h-10 flex items-center justify-center rounded-full bg-black/60 backdrop-blur-md hairline-border text-white active:scale-95 transition-transform"
-            title="Back to Camera"
-          >
-            <X className="w-6 h-6" />
-          </button>
-
-          <div className="flex items-center gap-2">
-            {/* Undo */}
-            <button
-              onClick={handleUndo}
-              disabled={history.length === 0}
-              className={`w-10 h-10 flex items-center justify-center rounded-full bg-black/60 backdrop-blur-md hairline-border text-white transition-opacity ${
-                history.length === 0 ? "opacity-30 cursor-not-allowed" : "active:scale-95"
-              }`}
-              title="Undo last action"
-            >
-              <Undo className="w-5 h-5" />
-            </button>
-
-            {/* AI Auto Layout */}
-            <button
-              onClick={handleAIAutoLayout}
-              className="h-10 px-3.5 rounded-full bg-black/60 backdrop-blur-md hairline-border text-volt font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-transform hover:bg-black/80"
-              title="AI Auto Layout"
-            >
-              <Wand2 className="w-4 h-4" />
-              <span>AI Layout</span>
-            </button>
-
-            {/* Live Social Story Preview */}
-            <button
-              onClick={() => setActiveSheet("preview")}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-volt text-ink active:scale-95 transition-transform shadow-[0_0_15px_rgba(244,228,9,0.4)]"
-              title="Story Live Preview"
-            >
-              <Eye className="w-5 h-5 fill-ink" />
-            </button>
-          </div>
-        </div>
-
-        {/* Interactive Lens Overlay Canvas Elements */}
-        <div className="absolute inset-0 z-20 pointer-events-none">
-          {elements.map((el) => {
-            const isSelected = el.id === selectedElementId;
-
-            return (
-              <div
-                key={el.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedElementId(el.id);
-                }}
-                className={`absolute pointer-events-auto cursor-move transition-all duration-75 select-none ${
-                  isSelected ? "ring-2 ring-volt ring-offset-2 ring-offset-black/50 shadow-2xl scale-[1.02]" : ""
-                }`}
-                style={{
-                  left: `${el.x}%`,
-                  top: `${el.y}%`,
-                  fontFamily: el.fontFamily,
-                  fontSize: `${el.fontSize}px`,
-                  fontWeight: el.fontWeight,
-                  fontStyle: el.fontStyle,
-                  textAlign: el.textAlign,
-                  color: el.color,
-                  backgroundColor: el.bgFill
-                    ? `${el.bgFill}${Math.round((el.bgOpacity ?? 0.8) * 255)
-                        .toString(16)
-                        .padStart(2, "0")}`
-                    : "transparent",
-                  borderRadius: el.borderRadius ? `${el.borderRadius}px` : "0px",
-                  padding: el.bgFill ? "8px 16px" : "0px",
-                  transform: `rotate(${el.rotation || 0}deg) scale(${el.scale || 1})`,
-                  textShadow: el.shadowBlur
-                    ? `0 0 ${el.shadowBlur}px ${el.shadowColor || "#000"}`
-                    : "0 2px 8px rgba(0,0,0,0.8)",
-                }}
-              >
-                {el.content}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Floating Vertical Snapchat Sidebar Toolbar */}
-        <div className="absolute top-24 right-4 z-30 flex flex-col items-center gap-2.5 bg-black/60 backdrop-blur-xl p-2 rounded-2xl hairline-border shadow-2xl">
-          {/* Lenses Sheet */}
-          <button
-            onClick={() => setActiveSheet("lens")}
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-volt hover:bg-white/10 transition-colors"
-            title="Switch Lens"
-          >
-            <Sparkles className="w-5 h-5" />
-          </button>
-
-          {/* Add Text / New Element */}
-          <button
-            onClick={handleAddNewElement}
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-white hover:bg-white/10 transition-colors"
-            title="Add Text Element"
-          >
-            <Type className="w-5 h-5" />
-          </button>
-
-          {/* Dynamic Metrics Binder Sheet */}
-          <button
-            onClick={() => setActiveSheet("stats")}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
-              selectedElement ? "text-amber-300 bg-white/10" : "text-white/60 hover:text-white"
-            }`}
-            title="Bind Metric Data"
-          >
-            <Activity className="w-5 h-5" />
-          </button>
-
-          {/* Font & Typography Sheet */}
-          <button
-            onClick={() => setActiveSheet("typography")}
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-white hover:bg-white/10 transition-colors"
-            title="Typography & Fonts"
-          >
-            <SlidersHorizontal className="w-5 h-5" />
-          </button>
-
-          {/* Colors & Palette Sheet */}
-          <button
-            onClick={() => setActiveSheet("color")}
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-cyan-300 hover:bg-white/10 transition-colors"
-            title="Colors & Fills"
-          >
-            <Palette className="w-5 h-5" />
-          </button>
-
-          {/* Quick Style Presets Sheet */}
-          <button
-            onClick={() => setActiveSheet("presets")}
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-pink-400 hover:bg-white/10 transition-colors"
-            title="Style Presets"
-          >
-            <Flame className="w-5 h-5" />
-          </button>
-
-          {/* Smart Color Extraction */}
-          <button
-            onClick={handleSmartColorExtract}
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-emerald-400 hover:bg-white/10 transition-colors"
-            title="Auto Color Extract"
-          >
-            <Wand2 className="w-5 h-5" />
-          </button>
-
-          {/* If Element Selected: Duplicate, Lock, Delete Controls */}
-          {selectedElement && (
-            <>
-              <div className="w-6 h-[1px] bg-white/20 my-0.5"></div>
-
-              <button
-                onClick={handleDuplicateElement}
-                className="w-10 h-10 rounded-xl flex items-center justify-center text-white hover:bg-white/10 transition-colors"
-                title="Duplicate Element"
-              >
-                <Copy className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={handleDeleteElement}
-                className="w-10 h-10 rounded-xl flex items-center justify-center text-rose-400 hover:bg-rose-500/20 transition-colors"
-                title="Delete Element"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* Bottom Snapchat Quick Action Bar */}
-        <div className="relative z-30 bg-ink px-screen-gutter py-4 pb-safe flex items-center gap-2 border-t border-hairline">
-          {/* Download Image */}
-          <button
-            onClick={() => showToast("Saved PNG to phone gallery! 🖼️")}
-            className="w-12 h-12 rounded-full bg-surface-raised flex items-center justify-center text-white active:scale-95 transition-transform hairline-border hover:bg-white/10 shrink-0"
-            title="Save PNG Image"
-          >
-            <Download className="w-5 h-5" />
-          </button>
-
-          {/* Save Project */}
-          <button
-            onClick={handleSaveProject}
-            className="flex-1 h-12 bg-surface-raised rounded-full flex items-center justify-center gap-1.5 active:scale-95 transition-transform hairline-border hover:bg-white/10"
-          >
-            <FolderKanban className="text-volt w-4 h-4" />
-            <span className="text-xs font-bold text-white">Save Project</span>
-          </button>
-
-          {/* Send To / Share */}
-          <button
-            onClick={() => setShowSendModal(true)}
-            className="flex-1 h-12 bg-volt rounded-full flex items-center justify-center gap-1.5 active:scale-95 transition-transform shadow-[0_0_20px_rgba(244,228,9,0.3)] hover:bg-volt-press"
-          >
-            <span className="text-xs font-extrabold text-ink">Send To</span>
-            <Send className="text-ink w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* CONTEXTUAL BOTTOM SHEETS */}
+      {/* 4. FULL-SCREEN TEXT EDITOR OVERLAY MODAL */}
       <AnimatePresence>
-        {activeSheet !== "none" && (
+        {isEditingText && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col justify-end"
-            onClick={() => setActiveSheet("none")}
+            className="absolute inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col justify-between p-4 pt-12 pb-6"
           >
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              className="bg-surface rounded-t-3xl hairline-border-t p-screen-gutter max-h-[75vh] overflow-y-auto space-y-4 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* SHEET HEADER */}
-              <div className="flex justify-between items-center pb-2 border-b border-hairline">
-                <h3 className="text-section-header mb-0">
-                  {activeSheet === "lens" && "Switch Lens Template"}
-                  {activeSheet === "stats" && "Bind Metric Statistic"}
-                  {activeSheet === "typography" && "Typography & Formatting"}
-                  {activeSheet === "color" && "Colors & Gradient Fill"}
-                  {activeSheet === "presets" && "Quick Style Presets"}
-                  {activeSheet === "preview" && "Social Story Live Preview"}
-                </h3>
+            {/* TEXT EDITOR TOP CONTROL BAR */}
+            <div className="flex items-center justify-between w-full">
+              <button
+                onClick={() => setIsEditingText(false)}
+                className="px-4 py-2 rounded-full bg-white/10 text-white font-semibold text-xs border border-white/10 active:scale-95"
+              >
+                Cancel
+              </button>
+
+              {/* Delete button if editing existing text */}
+              {editingTextId && (
                 <button
-                  onClick={() => setActiveSheet("none")}
-                  className="w-8 h-8 rounded-full bg-surface-raised flex items-center justify-center text-white"
+                  onClick={() => handleDeleteText(editingTextId)}
+                  className="w-9 h-9 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center active:scale-95"
+                  aria-label="Delete text"
                 >
-                  <X className="w-5 h-5" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
+              )}
+
+              {/* Done / Confirm button */}
+              <button
+                onClick={handleSaveText}
+                className="px-5 py-2 rounded-full bg-volt text-ink font-extrabold text-xs shadow-[0_0_15px_rgba(244,228,9,0.5)] active:scale-95 flex items-center gap-1.5"
+              >
+                <Check className="w-4 h-4 stroke-[3]" />
+                <span>Done</span>
+              </button>
+            </div>
+
+            {/* CENTER TEXT PREVIEW & INPUT FIELD */}
+            <div className="flex-1 flex flex-col items-center justify-center my-4 px-2 overflow-y-auto">
+              <div className="w-full max-w-md flex flex-col items-center">
+                <textarea
+                  autoFocus
+                  value={currentText}
+                  onChange={(e) => setCurrentText(e.target.value)}
+                  placeholder="Type a caption..."
+                  rows={3}
+                  style={{
+                    color:
+                      selectedBgStyle === "solid" && selectedColor.toLowerCase() === "#ffffff"
+                        ? "#000000"
+                        : selectedColor,
+                    backgroundColor:
+                      selectedBgStyle === "solid"
+                        ? selectedColor.toLowerCase() === "#ffffff"
+                          ? "#FFFFFF"
+                          : selectedColor
+                        : selectedBgStyle === "semi"
+                        ? "rgba(0, 0, 0, 0.7)"
+                        : "transparent",
+                    fontSize: `${selectedFontSize}px`,
+                    textAlign: selectedAlign,
+                  }}
+                  className={`w-full bg-transparent resize-none outline-none border-none p-3 rounded-2xl transition-all ${
+                    FONT_STYLES.find((f) => f.id === selectedFont)?.className || ""
+                  } ${
+                    selectedBgStyle === "outline" ? "border-2 border-white/90 bg-black/40" : ""
+                  }`}
+                />
+              </div>
+            </div>
+
+            {/* BOTTOM TEXT TOOLBAR CONTROLS */}
+            <div className="w-full flex flex-col gap-4 bg-black/60 border border-white/10 p-3.5 rounded-3xl backdrop-blur-xl">
+              {/* TOP ROW: Alignment, Background Style, Size Selector */}
+              <div className="flex items-center justify-between px-2 gap-2">
+                {/* Text Alignment */}
+                <div className="flex items-center bg-white/10 rounded-full p-1 border border-white/10">
+                  <button
+                    onClick={() => setSelectedAlign("left")}
+                    className={`p-1.5 rounded-full transition-colors ${
+                      selectedAlign === "left" ? "bg-volt text-ink" : "text-white/70"
+                    }`}
+                  >
+                    <AlignLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setSelectedAlign("center")}
+                    className={`p-1.5 rounded-full transition-colors ${
+                      selectedAlign === "center" ? "bg-volt text-ink" : "text-white/70"
+                    }`}
+                  >
+                    <AlignCenter className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setSelectedAlign("right")}
+                    className={`p-1.5 rounded-full transition-colors ${
+                      selectedAlign === "right" ? "bg-volt text-ink" : "text-white/70"
+                    }`}
+                  >
+                    <AlignRight className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Background Style Toggle */}
+                <div className="flex items-center bg-white/10 rounded-full p-1 border border-white/10 gap-1">
+                  {BG_STYLES.map((bg) => (
+                    <button
+                      key={bg.id}
+                      onClick={() => setSelectedBgStyle(bg.id)}
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
+                        selectedBgStyle === bg.id
+                          ? "bg-volt text-ink shadow-md"
+                          : "text-white/70 hover:text-white"
+                      }`}
+                    >
+                      {bg.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Font Size Presets */}
+                <div className="flex items-center bg-white/10 rounded-full p-1 border border-white/10 gap-0.5">
+                  {[
+                    { label: "S", size: 22 },
+                    { label: "M", size: 32 },
+                    { label: "L", size: 44 },
+                  ].map((sz) => (
+                    <button
+                      key={sz.label}
+                      onClick={() => setSelectedFontSize(sz.size)}
+                      className={`w-6 h-6 rounded-full text-[11px] font-extrabold transition-colors flex items-center justify-center ${
+                        selectedFontSize === sz.size ? "bg-volt text-ink" : "text-white/70"
+                      }`}
+                    >
+                      {sz.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* SHEET 1: LENSES */}
-              {activeSheet === "lens" && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-1">
-                  {LENS_TEMPLATES_EXPANDED.map((lens) => (
+              {/* MIDDLE ROW: Font Styles Swipe Carousel */}
+              <div className="w-full">
+                <GestureSwipeCarousel
+                  items={FONT_STYLES}
+                  selectedIndex={FONT_STYLES.findIndex((f) => f.id === selectedFont)}
+                  onSelectIndex={(index) => setSelectedFont(FONT_STYLES[index].id)}
+                  itemGap={8}
+                  selectedScale={1.05}
+                  unselectedOpacity={0.6}
+                  renderItem={(font, _, isSelected) => (
                     <button
-                      key={lens.id}
-                      onClick={() => {
-                        handleSwitchLens(lens);
-                        setActiveSheet("none");
-                      }}
-                      className={`p-3.5 rounded-2xl text-left border flex flex-col justify-between h-28 transition-all ${
-                        activeLensId === lens.id
-                          ? "border-volt bg-volt-dim shadow-lg"
-                          : "border-hairline bg-surface-raised hover:border-white/30"
+                      className={`px-3.5 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap border transition-all ${
+                        isSelected
+                          ? "bg-volt text-ink border-volt shadow-[0_0_15px_rgba(244,228,9,0.5)]"
+                          : "bg-surface-raised text-text-secondary border-hairline hover:text-white"
                       }`}
                     >
-                      <div className="flex justify-between items-start">
-                        <span className="text-2xl">{lens.icon}</span>
-                        {activeLensId === lens.id && <Check className="w-4 h-4 text-volt" />}
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold text-white">{lens.name}</div>
-                        <div className="text-[10px] text-text-secondary">{lens.tagline}</div>
-                      </div>
+                      {font.label}
                     </button>
-                  ))}
-                </div>
-              )}
+                  )}
+                />
+              </div>
 
-              {/* SHEET 2: DYNAMIC STATS PICKER */}
-              {activeSheet === "stats" && (
-                <div className="space-y-3">
-                  {/* Search Bar */}
-                  <div className="relative">
-                    <Search className="w-4 h-4 absolute left-3.5 top-3 text-text-secondary" />
-                    <input
-                      type="text"
-                      placeholder="Search metric (e.g. Pace, Heart Rate, Elevation)..."
-                      value={metricSearchQuery}
-                      onChange={(e) => setMetricSearchQuery(e.target.value)}
-                      className="w-full bg-surface-raised border border-hairline rounded-full pl-10 pr-4 py-2 text-xs text-white focus:outline-none focus:border-volt"
+              {/* BOTTOM ROW: Color Palette Swatches */}
+              <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1 px-1 justify-between">
+                {COLOR_PALETTE.map((c) => {
+                  const isSelected = selectedColor.toLowerCase() === c.hex.toLowerCase();
+                  return (
+                    <button
+                      key={c.hex}
+                      onClick={() => setSelectedColor(c.hex)}
+                      style={{ backgroundColor: c.hex }}
+                      className={`w-8 h-8 rounded-full shrink-0 border-2 transition-transform active:scale-90 ${
+                        isSelected
+                          ? "ring-2 ring-volt ring-offset-2 ring-offset-black scale-110 border-white"
+                          : "border-white/20"
+                      }`}
+                      aria-label={`Select color ${c.name}`}
                     />
-                  </div>
-
-                  {/* Category Tabs */}
-                  <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
-                    {["All", "Running", "Performance", "Elevation", "Ride", "Achievements"].map((cat) => (
-                      <button
-                        key={cat}
-                        onClick={() => setMetricCategoryFilter(cat)}
-                        className={`px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap ${
-                          metricCategoryFilter === cat
-                            ? "bg-volt text-ink"
-                            : "bg-surface-raised text-text-secondary hover:text-white"
-                        }`}
-                      >
-                        {cat}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Metric Options List */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1">
-                    {ALL_METRICS.filter((m) => {
-                      const matchesCategory =
-                        metricCategoryFilter === "All" || m.category === metricCategoryFilter;
-                      const matchesQuery =
-                        m.label.toLowerCase().includes(metricSearchQuery.toLowerCase()) ||
-                        m.category.toLowerCase().includes(metricSearchQuery.toLowerCase());
-                      return matchesCategory && matchesQuery;
-                    }).map((metric) => (
-                      <button
-                        key={metric.id}
-                        onClick={() => handleBindMetric(metric)}
-                        className="p-3 bg-surface-raised hover:bg-white/10 rounded-xl border border-hairline flex items-center justify-between transition-colors text-left"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-lg">{metric.icon}</span>
-                          <div>
-                            <div className="text-xs font-bold text-white">{metric.label}</div>
-                            <div className="text-[10px] text-text-secondary">{metric.category}</div>
-                          </div>
-                        </div>
-                        <span className="text-xs font-extrabold text-volt">
-                          {metric.value} {metric.unit}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* SHEET 3: TYPOGRAPHY & FORMATTING */}
-              {activeSheet === "typography" && selectedElement && (
-                <div className="space-y-4 text-xs">
-                  {/* Font Family */}
-                  <div>
-                    <label className="text-text-secondary block mb-1.5">Font Family</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {FONTS.map((font) => (
-                        <button
-                          key={font}
-                          onClick={() =>
-                            setElements((prev) =>
-                              prev.map((el) =>
-                                el.id === selectedElement.id ? { ...el, fontFamily: font } : el
-                              )
-                            )
-                          }
-                          className={`p-2.5 rounded-xl border text-center font-bold ${
-                            selectedElement.fontFamily === font
-                              ? "border-volt bg-volt/10 text-volt"
-                              : "border-hairline bg-surface-raised text-white"
-                          }`}
-                          style={{ fontFamily: font }}
-                        >
-                          {font}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Font Size & Weight */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-text-secondary block mb-1">
-                        Font Size ({selectedElement.fontSize}px)
-                      </label>
-                      <input
-                        type="range"
-                        min="16"
-                        max="72"
-                        value={selectedElement.fontSize}
-                        onChange={(e) =>
-                          setElements((prev) =>
-                            prev.map((el) =>
-                              el.id === selectedElement.id
-                                ? { ...el, fontSize: Number(e.target.value) }
-                                : el
-                            )
-                          )
-                        }
-                        className="w-full accent-volt"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-text-secondary block mb-1">Rotation</label>
-                      <input
-                        type="range"
-                        min="-45"
-                        max="45"
-                        value={selectedElement.rotation || 0}
-                        onChange={(e) =>
-                          setElements((prev) =>
-                            prev.map((el) =>
-                              el.id === selectedElement.id
-                                ? { ...el, rotation: Number(e.target.value) }
-                                : el
-                            )
-                          )
-                        }
-                        className="w-full accent-volt"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* SHEET 4: COLOR & FILL */}
-              {activeSheet === "color" && selectedElement && (
-                <div className="space-y-4 text-xs">
-                  <div>
-                    <label className="text-text-secondary block mb-2">Text Color</label>
-                    <div className="flex gap-2">
-                      {COLOR_PALETTE.map((c) => (
-                        <button
-                          key={c}
-                          onClick={() =>
-                            setElements((prev) =>
-                              prev.map((el) =>
-                                el.id === selectedElement.id ? { ...el, color: c } : el
-                              )
-                            )
-                          }
-                          className="w-8 h-8 rounded-full border-2 border-white/20 hover:scale-110 transition-transform"
-                          style={{ backgroundColor: c }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-text-secondary block mb-2">Background Badge Fill</label>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() =>
-                          setElements((prev) =>
-                            prev.map((el) =>
-                              el.id === selectedElement.id ? { ...el, bgFill: undefined } : el
-                            )
-                          )
-                        }
-                        className="px-3 py-1.5 rounded-full border border-hairline bg-surface-raised text-white text-[10px]"
-                      >
-                        Transparent
-                      </button>
-                      {COLOR_PALETTE.map((c) => (
-                        <button
-                          key={c}
-                          onClick={() =>
-                            setElements((prev) =>
-                              prev.map((el) =>
-                                el.id === selectedElement.id
-                                  ? { ...el, bgFill: c, bgOpacity: 0.85, borderRadius: 12 }
-                                  : el
-                              )
-                            )
-                          }
-                          className="w-8 h-8 rounded-full border-2 border-white/20 hover:scale-110 transition-transform"
-                          style={{ backgroundColor: c }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* SHEET 5: QUICK STYLE PRESETS */}
-              {activeSheet === "presets" && (
-                <div className="grid grid-cols-2 gap-2.5">
-                  {STYLE_PRESETS.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => {
-                        handleApplyPreset(p);
-                        setActiveSheet("none");
-                      }}
-                      className="p-3.5 bg-surface-raised border border-hairline rounded-xl text-left hover:border-volt transition-all"
-                    >
-                      <div className="text-xs font-extrabold text-white">{p.name}</div>
-                      <div className="flex gap-1 mt-2">
-                        <span className="w-4 h-4 rounded-full" style={{ backgroundColor: p.color }}></span>
-                        <span className="w-4 h-4 rounded-full" style={{ backgroundColor: p.bgFill }}></span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* SHEET 6: SOCIAL STORY LIVE PREVIEW */}
-              {activeSheet === "preview" && (
-                <div className="space-y-4">
-                  {/* Format Selector */}
-                  <div className="flex gap-2 justify-center">
-                    {SOCIAL_FORMATS.map((fmt) => (
-                      <button
-                        key={fmt.id}
-                        onClick={() => setSelectedSocialFormat(fmt.id)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
-                          selectedSocialFormat === fmt.id
-                            ? "bg-volt text-ink"
-                            : "bg-surface-raised text-text-secondary hover:text-white"
-                        }`}
-                      >
-                        {fmt.name}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Device Frame Live Mockup */}
-                  <div className="flex justify-center py-2">
-                    <div
-                      className={`relative w-56 bg-cover bg-center overflow-hidden shadow-2xl border-4 border-zinc-800 ${
-                        SOCIAL_FORMATS.find((f) => f.id === selectedSocialFormat)?.frameStyle
-                      }`}
-                      style={{ backgroundImage: `url("${bgImage}")` }}
-                    >
-                      <div className="absolute inset-0 bg-black/40"></div>
-                      <div className="absolute inset-0 p-3 pointer-events-none">
-                        {elements.map((el) => (
-                          <div
-                            key={el.id}
-                            className="absolute text-[10px] font-bold"
-                            style={{
-                              left: `${el.x}%`,
-                              top: `${el.y}%`,
-                              color: el.color,
-                            }}
-                          >
-                            {el.content}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </motion.div>
+                  );
+                })}
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Snapchat Send To Modal */}
+      {/* STICKER PICKER MODAL SHEET */}
       <AnimatePresence>
-        {showSendModal && (
+        {isStickerModalOpen && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col justify-end"
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 28, stiffness: 350 }}
+            className="absolute inset-x-0 bottom-0 z-50 h-[75vh] max-h-[600px] bg-black/90 backdrop-blur-2xl border-t border-white/15 rounded-t-3xl p-4 flex flex-col justify-between shadow-2xl"
           >
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              className="bg-surface rounded-t-3xl p-screen-gutter space-y-4"
-            >
-              <div className="flex justify-between items-center pb-2 border-b border-hairline">
-                <div>
-                  <h3 className="text-section-header mb-0.5">Send Stride Story</h3>
-                  <p className="text-xs text-text-secondary">Share directly with friends & Strava</p>
+            {/* HEADER & SEARCH */}
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-volt/20 text-volt flex items-center justify-center">
+                    <StickyNote className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-sm font-extrabold text-white">Stickers & Badges</h3>
                 </div>
                 <button
-                  onClick={() => setShowSendModal(false)}
-                  className="w-8 h-8 rounded-full bg-surface-raised flex items-center justify-center text-white"
+                  onClick={() => setIsStickerModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 active:scale-95"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="space-y-2">
-                {["Aarav Singh", "Strava Athletic Club", "Instagram Stories", "WhatsApp Status"].map(
-                  (target) => (
-                    <div
-                      key={target}
-                      onClick={() => {
-                        setShowSendModal(false);
-                        showToast(`Shared to ${target}! 🚀`);
-                      }}
-                      className="p-3 bg-surface-raised rounded-xl flex justify-between items-center cursor-pointer hover:bg-white/10"
-                    >
-                      <span className="text-xs font-bold text-white">{target}</span>
-                      <Send className="w-4 h-4 text-volt" />
-                    </div>
-                  )
+              {/* SEARCH INPUT */}
+              <div className="relative w-full">
+                <Search className="w-4 h-4 text-white/50 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={stickerSearch}
+                  onChange={(e) => setStickerSearch(e.target.value)}
+                  placeholder="Search badges, stats, emojis..."
+                  className="w-full bg-surface-raised border border-hairline rounded-full pl-10 pr-8 py-2 text-xs text-white placeholder-white/40 outline-none focus:border-volt"
+                />
+                {stickerSearch && (
+                  <button
+                    onClick={() => setStickerSearch("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-white/50 hover:text-white"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
-            </motion.div>
+
+              {/* CATEGORY TABS */}
+              <div className="w-full">
+                <GestureSwipeCarousel
+                  items={["All", "Badges", "Metrics", "Locations", "Emojis"]}
+                  selectedIndex={["All", "Badges", "Metrics", "Locations", "Emojis"].indexOf(selectedStickerCategory)}
+                  onSelectIndex={(index) => {
+                    const cats = ["All", "Badges", "Metrics", "Locations", "Emojis"];
+                    setSelectedStickerCategory(cats[index]);
+                  }}
+                  itemGap={8}
+                  selectedScale={1.05}
+                  unselectedOpacity={0.6}
+                  renderItem={(cat, _, isSelected) => (
+                    <button
+                      className={`px-3.5 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap border transition-all ${
+                        isSelected
+                          ? "bg-volt text-ink border-volt shadow-[0_0_15px_rgba(244,228,9,0.5)]"
+                          : "bg-surface-raised text-text-secondary border-hairline hover:text-white"
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* STICKER GRID LIST */}
+            <div className="flex-1 my-3 overflow-y-auto no-scrollbar pr-1">
+              {filteredStickers.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-40 text-white/50 text-xs">
+                  <Smile className="w-8 h-8 mb-2 opacity-40" />
+                  <span>No stickers found matching "{stickerSearch}"</span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  {filteredStickers.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => handleAddSticker(item)}
+                      className={`flex items-center justify-center p-3 rounded-2xl border transition-all active:scale-95 group relative ${
+                        item.type === "emoji"
+                          ? "bg-black/40 border-white/10 hover:border-volt hover:bg-black/60 min-h-[64px]"
+                          : `bg-gradient-to-r ${item.bgGradient || "from-amber-500 to-yellow-400"} border-white/20 shadow-lg min-h-[56px]`
+                      }`}
+                    >
+                      {item.type === "emoji" ? (
+                        <span className="text-4xl group-hover:scale-110 transition-transform">{item.content}</span>
+                      ) : (
+                        <span className="text-xs font-extrabold text-white tracking-wider uppercase text-center drop-shadow-md leading-tight">
+                          {item.content}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* FOOTER DISMISS */}
+            <div className="pt-2 border-t border-white/10 flex justify-center">
+              <button
+                onClick={() => setIsStickerModalOpen(false)}
+                className="px-6 py-2 rounded-full bg-white/10 text-white/80 font-bold text-xs border border-white/10 active:scale-95"
+              >
+                Close
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* DRAWING TOOL FLOATING CONTROL PANEL */}
+      <AnimatePresence>
+        {activeTool === "draw" && (
+          <motion.div
+            initial={{ y: 50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 50, opacity: 0 }}
+            className="absolute bottom-20 left-4 right-4 z-40 bg-black/90 backdrop-blur-2xl border border-white/20 p-3.5 rounded-3xl shadow-2xl flex flex-col gap-3"
+          >
+            {/* ROW 1: Brush Types & Sizes */}
+            <div className="flex items-center justify-between gap-2">
+              {/* Brush Types */}
+              <div className="flex items-center bg-white/10 rounded-full p-1 border border-white/10 gap-1 overflow-x-auto no-scrollbar">
+                {[
+                  { id: "pen", label: "Pen", icon: PenTool },
+                  { id: "neon", label: "Glow", icon: Sparkles },
+                  { id: "highlighter", label: "Marker", icon: Highlighter },
+                  { id: "eraser", label: "Eraser", icon: Eraser },
+                ].map((b) => {
+                  const Icon = b.icon;
+                  const isSelected = brushType === b.id;
+                  return (
+                    <button
+                      key={b.id}
+                      onClick={() => setBrushType(b.id as any)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-extrabold flex items-center gap-1.5 transition-all whitespace-nowrap ${
+                        isSelected
+                          ? "bg-volt text-ink shadow-md scale-105"
+                          : "text-white/70 hover:text-white"
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{b.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Size Selector */}
+              <div className="flex items-center bg-white/10 rounded-full p-1 border border-white/10 gap-1 shrink-0">
+                {[
+                  { label: "S", size: 3 },
+                  { label: "M", size: 8 },
+                  { label: "L", size: 16 },
+                  { label: "XL", size: 28 },
+                ].map((sz) => (
+                  <button
+                    key={sz.label}
+                    onClick={() => setBrushSize(sz.size)}
+                    className={`w-7 h-7 rounded-full text-[11px] font-extrabold flex items-center justify-center transition-colors ${
+                      brushSize === sz.size ? "bg-volt text-ink" : "text-white/70 hover:text-white"
+                    }`}
+                  >
+                    {sz.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* ROW 2: Color Palette Swatches & Actions (Clear, Undo, Redo, Done) */}
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/10">
+              {/* Color Palette (hidden when Eraser selected) */}
+              {brushType !== "eraser" ? (
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 max-w-[55%]">
+                  {COLOR_PALETTE.map((c) => {
+                    const isSelected = brushColor.toLowerCase() === c.hex.toLowerCase();
+                    return (
+                      <button
+                        key={c.hex}
+                        onClick={() => setBrushColor(c.hex)}
+                        style={{ backgroundColor: c.hex }}
+                        className={`w-7 h-7 rounded-full shrink-0 border-2 transition-transform active:scale-90 ${
+                          isSelected
+                            ? "ring-2 ring-volt ring-offset-2 ring-offset-black scale-110 border-white"
+                            : "border-white/20"
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-xs text-white/50 italic px-2">
+                  Rub canvas to erase strokes
+                </div>
+              )}
+
+              {/* Actions: Clear, Undo, Redo, Done */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={handleGlobalUndo}
+                  disabled={historyStack.length === 0}
+                  className="w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center disabled:opacity-30 active:scale-95 border border-white/10"
+                  title="Undo Stroke"
+                >
+                  <Undo className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={handleGlobalRedo}
+                  disabled={redoHistoryStack.length === 0}
+                  className="w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center disabled:opacity-30 active:scale-95 border border-white/10"
+                  title="Redo Stroke"
+                >
+                  <Redo className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={handleClearDraw}
+                  className="w-8 h-8 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center active:scale-95"
+                  title="Clear Canvas"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTool(null);
+                    showToast("Drawing applied");
+                  }}
+                  className="px-4 py-1.5 rounded-full bg-volt text-ink font-extrabold text-xs shadow-md active:scale-95 flex items-center gap-1"
+                >
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  <span>Done</span>
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* IMAGE TOOL FLOATING CONTROL PANEL (Crop, Perspective, Shadow) */}
+      <AnimatePresence>
+        {(activeTool === "crop" || isImageSelected) && (
+          <motion.div
+            initial={{ y: 50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 50, opacity: 0 }}
+            className="absolute bottom-20 left-4 right-4 z-40 bg-black/92 backdrop-blur-2xl border border-white/20 p-3.5 rounded-3xl shadow-2xl flex flex-col gap-3"
+          >
+            {/* Header Tabs: Crop | Perspective | Shadow */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+              <div className="flex items-center gap-1 bg-white/10 p-1 rounded-full border border-white/10">
+                <button
+                  onClick={() => setImageSubTab("crop")}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                    imageSubTab === "crop" ? "bg-volt text-ink shadow-md" : "text-white/70 hover:text-white"
+                  }`}
+                >
+                  Crop
+                </button>
+                <button
+                  onClick={() => setImageSubTab("perspective")}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                    imageSubTab === "perspective" ? "bg-volt text-ink shadow-md" : "text-white/70 hover:text-white"
+                  }`}
+                >
+                  Perspective
+                </button>
+                <button
+                  onClick={() => setImageSubTab("shadow")}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                    imageSubTab === "shadow" ? "bg-volt text-ink shadow-md" : "text-white/70 hover:text-white"
+                  }`}
+                >
+                  Shadow
+                </button>
+              </div>
+
+              <button
+                onClick={() => {
+                  setIsImageSelected(false);
+                  setActiveTool(null);
+                }}
+                className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white text-xs"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* TAB 1: CROP */}
+            {imageSubTab === "crop" && (
+              <>
+                {/* ROW 1: ASPECT RATIO CAROUSEL */}
+                <div className="w-full flex items-center gap-2">
+                  <span className="text-[11px] font-extrabold text-white/50 uppercase tracking-wider shrink-0 px-1">
+                    Ratio
+                  </span>
+                  <div className="flex-1 overflow-x-auto no-scrollbar">
+                    <GestureSwipeCarousel
+                      items={[
+                        { id: "free", label: "Free" },
+                        { id: "9:16", label: "9:16 Story" },
+                        { id: "1:1", label: "1:1 Square" },
+                        { id: "4:5", label: "4:5 Post" },
+                        { id: "16:9", label: "16:9 Landscape" },
+                      ]}
+                      selectedIndex={["free", "9:16", "1:1", "4:5", "16:9"].indexOf(cropRatio)}
+                      onSelectIndex={(idx) => {
+                        const ratios = ["free", "9:16", "1:1", "4:5", "16:9"];
+                        setCropRatio(ratios[idx]);
+                      }}
+                      itemGap={8}
+                      selectedScale={1.05}
+                      unselectedOpacity={0.6}
+                      renderItem={(item, _, isSelected) => (
+                        <button
+                          className={`px-3 py-1 rounded-full text-xs font-extrabold whitespace-nowrap border transition-all ${
+                            isSelected
+                              ? "bg-volt text-ink border-volt shadow-[0_0_12px_rgba(244,228,9,0.5)]"
+                              : "bg-surface-raised text-text-secondary border-hairline hover:text-white"
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {/* ROW 2: ROTATION & FLIP CONTROLS + APPLY / CANCEL */}
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/10">
+                  <div className="flex items-center gap-1 bg-white/10 rounded-full p-1 border border-white/10">
+                    <button
+                      onClick={() => setCropRotation((prev) => (prev + 90) % 360)}
+                      className="p-1.5 rounded-full text-white/80 hover:text-white hover:bg-white/10 active:scale-95 transition-colors"
+                      title="Rotate 90° Clockwise"
+                    >
+                      <RotateCw className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setCropRotation((prev) => (prev - 90 + 360) % 360)}
+                      className="p-1.5 rounded-full text-white/80 hover:text-white hover:bg-white/10 active:scale-95 transition-colors"
+                      title="Rotate 90° Counter-Clockwise"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setCropFlipH((prev) => !prev)}
+                      className={`p-1.5 rounded-full transition-colors ${
+                        cropFlipH ? "bg-volt text-ink font-bold" : "text-white/80 hover:text-white"
+                      }`}
+                      title="Flip Horizontal"
+                    >
+                      <FlipHorizontal className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setCropFlipV((prev) => !prev)}
+                      className={`p-1.5 rounded-full transition-colors ${
+                        cropFlipV ? "bg-volt text-ink font-bold" : "text-white/80 hover:text-white"
+                      }`}
+                      title="Flip Vertical"
+                    >
+                      <FlipVertical className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCropRatio("free");
+                        setCropRotation(0);
+                        setCropFlipH(false);
+                        setCropFlipV(false);
+                      }}
+                      className="p-1.5 rounded-full text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 active:scale-95 transition-colors"
+                      title="Reset Transform"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setCropRatio(committedCrop.ratio);
+                        setCropRotation(committedCrop.rotation);
+                        setCropFlipH(committedCrop.flipH);
+                        setCropFlipV(committedCrop.flipV);
+                        setIsImageSelected(false);
+                        setActiveTool(null);
+                      }}
+                      className="px-3 py-1.5 rounded-full bg-white/10 text-white font-semibold text-xs border border-white/10 active:scale-95"
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        pushHistorySnapshot();
+                        setCommittedCrop({
+                          ratio: cropRatio,
+                          rotation: cropRotation,
+                          flipH: cropFlipH,
+                          flipV: cropFlipV,
+                        });
+                        setIsImageSelected(false);
+                        setActiveTool(null);
+                        showToast("Crop & orientation applied");
+                      }}
+                      className="px-4 py-1.5 rounded-full bg-volt text-ink font-extrabold text-xs shadow-md active:scale-95 flex items-center gap-1"
+                    >
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                      <span>Apply</span>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* TAB 2: PERSPECTIVE */}
+            {imageSubTab === "perspective" && (
+              <div className="flex flex-col gap-3 py-1">
+                {/* Perspective X Slider */}
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-white/70 w-24 shrink-0">Tilt X: {imagePerspectiveX}°</span>
+                  <input
+                    type="range"
+                    min={-45}
+                    max={45}
+                    value={imagePerspectiveX}
+                    onChange={(e) => {
+                      pushHistorySnapshot();
+                      setImagePerspectiveX(Number(e.target.value));
+                    }}
+                    className="w-full accent-volt cursor-pointer"
+                  />
+                  <button
+                    onClick={() => setImagePerspectiveX(0)}
+                    className="text-[11px] text-white/50 hover:text-white underline shrink-0"
+                  >
+                    Reset
+                  </button>
+                </div>
+
+                {/* Perspective Y Slider */}
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-white/70 w-24 shrink-0">Tilt Y: {imagePerspectiveY}°</span>
+                  <input
+                    type="range"
+                    min={-45}
+                    max={45}
+                    value={imagePerspectiveY}
+                    onChange={(e) => {
+                      pushHistorySnapshot();
+                      setImagePerspectiveY(Number(e.target.value));
+                    }}
+                    className="w-full accent-volt cursor-pointer"
+                  />
+                  <button
+                    onClick={() => setImagePerspectiveY(0)}
+                    className="text-[11px] text-white/50 hover:text-white underline shrink-0"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: SHADOW */}
+            {imageSubTab === "shadow" && (
+              <div className="flex flex-col gap-3 py-1">
+                {/* Shadow Blur Slider */}
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-white/70 w-24 shrink-0">Blur: {imageShadowBlur}px</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={50}
+                    value={imageShadowBlur}
+                    onChange={(e) => {
+                      pushHistorySnapshot();
+                      setImageShadowBlur(Number(e.target.value));
+                    }}
+                    className="w-full accent-volt cursor-pointer"
+                  />
+                </div>
+
+                {/* Shadow Offset Y Slider */}
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-white/70 w-24 shrink-0">Offset: {imageShadowOffsetY}px</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={30}
+                    value={imageShadowOffsetY}
+                    onChange={(e) => {
+                      pushHistorySnapshot();
+                      setImageShadowOffsetY(Number(e.target.value));
+                    }}
+                    className="w-full accent-volt cursor-pointer"
+                  />
+                </div>
+
+                {/* Shadow Color Selector */}
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs font-bold text-white/70 w-24 shrink-0">Color:</span>
+                  <div className="flex items-center gap-2">
+                    {[
+                      { hex: "#000000", label: "Black" },
+                      { hex: "#3B82F6", label: "Blue" },
+                      { hex: "#F4E409", label: "Neon" },
+                      { hex: "#F43F5E", label: "Rose" },
+                      { hex: "#10B981", label: "Emerald" },
+                      { hex: "#FFFFFF", label: "White" },
+                    ].map((c) => (
+                      <button
+                        key={c.hex}
+                        onClick={() => {
+                          pushHistorySnapshot();
+                          setImageShadowColor(c.hex);
+                        }}
+                        style={{ backgroundColor: c.hex }}
+                        className={`w-6 h-6 rounded-full border border-white/20 transition-transform ${
+                          imageShadowColor.toLowerCase() === c.hex.toLowerCase()
+                            ? "ring-2 ring-volt scale-110"
+                            : "hover:scale-105"
+                        }`}
+                        title={c.label}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* LAYER MANAGER FLOATING CONTROL PANEL */}
+      <AnimatePresence>
+        {activeTool === "layers" && (
+          <motion.div
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            className="absolute bottom-20 left-4 right-4 z-40 bg-black/92 backdrop-blur-2xl border border-white/20 p-4 rounded-3xl shadow-2xl flex flex-col gap-3 max-h-[55vh] overflow-hidden"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-2 border-b border-white/10 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-volt/20 text-volt border border-volt/30 flex items-center justify-center shrink-0">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                    Layer Manager
+                    <span className="px-2 py-0.5 rounded-full bg-white/10 text-white/70 text-[10px] font-bold">
+                      {getAllLayers().length}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-white/50">
+                    Reorder, lock, hide or duplicate elements
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick Add Shortcuts */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => openTextEditor()}
+                  className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 border border-white/10 active:scale-95 transition-colors"
+                >
+                  <Plus className="w-3 h-3 text-volt" />
+                  <span>Text</span>
+                </button>
+                <button
+                  onClick={() => setIsStickerModalOpen(true)}
+                  className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 border border-white/10 active:scale-95 transition-colors"
+                >
+                  <Plus className="w-3 h-3 text-volt" />
+                  <span>Sticker</span>
+                </button>
+                <button
+                  onClick={() => setActiveTool(null)}
+                  className="w-7 h-7 rounded-full bg-white/10 text-white/70 hover:text-white flex items-center justify-center border border-white/10 ml-1 active:scale-95 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Layer Stack Items List */}
+            <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col gap-2 pr-1">
+              {getAllLayers().map((layer, index) => {
+                const isTop = index === 0;
+                const isBottom = index === getAllLayers().length - 1;
+                const isSelected =
+                  (layer.type === "text" && selectedTextId === layer.id) ||
+                  (layer.type === "sticker" && selectedStickerId === layer.id);
+
+                return (
+                  <div
+                    key={layer.id}
+                    onClick={() => handleSelectLayer(layer.id, layer.type)}
+                    className={`p-2.5 rounded-2xl border flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                      isSelected
+                        ? "bg-volt/15 border-volt shadow-[0_0_12px_rgba(244,228,9,0.2)]"
+                        : "bg-white/5 hover:bg-white/10 border-white/10"
+                    }`}
+                  >
+                    {/* Left Icon & Info */}
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center shrink-0 text-volt border border-white/10">
+                        {layer.type === "image" && <ImageIcon className="w-4 h-4 text-blue-400" />}
+                        {layer.type === "draw" && <PenTool className="w-4 h-4 text-emerald-400" />}
+                        {layer.type === "text" && <Type className="w-4 h-4 text-volt" />}
+                        {layer.type === "sticker" && <StickyNote className="w-4 h-4 text-amber-400" />}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-xs font-bold truncate ${layer.hidden ? "line-through text-white/40" : "text-white"}`}>
+                            {layer.name}
+                          </span>
+                          {layer.locked && (
+                            <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-bold border border-amber-500/30">
+                              LOCKED
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-white/50 truncate">{layer.subtext}</p>
+                      </div>
+                    </div>
+
+                    {/* Controls: Move Up, Move Down, Duplicate, Lock, Hide, Delete */}
+                    <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {/* Move Up */}
+                      <button
+                        onClick={() => reorderLayer(layer.id, "up")}
+                        disabled={isTop}
+                        className="p-1.5 rounded-lg bg-white/10 text-white/80 hover:text-white disabled:opacity-20 active:scale-95 transition-colors"
+                        title="Bring Layer Forward"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Move Down */}
+                      <button
+                        onClick={() => reorderLayer(layer.id, "down")}
+                        disabled={isBottom}
+                        className="p-1.5 rounded-lg bg-white/10 text-white/80 hover:text-white disabled:opacity-20 active:scale-95 transition-colors"
+                        title="Send Layer Backward"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Duplicate (text & sticker only) */}
+                      {(layer.type === "text" || layer.type === "sticker") && (
+                        <button
+                          onClick={() => duplicateLayer(layer.id, layer.type)}
+                          className="p-1.5 rounded-lg bg-white/10 text-white/80 hover:text-white hover:bg-white/20 active:scale-95 transition-colors"
+                          title="Duplicate Layer"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
+                      {/* Lock Toggle */}
+                      <button
+                        onClick={() => toggleLayerLock(layer.id, layer.type)}
+                        className={`p-1.5 rounded-lg transition-colors active:scale-95 ${
+                          layer.locked
+                            ? "bg-amber-500/30 text-amber-300 border border-amber-500/40"
+                            : "bg-white/10 text-white/70 hover:text-white"
+                        }`}
+                        title={layer.locked ? "Unlock Layer" : "Lock Layer"}
+                      >
+                        {layer.locked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                      </button>
+
+                      {/* Hide Toggle */}
+                      <button
+                        onClick={() => toggleLayerVisibility(layer.id, layer.type)}
+                        className={`p-1.5 rounded-lg transition-colors active:scale-95 ${
+                          layer.hidden
+                            ? "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                            : "bg-white/10 text-white/70 hover:text-white"
+                        }`}
+                        title={layer.hidden ? "Show Layer" : "Hide Layer"}
+                      >
+                        {layer.hidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+
+                      {/* Delete */}
+                      {layer.type !== "image" && (
+                        <button
+                          onClick={() => deleteLayerItem(layer.id, layer.type)}
+                          className="p-1.5 rounded-lg bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 border border-rose-500/30 active:scale-95 ml-0.5 transition-colors"
+                          title="Delete Layer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 5. BOTTOM CONTEXT BAR */}
+      <div className="relative z-20 px-4 pb-8 pt-2 w-full flex items-center justify-center">
+        <button
+          onClick={() => setIsExportModalOpen(true)}
+          className="w-full max-w-sm flex items-center justify-center gap-2 px-6 py-3.5 rounded-full bg-volt text-ink font-extrabold text-sm shadow-[0_0_20px_rgba(244,228,9,0.4)] active:scale-95 transition-transform"
+        >
+          <span>Export & Share Image</span>
+          <Send className="w-4 h-4 fill-ink" />
+        </button>
+      </div>
+
+      {/* 6. EXPORT & SHARE MODAL */}
+      <ExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        capturedImage={capturedImage}
+        textOverlays={textOverlays}
+        stickerOverlays={stickerOverlays}
+        drawingCanvas={drawingCanvasRef.current}
+        committedCrop={committedCrop}
+        isBaseImageHidden={isBaseImageHidden}
+        isDrawingHidden={isDrawingHidden}
+        baseImageZIndex={baseImageZIndex}
+        drawingZIndex={drawingZIndex}
+        containerRef={canvasRef}
+        showToast={showToast}
+      />
     </div>
   );
 }
+

@@ -34,7 +34,7 @@ export interface EditableLensElement {
 export interface LensTemplate {
   id: string;
   name: string;
-  category: "Running" | "Cycling" | "Minimal" | "Cyber HUD" | "Vintage Film" | "GPS Route" | "PR Trophy" | "Music Beats" | "Trending";
+  category: string;
   icon: string;
   tagline: string;
   badgeColor: string;
