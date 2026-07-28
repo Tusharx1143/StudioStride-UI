@@ -41,9 +41,11 @@ import {
   Sparkle
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LENS_TEMPLATES_EXPANDED, STOCK_PHOTOS, MUSIC_TRACKS, MusicTrack } from "../data/mockData";
-import { LensTemplate, PhotoSource } from "../types";
+import { LENS_TEMPLATES_EXPANDED, STOCK_PHOTOS, MUSIC_TRACKS, MusicTrack, TEMPLATE_FAMILIES } from "../data/mockData";
+import { LensTemplate, PhotoSource, TemplateFamily } from "../types";
 import GestureSwipeCarousel from "./GestureSwipeCarousel";
+import TemplateCarousel from "./TemplateCarousel";
+import TemplatePreview from "./TemplatePreview";
 
 export const LENS_CATEGORIES = [
   "All",
@@ -100,7 +102,6 @@ export default function SnapCamera() {
   const [cameraError, setCameraError] = useState<string | null>(null);
 
   // Optical Zoom & Camera Lenses
-  const [zoomLevel, setZoomLevel] = useState<"0.5x" | "1x" | "2x" | "3x">("1x");
   const [isPortraitDepthMode, setIsPortraitDepthMode] = useState<boolean>(false);
   const [captureMode, setCaptureMode] = useState<CaptureMode>("photo");
 
@@ -141,6 +142,11 @@ export default function SnapCamera() {
   const [selectedLensIndex, setSelectedLensIndex] = useState<number>(0);
   const [activeCategory, setActiveCategory] = useState<string>("All");
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
+
+  // Template family selection
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateFamily>(TEMPLATE_FAMILIES[0]);
+  const [templateLabelVisible, setTemplateLabelVisible] = useState<boolean>(false);
+  const templateLabelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const filteredLenses = lenses.filter((l) => {
     if (activeCategory === "All") return true;
@@ -219,6 +225,7 @@ export default function SnapCamera() {
           state: {
             capturedImage: imageUrl,
             selectedLensId: activeLens?.id || "minimal",
+            selectedTemplateFamily: selectedTemplate,
             appliedMusic: selectedMusic ? selectedMusic.title : null,
             activityTitle,
             activityDistance,
@@ -243,6 +250,7 @@ export default function SnapCamera() {
       state: {
         capturedImage: photo.url,
         selectedLensId: activeLens?.id || "minimal",
+        selectedTemplateFamily: selectedTemplate,
         appliedMusic: selectedMusic ? selectedMusic.title : null,
         activityTitle,
         activityDistance,
@@ -343,6 +351,7 @@ export default function SnapCamera() {
         state: {
           capturedImage: imageUrl,
           selectedLensId: activeLens?.id || "minimal",
+          selectedTemplateFamily: selectedTemplate,
           appliedMusic: selectedMusic ? selectedMusic.title : null,
           aspectRatio: aspectRatio,
           hdQuality: hdQuality,
@@ -353,16 +362,6 @@ export default function SnapCamera() {
         },
       });
     }, 250);
-  };
-
-  // Zoom scale multiplier — returns CSS scale value (avoids purged Tailwind classes)
-  const getZoomScale = (): number => {
-    switch (zoomLevel) {
-      case "0.5x": return 1;
-      case "2x": return 1.25;
-      case "3x": return 1.5;
-      default: return 1.05;
-    }
   };
 
   return (
@@ -518,14 +517,14 @@ export default function SnapCamera() {
               } ${
                 isNightMode ? "brightness-125 contrast-125 saturate-150" : ""
               } ${isBeautyMode ? "blur-[0.3px]" : ""}`}
-              style={{ transform: `scale(${getZoomScale()})` }}
+              style={{}}
             />
           ) : (
             <div
               className={`absolute inset-0 bg-cover bg-center transition-transform duration-500 ${
                 isNightMode ? "brightness-125 contrast-125" : ""
               }`}
-              style={{ backgroundImage: `url("${STOCK_PHOTOS[1].url}")`, transform: `scale(${getZoomScale()})` }}
+              style={{ backgroundImage: `url("${STOCK_PHOTOS[1].url}")` }}
             ></div>
           )}
 
@@ -547,17 +546,16 @@ export default function SnapCamera() {
           {/* Dark Glass Scrim Gradient */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-transparent to-black/90 pointer-events-none z-10"></div>
 
-          {/* Active Lens Live Graphics Overlay */}
+          {/* Template Preview Overlay */}
           <div className="absolute inset-0 z-20 p-screen-gutter pt-24 pb-44 flex flex-col justify-between pointer-events-none">
-            {/* Active Lens Badge */}
+            {/* Template Badge + Music */}
             <div className="self-start flex items-center gap-2">
               <span
-                className={`px-3 py-1.5 rounded-full text-xs font-extrabold shadow-xl flex items-center gap-1.5 backdrop-blur-md ${
-                  activeLens?.badgeColor || "bg-volt text-ink"
-                }`}
+                className="px-3 py-1.5 rounded-full text-xs font-extrabold shadow-xl flex items-center gap-1.5 backdrop-blur-md border border-white/10"
+                style={{ backgroundColor: selectedTemplate.accentColor + "20", color: selectedTemplate.accentColor }}
               >
-                <span>{activeLens?.icon || "🏃"}</span>
-                <span>{activeLens?.name || "Stride"} Lens</span>
+                <span>{selectedTemplate.icon}</span>
+                <span>{selectedTemplate.name}</span>
               </span>
 
               {selectedMusic && (
@@ -568,53 +566,16 @@ export default function SnapCamera() {
               )}
             </div>
 
-            {/* Lens Specific Stats Card Overlay */}
+            {/* Template-specific stats overlay */}
             <div className="w-full max-w-xs drop-shadow-2xl">
-              {activeLens?.overlayType === "minimal" && (
-                <div className="space-y-2">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-5xl font-black text-white tracking-tighter drop-shadow-lg">
-                      {distanceNumeric.toFixed(2)}
-                    </span>
-                    <span className="text-lg text-volt font-bold">km</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="bg-black/60 backdrop-blur-md hairline-border rounded-xl px-3 py-1.5 text-xs text-white">
-                      Pace: <span className="text-volt font-bold">{paceRaw}</span>
-                    </div>
-                    <div className="bg-black/60 backdrop-blur-md hairline-border rounded-xl px-3 py-1.5 text-xs text-white">
-                      Time: <span className="font-bold">{activityTime}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeLens?.overlayType === "strava" && (
-                <div className="bg-[#FC4C02]/90 text-white rounded-2xl p-4 shadow-2xl backdrop-blur-md border border-white/20">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-amber-200 mb-1">
-                    STRAVA ACTIVITY ⚡
-                  </div>
-                  <div className="text-3xl font-extrabold">{distanceNumeric.toFixed(2)} KM</div>
-                  <div className="text-xs opacity-90 mt-1">{activityTitle}</div>
-                </div>
-              )}
-
-              {activeLens?.overlayType === "cyberpunk" && (
-                <div className="border border-cyan-400 bg-black/80 text-cyan-300 p-3.5 rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.4)] font-mono text-xs">
-                  <div className="flex justify-between mb-1">
-                    <span>[ CYBER HUD ]</span>
-                    <span className="animate-pulse text-red-400">● RECORDING</span>
-                  </div>
-                  <div className="text-3xl font-black text-white">{String(distanceNumeric.toFixed(2)).padStart(5, "0")} KM</div>
-                </div>
-              )}
-
-              {activeLens?.overlayType === "vintage" && (
-                <div className="bg-amber-50/90 text-zinc-900 p-3 rounded-xl font-serif rotate-[-1deg]">
-                  <div className="text-[10px] text-zinc-600">{new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }).toUpperCase()}</div>
-                  <div className="text-2xl font-bold">{distanceNumeric.toFixed(1)} kilometers</div>
-                </div>
-              )}
+              <TemplatePreview
+                template={selectedTemplate}
+                distance={distanceNumeric}
+                distanceUnit="km"
+                pace={paceRaw}
+                time={activityTime}
+                title={activityTitle}
+              />
             </div>
           </div>
 
@@ -645,21 +606,6 @@ export default function SnapCamera() {
             </div>
           </div>
 
-          {/* ZOOM LEVEL PILLS (0.5x, 1x, 2x, 3x) */}
-          <div className="absolute bottom-48 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
-            {(["0.5x", "1x", "2x", "3x"] as const).map((z) => (
-              <button
-                key={z}
-                onClick={() => setZoomLevel(z)}
-                className={`px-2.5 py-0.5 rounded-full text-xs font-black transition-all ${
-                  zoomLevel === z ? "bg-volt text-ink shadow-md" : "text-white/70 hover:text-white"
-                }`}
-              >
-                {z}
-              </button>
-            ))}
-          </div>
-
           {/* CAPTURE MODES & SNAPCHAT LENS CAROUSEL AREA */}
           <div className="relative z-30 pb-safe pb-4 flex flex-col items-center gap-2">
             {/* Capture Mode Selector Tabs (Photo / Video / Burst / Portrait) */}
@@ -680,14 +626,14 @@ export default function SnapCamera() {
               ))}
             </div>
 
-            {/* Lens Category Filter Pills (Gesture Swipe Carousel) */}
+            {/* Template Category Filter Pills */}
             <div className="w-full px-2 py-0.5">
               <GestureSwipeCarousel
-                items={LENS_CATEGORIES}
-                selectedIndex={LENS_CATEGORIES.indexOf(activeCategory) >= 0 ? LENS_CATEGORIES.indexOf(activeCategory) : 0}
+                items={["All", "Bold", "Classic", "Clean", "Modern", "Tech", "Vintage", "Art", "Premium", "Social", "Gaming", "Maps", "Utility", "Dynamic"]}
+                selectedIndex={0}
                 onSelectIndex={(index) => {
-                  setActiveCategory(LENS_CATEGORIES[index]);
-                  setSelectedLensIndex(0);
+                  const categories = ["All", "Bold", "Classic", "Clean", "Modern", "Tech", "Vintage", "Art", "Premium", "Social", "Gaming", "Maps", "Utility", "Dynamic"];
+                  setActiveCategory(categories[index]);
                 }}
                 itemGap={8}
                 selectedScale={1.05}
@@ -706,44 +652,38 @@ export default function SnapCamera() {
               />
             </div>
 
-            {/* Bottom Snapchat Lens Carousel (Gesture Swipe Carousel) */}
+            {/* Activity Template Generation Carousel */}
             <div className="w-full px-2 py-1">
-              <GestureSwipeCarousel<LensTemplate>
-                items={filteredLenses}
-                selectedIndex={selectedLensIndex < filteredLenses.length ? selectedLensIndex : 0}
-                onSelectIndex={setSelectedLensIndex}
-                itemGap={16}
-                selectedScale={1.22}
-                unselectedOpacity={0.5}
-                renderItem={(lens: LensTemplate, _, isSelected) => (
-                  <div className="relative group py-2">
-                    <div className="flex flex-col items-center gap-1.5">
-                      <div
-                        className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl transition-all relative ${
-                          isSelected
-                            ? "ring-4 ring-volt bg-surface-raised shadow-[0_0_30px_rgba(244,228,9,0.7)]"
-                            : "border-2 border-white/20 bg-black/70"
-                        }`}
-                      >
-                        {lens.icon}
-                      </div>
-                      <span className={`text-[11px] font-extrabold tracking-tight ${isSelected ? "text-volt drop-shadow-md" : "text-white/80"}`}>
-                        {lens.name.split(" ")[0]}
-                      </span>
-                    </div>
-
-                    {/* Lens Favorite Heart Toggle */}
-                    <button
-                      onClick={(e) => toggleFavoriteLens(lens.id, e)}
-                      className={`absolute top-1 right-0 w-5 h-5 rounded-full flex items-center justify-center backdrop-blur-md text-[10px] z-10 transition-transform active:scale-90 ${
-                        lens.isFavorite ? "bg-rose-500 text-white shadow-md" : "bg-black/60 text-white/60"
-                      }`}
-                    >
-                      <Heart className={`w-3 h-3 ${lens.isFavorite ? "fill-white" : ""}`} />
-                    </button>
-                  </div>
-                )}
+              <TemplateCarousel
+                templates={TEMPLATE_FAMILIES}
+                selectedId={selectedTemplate.id}
+                onSelect={(template) => {
+                  setSelectedTemplate(template);
+                  setTemplateLabelVisible(true);
+                  if (templateLabelTimerRef.current) clearTimeout(templateLabelTimerRef.current);
+                  templateLabelTimerRef.current = setTimeout(() => {
+                    setTemplateLabelVisible(false);
+                  }, 1000);
+                }}
               />
+            </div>
+
+            {/* Template Selection Label */}
+            <div className="h-6 flex items-center justify-center">
+              <AnimatePresence>
+                {templateLabelVisible && (
+                  <motion.span
+                    initial={{ opacity: 0, y: 6, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.9 }}
+                    transition={{ duration: 0.2 }}
+                    className="px-3 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-[11px] font-bold text-white"
+                  >
+                    {selectedTemplate.name}{" "}
+                    <span className="text-volt">Selected</span>
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* MAIN SHUTTER BUTTON & GALLERY IMPORT BAR */}

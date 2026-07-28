@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { STOCK_PHOTOS } from "../data/mockData";
+import { TemplateFamily } from "../types";
 import GestureSwipeCarousel from "./GestureSwipeCarousel";
 import ExportModal from "./ExportModal";
 
@@ -175,6 +176,10 @@ export default function EditorScreen() {
     location.state?.capturedImage ||
     sessionStorage.getItem("temp_captured_image") ||
     STOCK_PHOTOS[0].url;
+
+  // Selected template family for future generation engine
+  const selectedTemplateFamily: TemplateFamily | null =
+    location.state?.selectedTemplateFamily || null;
 
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -1435,7 +1440,7 @@ export default function EditorScreen() {
           return (
             <button
               key={tool.id}
-              onClick={() => handleToolClick(tool.id, tool.label)}
+              onClick={() => handleToolClick(tool.id)}
               className={`flex flex-col items-center gap-1 group relative transition-all duration-200 active:scale-90`}
             >
               <div

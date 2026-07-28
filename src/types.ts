@@ -65,3 +65,12 @@ export interface SavedProject {
   updatedAt: string;
   placedTextsCount: number;
 }
+
+export interface TemplateFamily {
+  id: string;
+  name: string;
+  category: string;
+  icon: string;
+  tagline: string;
+  accentColor: string;
+}
