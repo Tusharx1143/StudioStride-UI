@@ -235,7 +235,7 @@ export default function EditorScreen() {
     isDrawingHidden: boolean;
     isDrawingLocked: boolean;
     drawingZIndex: number;
-    drawingCanvasImageData?: ImageData | null;
+    drawingCanvasDataUrl?: string | null;
     hasDrawnStrokes: boolean;
   }
 
@@ -251,17 +251,15 @@ export default function EditorScreen() {
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
 
   // Helper to snapshot current canvas & editor state
+  // Uses compressed data URL instead of raw ImageData (~8MB → ~200KB per snapshot)
   const getCurrentSnapshot = (): EditorSnapshot => {
-    let drawingData: ImageData | null = null;
+    let drawingDataUrl: string | null = null;
     const canvas = drawingCanvasRef.current;
-    if (canvas && canvas.width > 0 && canvas.height > 0) {
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        try {
-          drawingData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        } catch {
-          // ignore
-        }
+    if (canvas && canvas.width > 0 && canvas.height > 0 && hasDrawnStrokes) {
+      try {
+        drawingDataUrl = canvas.toDataURL("image/png");
+      } catch {
+        // ignore
       }
     }
 
@@ -280,7 +278,7 @@ export default function EditorScreen() {
       isDrawingHidden,
       isDrawingLocked,
       drawingZIndex,
-      drawingCanvasImageData: drawingData,
+      drawingCanvasDataUrl: drawingDataUrl,
       hasDrawnStrokes,
     };
   };
@@ -288,7 +286,7 @@ export default function EditorScreen() {
   // Push snapshot before making any state mutation
   const pushHistorySnapshot = () => {
     const snapshot = getCurrentSnapshot();
-    setHistoryStack((prev) => [...prev.slice(-30), snapshot]); // Store up to 30 history states
+    setHistoryStack((prev) => [...prev.slice(-14), snapshot]); // Store up to 15 history states
     setRedoHistoryStack([]); // Clear redo stack on new action
   };
 
@@ -310,13 +308,19 @@ export default function EditorScreen() {
     setDrawingZIndex(snapshot.drawingZIndex);
     setHasDrawnStrokes(snapshot.hasDrawnStrokes);
 
+    // Restore drawing canvas from compressed data URL
     const canvas = drawingCanvasRef.current;
     if (canvas && canvas.width > 0 && canvas.height > 0) {
       const ctx = canvas.getContext("2d");
       if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if (snapshot.drawingCanvasImageData) {
-          ctx.putImageData(snapshot.drawingCanvasImageData, 0, 0);
+        if (snapshot.drawingCanvasDataUrl) {
+          const img = new Image();
+          img.onload = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+          };
+          img.src = snapshot.drawingCanvasDataUrl;
         }
       }
     }

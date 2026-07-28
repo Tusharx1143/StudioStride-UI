@@ -11,6 +11,7 @@ import ProfileScreen from "./components/ProfileScreen";
 import EditorScreen from "./components/EditorScreen";
 import ProjectsScreen from "./components/ProjectsScreen";
 import SnapCamera from "./components/SnapCamera";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 const pageVariants = {
   initial: { opacity: 0, scale: 0.98, y: 8 },
@@ -19,7 +20,7 @@ const pageVariants = {
 };
 
 const pageTransition = {
-  type: "spring",
+  type: "spring" as const,
   stiffness: 380,
   damping: 30,
   mass: 0.8,
@@ -34,49 +35,61 @@ function AnimatedRoutes() {
         <Route
           path="/"
           element={
-            <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
-              <AuthScreen />
-            </motion.div>
+            <ErrorBoundary>
+              <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
+                <AuthScreen />
+              </motion.div>
+            </ErrorBoundary>
           }
         />
         <Route
           path="/home"
           element={
-            <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
-              <HomeScreen />
-            </motion.div>
+            <ErrorBoundary>
+              <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
+                <HomeScreen />
+              </motion.div>
+            </ErrorBoundary>
           }
         />
         <Route
           path="/profile"
           element={
-            <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
-              <ProfileScreen />
-            </motion.div>
+            <ErrorBoundary>
+              <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
+                <ProfileScreen />
+              </motion.div>
+            </ErrorBoundary>
           }
         />
         <Route
           path="/editor"
           element={
-            <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
-              <EditorScreen />
-            </motion.div>
+            <ErrorBoundary>
+              <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
+                <EditorScreen />
+              </motion.div>
+            </ErrorBoundary>
           }
         />
         <Route
           path="/projects"
           element={
-            <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
-              <ProjectsScreen />
-            </motion.div>
+            <ErrorBoundary>
+              <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
+                <ProjectsScreen />
+              </motion.div>
+            </ErrorBoundary>
           }
         />
         <Route
           path="/camera"
           element={
-            <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
-              <SnapCamera />
-            </motion.div>
+            <ErrorBoundary>
+              <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
+                <SnapCamera />
+              </motion.div>
+            </ErrorBoundary>
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />

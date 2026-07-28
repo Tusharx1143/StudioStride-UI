@@ -16,20 +16,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { LENS_TEMPLATES_EXPANDED } from "../data/mockData";
-
-export interface SavedProject {
-  id: string;
-  title: string;
-  activityType: string;
-  date: string;
-  bgImage: string;
-  lensId: string;
-  distance: string;
-  pace: string;
-  time: string;
-  updatedAt: string;
-  placedTextsCount: number;
-}
+import { SavedProject } from "../types";
 
 const DEFAULT_PROJECTS: SavedProject[] = [
   {
@@ -37,8 +24,9 @@ const DEFAULT_PROJECTS: SavedProject[] = [
     title: "Morning Run 👟",
     activityType: "Running",
     date: "Today, 06:42 AM",
-    bgImage: "https://lh3.googleusercontent.com/aida-public/AB6AXuDlsjk48o8ErhWrUjPhdzzaP74wJH_nquNbZIH4dR7AIG6LbjQkqiJaMR284RioPEkOLEw7D3MXmWV3A79eAJcOw_mXQTmHbqtKY7BkoTatCpo3-TuKVmrc5DSldPniGu4j0g0l7scfAKwI-l4WsOrcLq8loKxR7ryH5R--8ouPLRfes4BcES-TNs_-ptBX6nwHeko36PIy4neS96AG15e8Bpld82jqn2ss32hXxYfuqAo6B5P5EhLfBvz6FHQDKuIMklXl5I3oHpE",
+    bgImage: "https://lh3.googleusercontent.com/aida-public/AB6AXuDlsjk48o8ErhWrUjPhdzzaP74wJH_nquNbZIH4dR7AIG6LbjLQkqiJaMR284RioPEkOLEw7D3MXmWV3A79eAJcOw_mXQTmHbqtKY7BkoTatCpo3-TuKVmrc5DSldPniGu4j0g0l7scfAKwI-l4WsOrcLq8loKxR7ryH5R--8ouPLRfes4BcES-TNs_-ptBX6nwHeko36PIy4neS96AG15e8Bpld82jqn2ss32hXxYfuqAo6B5P5EhLfBvz6FHQDKuIMklXl5I3oHpE",
     lensId: "minimal",
+    elements: [],
     distance: "8.4 km",
     pace: "6:12 /km",
     time: "52:18",
@@ -52,6 +40,7 @@ const DEFAULT_PROJECTS: SavedProject[] = [
     date: "Yesterday, 05:15 PM",
     bgImage: "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=1200&auto=format&fit=crop",
     lensId: "strava",
+    elements: [],
     distance: "12.1 km",
     pace: "5:48 /km",
     time: "1:10:22",
@@ -65,6 +54,7 @@ const DEFAULT_PROJECTS: SavedProject[] = [
     date: "2 days ago",
     bgImage: "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?q=80&w=1200&auto=format&fit=crop",
     lensId: "cyberpunk",
+    elements: [],
     distance: "5.0 km",
     pace: "4:32 /km",
     time: "22:40",
