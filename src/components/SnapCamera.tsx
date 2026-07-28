@@ -7,7 +7,6 @@ import {
   Zap,
   ZapOff,
   Image as ImageIcon,
-  Sparkles,
   ChevronRight,
   ChevronDown,
   ChevronUp,
@@ -43,7 +42,6 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import { LENS_TEMPLATES_EXPANDED, STOCK_PHOTOS, MUSIC_TRACKS, MusicTrack, TEMPLATE_FAMILIES } from "../data/mockData";
 import { LensTemplate, PhotoSource, TemplateFamily } from "../types";
-import GestureSwipeCarousel from "./GestureSwipeCarousel";
 import TemplateCarousel from "./TemplateCarousel";
 import TemplatePreview from "./TemplatePreview";
 
@@ -134,8 +132,7 @@ export default function SnapCamera() {
   const [showNotificationsModal, setShowNotificationsModal] = useState<boolean>(false);
   const [showFriendsModal, setShowFriendsModal] = useState<boolean>(false);
   const [showCameraSettings, setShowCameraSettings] = useState<boolean>(false);
-  const [showStockModal, setShowStockModal] = useState<boolean>(false);
-  const [selectedSourceCategory, setSelectedSourceCategory] = useState<string>("All");
+  const [showTemplateCarousel, setShowTemplateCarousel] = useState<boolean>(false);
 
   // Lenses & Carousel state
   const [lenses, setLenses] = useState<LensTemplate[]>(LENS_TEMPLATES_EXPANDED);
@@ -240,7 +237,6 @@ export default function SnapCamera() {
 
   // Select stock image or gradient preset background
   const handleSelectStockPhoto = (photo: PhotoSource) => {
-    setShowStockModal(false);
     try {
       sessionStorage.setItem("temp_captured_image", photo.url);
     } catch {
@@ -608,65 +604,31 @@ export default function SnapCamera() {
 
           {/* CAPTURE MODES & SNAPCHAT LENS CAROUSEL AREA */}
           <div className="relative z-30 pb-safe pb-4 flex flex-col items-center gap-2">
-            {/* Capture Mode Selector Tabs (Photo / Video / Burst / Portrait) */}
-            <div className="flex items-center gap-4 bg-black/60 backdrop-blur-md px-4 py-1 rounded-full border border-white/10 text-xs font-bold">
-              {(["photo", "video", "burst", "portrait"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => {
-                    setCaptureMode(mode);
-                    if (mode === "portrait") setIsPortraitDepthMode(true);
-                  }}
-                  className={`capitalize transition-all ${
-                    captureMode === mode ? "text-volt scale-105" : "text-white/60 hover:text-white"
-                  }`}
+            {/* Inline Template Carousel (toggled by the Templates button below) */}
+            <AnimatePresence>
+              {showTemplateCarousel && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="w-full overflow-hidden"
                 >
-                  {mode}
-                </button>
-              ))}
-            </div>
-
-            {/* Template Category Filter Pills */}
-            <div className="w-full px-2 py-0.5">
-              <GestureSwipeCarousel
-                items={["All", "Bold", "Classic", "Clean", "Modern", "Tech", "Vintage", "Art", "Premium", "Social", "Gaming", "Maps", "Utility", "Dynamic"]}
-                selectedIndex={0}
-                onSelectIndex={(index) => {
-                  const categories = ["All", "Bold", "Classic", "Clean", "Modern", "Tech", "Vintage", "Art", "Premium", "Social", "Gaming", "Maps", "Utility", "Dynamic"];
-                  setActiveCategory(categories[index]);
-                }}
-                itemGap={8}
-                selectedScale={1.05}
-                unselectedOpacity={0.6}
-                renderItem={(cat, _, isSelected) => (
-                  <button
-                    className={`px-3.5 py-1.5 rounded-full text-[11px] font-extrabold transition-all whitespace-nowrap border ${
-                      isSelected
-                        ? "bg-volt text-ink border-volt shadow-[0_0_15px_rgba(244,228,9,0.5)]"
-                        : "bg-black/70 text-white/70 border-white/10 hover:text-white"
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                )}
-              />
-            </div>
-
-            {/* Activity Template Generation Carousel */}
-            <div className="w-full px-2 py-1">
-              <TemplateCarousel
-                templates={TEMPLATE_FAMILIES}
-                selectedId={selectedTemplate.id}
-                onSelect={(template) => {
-                  setSelectedTemplate(template);
-                  setTemplateLabelVisible(true);
-                  if (templateLabelTimerRef.current) clearTimeout(templateLabelTimerRef.current);
-                  templateLabelTimerRef.current = setTimeout(() => {
-                    setTemplateLabelVisible(false);
-                  }, 1000);
-                }}
-              />
-            </div>
+                  <TemplateCarousel
+                    templates={TEMPLATE_FAMILIES}
+                    selectedId={selectedTemplate.id}
+                    onSelect={(template) => {
+                      setSelectedTemplate(template);
+                      setTemplateLabelVisible(true);
+                      if (templateLabelTimerRef.current) clearTimeout(templateLabelTimerRef.current);
+                      templateLabelTimerRef.current = setTimeout(() => {
+                        setTemplateLabelVisible(false);
+                      }, 1000);
+                    }}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Template Selection Label */}
             <div className="h-6 flex items-center justify-center">
@@ -723,13 +685,15 @@ export default function SnapCamera() {
                 </div>
               </button>
 
-              {/* Stock Photos / Presets Modal Trigger */}
+              {/* Template Selector Trigger */}
               <button
-                onClick={() => setShowStockModal(true)}
-                className="w-12 h-12 rounded-full bg-black/60 backdrop-blur-md hairline-border flex items-center justify-center text-volt active:scale-95 transition-transform"
-                title="Stock Backgrounds"
+                onClick={() => setShowTemplateCarousel((prev) => !prev)}
+                className={`w-12 h-12 rounded-full backdrop-blur-md hairline-border flex items-center justify-center active:scale-95 transition-transform ${
+                  showTemplateCarousel ? "bg-volt text-ink" : "bg-black/60 text-volt"
+                }`}
+                title="Templates"
               >
-                <Sparkles className="w-5 h-5" />
+                <Wand2 className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -1041,86 +1005,6 @@ export default function SnapCamera() {
         )}
       </AnimatePresence>
 
-      {/* STOCK PHOTOS MODAL SHEET */}
-      <AnimatePresence>
-        {showStockModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col justify-end"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Select Photo Background"
-          >
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              className="bg-surface rounded-t-3xl hairline-border-t p-screen-gutter max-h-[80vh] overflow-y-auto space-y-4"
-            >
-              <div className="flex justify-between items-center pb-2 border-b border-hairline">
-                <div>
-                  <h3 className="text-section-header mb-0.5">Select Photo Background</h3>
-                  <p className="text-xs text-text-secondary">Curated athletic stock & presets</p>
-                </div>
-                <button
-                  onClick={() => setShowStockModal(false)}
-                  className="w-8 h-8 rounded-full bg-surface-raised flex items-center justify-center text-white"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="py-2">
-                <GestureSwipeCarousel
-                  items={["All", "Stock Running", "Cycling & Trails", "Track & Night", "Preset Gradients"]}
-                  selectedIndex={["All", "Stock Running", "Cycling & Trails", "Track & Night", "Preset Gradients"].indexOf(selectedSourceCategory) >= 0 ? ["All", "Stock Running", "Cycling & Trails", "Track & Night", "Preset Gradients"].indexOf(selectedSourceCategory) : 0}
-                  onSelectIndex={(index) => {
-                    const categories = ["All", "Stock Running", "Cycling & Trails", "Track & Night", "Preset Gradients"];
-                    setSelectedSourceCategory(categories[index]);
-                  }}
-                  itemGap={8}
-                  selectedScale={1.05}
-                  unselectedOpacity={0.6}
-                  renderItem={(cat, _, isSelected) => (
-                    <button
-                      className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors border ${
-                        isSelected
-                          ? "bg-volt text-ink border-volt"
-                          : "bg-surface-raised text-text-secondary border-hairline hover:text-white"
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  )}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {STOCK_PHOTOS.filter(
-                  (p) => selectedSourceCategory === "All" || p.category === selectedSourceCategory
-                ).map((photo) => (
-                  <div
-                    key={photo.id}
-                    onClick={() => handleSelectStockPhoto(photo)}
-                    className="relative h-32 rounded-xl overflow-hidden cursor-pointer group hairline-border hover:border-volt transition-all"
-                  >
-                    <img
-                      src={photo.url}
-                      alt={photo.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-2">
-                      <span className="text-[11px] font-bold text-white">{photo.name}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
