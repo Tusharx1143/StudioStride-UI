@@ -187,7 +187,10 @@ export default function EditorScreen() {
   // Selected template family, carried over from the camera
   const selectedTemplateFamily: TemplateFamily | null =
     location.state?.selectedTemplateFamily || null;
-  const templateId = selectedTemplateFamily?.id ?? "default";
+  // Editor state, not a derived constant: undo has to be able to restore it.
+  const [templateId, setTemplateId] = useState<string>(
+    selectedTemplateFamily?.id ?? "default"
+  );
 
   // Stat data and slot positions handed over from the camera. The layout the
   // user arranged there is the starting point here.
@@ -252,6 +255,8 @@ export default function EditorScreen() {
   interface EditorSnapshot {
     textOverlays: TextOverlay[];
     stickerOverlays: StickerOverlay[];
+    templateId: string;
+    statLayout: TemplateLayout;
     committedCrop: {
       ratio: string;
       rotation: number;
@@ -300,6 +305,8 @@ export default function EditorScreen() {
     return {
       textOverlays: JSON.parse(JSON.stringify(textOverlays)),
       stickerOverlays: JSON.parse(JSON.stringify(stickerOverlays)),
+      templateId,
+      statLayout: JSON.parse(JSON.stringify(statLayout)),
       committedCrop: { ...committedCrop },
       isBaseImageHidden,
       isBaseImageLocked,
@@ -328,6 +335,9 @@ export default function EditorScreen() {
   const applySnapshot = (snapshot: EditorSnapshot) => {
     setTextOverlays(snapshot.textOverlays);
     setStickerOverlays(snapshot.stickerOverlays);
+    // Snapshots taken before stats were tracked carry neither field.
+    if (snapshot.templateId) setTemplateId(snapshot.templateId);
+    if (snapshot.statLayout) setStatLayout(snapshot.statLayout);
     setCommittedCrop(snapshot.committedCrop);
     setIsBaseImageHidden(snapshot.isBaseImageHidden);
     setIsBaseImageLocked(snapshot.isBaseImageLocked);
