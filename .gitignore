@@ -9,3 +9,6 @@ coverage/
 docs
 .superpowers/
 .idea/
+
+# bun.lock is the lockfile of record; npm's must not drift alongside it
+package-lock.json
