@@ -153,11 +153,16 @@ export default function TemplateCarousel({
   const [virtualIndex, setVirtualIndex] = useState<number>(virtualIndexRef.current);
 
   // ── Calculate x to center item at a tripled index ────────────────
+  // The row starts with a lead spacer, so an item's offset inside the row is
+  // spacer + itemCenter. Centring maths must account for it or every item
+  // lands one spacer-width to the right.
+  const spacerWidthRef = useRef<number>(144);
+
   const getTargetX = useCallback(
     (tripledIndex: number): number => {
       const cw = containerWidthRef.current;
       const itemCenter = tripledIndex * ITEM_STEP + ITEM_SIZE / 2;
-      return cw / 2 - itemCenter;
+      return cw / 2 - (spacerWidthRef.current + itemCenter);
     },
     []
   );
@@ -169,7 +174,9 @@ export default function TemplateCarousel({
         const w = containerRef.current.offsetWidth;
         if (w > 0) {
           containerWidthRef.current = w;
-          setSpacerWidth(Math.max(0, w / 2 - ITEM_SIZE / 2));
+          const spacer = Math.max(0, w / 2 - ITEM_SIZE / 2);
+          spacerWidthRef.current = spacer;
+          setSpacerWidth(spacer);
         }
       }
     };
@@ -254,7 +261,7 @@ export default function TemplateCarousel({
 
       for (let i = 0; i < tripledTemplates.length; i++) {
         const itemCenter = i * ITEM_STEP + ITEM_SIZE / 2;
-        const screenPos = itemCenter + projectedX;
+        const screenPos = spacerWidthRef.current + itemCenter + projectedX;
         const dist = Math.abs(cw / 2 - screenPos);
         if (dist < bestDist) {
           bestDist = dist;
