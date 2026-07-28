@@ -620,53 +620,11 @@ export default function SnapCamera() {
 
           {/* TOP BAR OVERLAY */}
           <div className="relative z-30 flex justify-between items-center p-screen-gutter pt-8">
-            {/* Top Left Controls */}
-            <div className="flex items-center gap-2">
-              {/* Profile Avatar with notification indicator */}
-              <button
-                onClick={() => setShowProfileDrawer(true)}
-                className="relative w-10 h-10 rounded-full bg-surface-raised border-2 border-white/20 p-0.5 overflow-hidden active:scale-95 transition-transform"
-                aria-label="Open profile"
-              >
-                <img
-                  src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200&auto=format&fit=crop"
-                  alt="Profile Avatar"
-                  className="w-full h-full rounded-full object-cover"
-                />
-                <span className="absolute top-0 right-0 w-3 h-3 bg-volt rounded-full border-2 border-black"></span>
-              </button>
-
-              {/* Search Button */}
-              <button
-                onClick={() => setShowSearchModal(true)}
-                className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hairline-border text-white flex items-center justify-center active:scale-95 transition-transform"
-                aria-label="Search lenses and sounds"
-              >
-                <Search className="w-5 h-5 text-white stroke-[1.75]" />
-              </button>
-            </div>
+            {/* Top Left — empty, space reserved for future controls */}
+            <div className="flex items-center gap-2" />
 
             {/* Top Right Controls */}
             <div className="flex items-center gap-2">
-              {/* Notifications */}
-              <button
-                onClick={() => setShowNotificationsModal(true)}
-                className="relative w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hairline-border text-white flex items-center justify-center active:scale-95 transition-transform"
-                aria-label="Notifications"
-              >
-                <Bell className="w-5 h-5 stroke-[1.75]" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full"></span>
-              </button>
-
-              {/* Add Friends */}
-              <button
-                onClick={() => setShowFriendsModal(true)}
-                className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hairline-border text-white flex items-center justify-center active:scale-95 transition-transform"
-                aria-label="Add friends"
-              >
-                <UserPlus className="w-5 h-5 stroke-[1.75]" />
-              </button>
-
               {/* Camera Switch */}
               <button
                 onClick={toggleCameraFacing}
@@ -684,130 +642,6 @@ export default function SnapCamera() {
               >
                 <Settings className="w-5 h-5 stroke-[1.75]" />
               </button>
-            </div>
-          </div>
-
-          {/* RIGHT FLOATING TOOLBAR */}
-          <div className="absolute top-24 right-4 z-30 flex flex-col items-center">
-            <div className="bg-black/50 backdrop-blur-xl border border-white/15 rounded-2xl p-1.5 flex flex-col items-center gap-3 shadow-2xl transition-all">
-              {/* Expand / Collapse Button */}
-              <button
-                onClick={() => setIsToolbarExpanded((prev) => !prev)}
-                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center"
-                aria-label="Expand toolbar"
-              >
-                {isToolbarExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-              </button>
-
-              {/* Flash Toggle */}
-              <button
-                onClick={() =>
-                  setFlash((prev) => (prev === "off" ? "on" : prev === "on" ? "auto" : "off"))
-                }
-                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
-                  flash !== "off" ? "bg-volt text-ink font-bold" : "text-white hover:bg-white/10"
-                }`}
-                title="Flash"
-              >
-                {flash === "on" ? <Zap className="w-4 h-4 fill-ink" /> : <ZapOff className="w-4 h-4" />}
-              </button>
-
-              {/* Music Picker */}
-              <button
-                onClick={() => setShowMusicSheet(true)}
-                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
-                  selectedMusic ? "bg-pink-500 text-white" : "text-white hover:bg-white/10"
-                }`}
-                title="Music Picker"
-              >
-                <Music className="w-4 h-4" />
-              </button>
-
-              {/* HD Toggle */}
-              <button
-                onClick={() =>
-                  setHdQuality((prev) => (prev === "HD" ? "4K" : prev === "4K" ? "SD" : "HD"))
-                }
-                className={`w-9 h-9 rounded-xl flex items-center justify-center text-[10px] font-black transition-all ${
-                  hdQuality === "4K" ? "bg-volt text-ink" : "text-white hover:bg-white/10"
-                }`}
-                title="HD Quality"
-              >
-                {hdQuality}
-              </button>
-
-              {/* Expanded Toolbar Features */}
-              {isToolbarExpanded && (
-                <>
-                  {/* Aspect Ratio Selector */}
-                  <button
-                    onClick={() =>
-                      setAspectRatio((prev) =>
-                        prev === "9:16" ? "1:1" : prev === "1:1" ? "4:3" : "9:16"
-                      )
-                    }
-                    className="w-9 h-9 rounded-xl text-white hover:bg-white/10 flex items-center justify-center text-[10px] font-bold"
-                    title="Aspect Ratio"
-                  >
-                    {aspectRatio}
-                  </button>
-
-                  {/* Night Mode */}
-                  <button
-                    onClick={() => setIsNightMode((prev) => !prev)}
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
-                      isNightMode ? "bg-indigo-500 text-white" : "text-white hover:bg-white/10"
-                    }`}
-                    title="Night Mode"
-                  >
-                    <Moon className="w-4 h-4" />
-                  </button>
-
-                  {/* Timer Toggle */}
-                  <button
-                    onClick={() =>
-                      setTimerSeconds((prev) => (prev === 0 ? 3 : prev === 3 ? 10 : 0))
-                    }
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
-                      timerSeconds > 0 ? "bg-volt text-ink font-bold" : "text-white hover:bg-white/10"
-                    }`}
-                    title="Timer"
-                  >
-                    <TimerIcon className="w-4 h-4" />
-                  </button>
-
-                  {/* Grid Overlay */}
-                  <button
-                    onClick={() => setIsGridEnabled((prev) => !prev)}
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
-                      isGridEnabled ? "bg-white text-ink" : "text-white hover:bg-white/10"
-                    }`}
-                    title="Grid Overlay"
-                  >
-                    <Grid className="w-4 h-4" />
-                  </button>
-
-                  {/* Beauty Mode */}
-                  <button
-                    onClick={() => setIsBeautyMode((prev) => !prev)}
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
-                      isBeautyMode ? "bg-pink-400 text-ink" : "text-white hover:bg-white/10"
-                    }`}
-                    title="Beauty Mode"
-                  >
-                    <Wand2 className="w-4 h-4" />
-                  </button>
-
-                  {/* Lens Settings */}
-                  <button
-                    onClick={() => setShowLensSettings(true)}
-                    className="w-9 h-9 rounded-xl text-white hover:bg-white/10 flex items-center justify-center"
-                    title="Lens Settings"
-                  >
-                    <Aperture className="w-4 h-4" />
-                  </button>
-                </>
-              )}
             </div>
           </div>
 
