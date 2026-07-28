@@ -41,9 +41,24 @@ import {
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { LENS_TEMPLATES_EXPANDED, STOCK_PHOTOS, MUSIC_TRACKS, MusicTrack, TEMPLATE_FAMILIES } from "../data/mockData";
-import { LensTemplate, PhotoSource, TemplateFamily } from "../types";
+import {
+  CustomLayouts,
+  LensTemplate,
+  PhotoSource,
+  TemplateFamily,
+  TemplateLayout,
+} from "../types";
+import { triggerHaptic } from "../utils/haptics";
 import TemplateCarousel from "./TemplateCarousel";
-import TemplatePreview from "./TemplatePreview";
+import StatLayer from "./StatLayer";
+import {
+  clearCustomLayout,
+  hasCustomLayout,
+  loadCustomLayouts,
+  resolveLayout,
+  saveCustomLayouts,
+  storeCustomLayout,
+} from "../utils/statLayouts";
 
 export const LENS_CATEGORIES = [
   "All",
@@ -86,6 +101,13 @@ export default function SnapCamera() {
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const viewfinderRef = useRef<HTMLDivElement | null>(null);
+
+  // Stat slot positions: customs are remembered per template, defaults come
+  // from the template's own design.
+  const [customLayouts, setCustomLayouts] = useState<CustomLayouts>(() =>
+    loadCustomLayouts()
+  );
 
   // Main View Navigation Mode (Swipe left -> Stories, Swipe right -> Memories, Center -> Camera)
   const [viewMode, setViewMode] = useState<CameraViewMode>("camera");
@@ -143,6 +165,33 @@ export default function SnapCamera() {
   // Template family selection
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateFamily>(TEMPLATE_FAMILIES[0]);
   const [templateLabelVisible, setTemplateLabelVisible] = useState<boolean>(false);
+
+  const statData = {
+    distance: distanceNumeric,
+    distanceUnit: "km",
+    pace: paceRaw,
+    time: activityTime,
+    title: activityTitle,
+  };
+  const statLayout = resolveLayout(selectedTemplate.id, customLayouts);
+  const templateIsCustomized = hasCustomLayout(customLayouts, selectedTemplate.id);
+
+  const handleStatLayoutChange = (next: TemplateLayout) => {
+    setCustomLayouts((prev) => {
+      const updated = storeCustomLayout(prev, selectedTemplate.id, next);
+      saveCustomLayouts(updated);
+      return updated;
+    });
+  };
+
+  const handleResetStatLayout = () => {
+    setCustomLayouts((prev) => {
+      const updated = clearCustomLayout(prev, selectedTemplate.id);
+      saveCustomLayouts(updated);
+      return updated;
+    });
+    triggerHaptic("light");
+  };
   const templateLabelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const filteredLenses = lenses.filter((l) => {
@@ -223,6 +272,7 @@ export default function SnapCamera() {
             capturedImage: imageUrl,
             selectedLensId: activeLens?.id || "minimal",
             selectedTemplateFamily: selectedTemplate,
+            statLayout,
             appliedMusic: selectedMusic ? selectedMusic.title : null,
             activityTitle,
             activityDistance,
@@ -247,6 +297,7 @@ export default function SnapCamera() {
         capturedImage: photo.url,
         selectedLensId: activeLens?.id || "minimal",
         selectedTemplateFamily: selectedTemplate,
+        statLayout,
         appliedMusic: selectedMusic ? selectedMusic.title : null,
         activityTitle,
         activityDistance,
@@ -348,6 +399,7 @@ export default function SnapCamera() {
           capturedImage: imageUrl,
           selectedLensId: activeLens?.id || "minimal",
           selectedTemplateFamily: selectedTemplate,
+          statLayout,
           appliedMusic: selectedMusic ? selectedMusic.title : null,
           aspectRatio: aspectRatio,
           hdQuality: hdQuality,
@@ -492,6 +544,7 @@ export default function SnapCamera() {
 
         {/* MAIN CAMERA VIEWFINDER CANVAS */}
         <div
+          ref={viewfinderRef}
           onClick={handleDoubleTapViewfinder}
           className={`relative w-full h-full bg-black flex flex-col justify-between overflow-hidden transition-all duration-300 ${
             aspectRatio === "1:1"
@@ -542,10 +595,9 @@ export default function SnapCamera() {
           {/* Dark Glass Scrim Gradient */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-transparent to-black/90 pointer-events-none z-10"></div>
 
-          {/* Template Preview Overlay */}
-          <div className="absolute inset-0 z-20 p-screen-gutter pt-24 pb-44 flex flex-col justify-between pointer-events-none">
-            {/* Template Badge + Music */}
-            <div className="self-start flex items-center gap-2">
+          {/* Template Badge + Music — chrome, not a draggable slot */}
+          <div className="absolute inset-x-0 top-0 z-20 p-screen-gutter pt-24 pointer-events-none">
+            <div className="flex items-center gap-2">
               <span
                 className="px-3 py-1.5 rounded-full text-xs font-extrabold shadow-xl flex items-center gap-1.5 backdrop-blur-md border border-white/10"
                 style={{ backgroundColor: selectedTemplate.accentColor + "20", color: selectedTemplate.accentColor }}
@@ -560,19 +612,34 @@ export default function SnapCamera() {
                   <span>{selectedMusic.title}</span>
                 </span>
               )}
-            </div>
 
-            {/* Template-specific stats overlay */}
-            <div className="w-full max-w-xs drop-shadow-2xl">
-              <TemplatePreview
-                template={selectedTemplate}
-                distance={distanceNumeric}
-                distanceUnit="km"
-                pace={paceRaw}
-                time={activityTime}
-                title={activityTitle}
-              />
+              {templateIsCustomized && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleResetStatLayout();
+                  }}
+                  className="pointer-events-auto px-3 py-1.5 rounded-full text-xs font-bold bg-black/60 text-white/80 backdrop-blur-md border border-white/10 flex items-center gap-1.5 active:scale-95 transition-transform"
+                  aria-label="Reset stat layout"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Reset layout</span>
+                </button>
+              )}
             </div>
+          </div>
+
+          {/* Draggable template stats. The wrapper must not swallow pointer
+              events — only the chips themselves opt back in. */}
+          <div className="absolute inset-0 z-20 drop-shadow-2xl pointer-events-none">
+            <StatLayer
+              templateId={selectedTemplate.id}
+              data={statData}
+              layout={statLayout}
+              onLayoutChange={handleStatLayoutChange}
+              constraintsRef={viewfinderRef}
+              onDragStart={() => triggerHaptic("light")}
+            />
           </div>
 
           {/* TOP BAR OVERLAY */}

@@ -43,9 +43,16 @@ import {
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { STOCK_PHOTOS } from "../data/mockData";
-import { TemplateFamily } from "../types";
+import { StatData, StatSlotId, TemplateFamily, TemplateLayout } from "../types";
 import GestureSwipeCarousel from "./GestureSwipeCarousel";
 import ExportModal from "./ExportModal";
+import StatLayer from "./StatLayer";
+import {
+  loadCustomLayouts,
+  resolveLayout,
+  saveCustomLayouts,
+  storeCustomLayout,
+} from "../utils/statLayouts";
 
 // Text Overlay item model
 interface TextOverlay {
@@ -177,9 +184,31 @@ export default function EditorScreen() {
     sessionStorage.getItem("temp_captured_image") ||
     STOCK_PHOTOS[0].url;
 
-  // Selected template family for future generation engine
+  // Selected template family, carried over from the camera
   const selectedTemplateFamily: TemplateFamily | null =
     location.state?.selectedTemplateFamily || null;
+  const templateId = selectedTemplateFamily?.id ?? "default";
+
+  // Stat data and slot positions handed over from the camera. The layout the
+  // user arranged there is the starting point here.
+  const statData: StatData = {
+    distance: parseFloat(location.state?.activityDistance ?? "") || 8.4,
+    distanceUnit: "km",
+    pace: (location.state?.activityPace ?? "6:12 /km").replace(" /km", ""),
+    time: location.state?.activityTime ?? "52:18",
+    title: location.state?.activityTitle ?? "Morning Run",
+  };
+
+  const [statLayout, setStatLayout] = useState<TemplateLayout>(
+    () => location.state?.statLayout ?? resolveLayout(templateId, loadCustomLayouts())
+  );
+  const [selectedStatSlot, setSelectedStatSlot] = useState<StatSlotId | null>(null);
+
+  const handleStatLayoutChange = (next: TemplateLayout) => {
+    setStatLayout(next);
+    const updated = storeCustomLayout(loadCustomLayouts(), templateId, next);
+    saveCustomLayouts(updated);
+  };
 
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -968,6 +997,7 @@ export default function EditorScreen() {
           setSelectedTextId(null);
           setSelectedStickerId(null);
           setIsImageSelected(false);
+          setSelectedStatSlot(null);
         }}
         className="absolute inset-0 z-0 bg-neutral-950 flex items-center justify-center overflow-hidden"
       >
@@ -1041,6 +1071,23 @@ export default function EditorScreen() {
             </div>
           )}
         </div>
+
+        {/* DRAGGABLE TEMPLATE STATS — sit under user-added text overlays */}
+        <StatLayer
+          templateId={templateId}
+          data={statData}
+          layout={statLayout}
+          onLayoutChange={handleStatLayoutChange}
+          constraintsRef={canvasRef}
+          selectedSlot={selectedStatSlot}
+          onSelectSlot={(slot) => {
+            setSelectedStatSlot(slot);
+            setSelectedTextId(null);
+            setSelectedStickerId(null);
+            setIsImageSelected(false);
+          }}
+          onDragStart={() => pushHistorySnapshot()}
+        />
 
         {/* DRAGGABLE TEXT OVERLAYS ON CANVAS */}
         {textOverlays.map((overlay) => {
@@ -2410,6 +2457,9 @@ export default function EditorScreen() {
         drawingZIndex={drawingZIndex}
         containerRef={canvasRef}
         showToast={showToast}
+        templateId={templateId}
+        statLayout={statLayout}
+        statData={statData}
       />
     </div>
   );

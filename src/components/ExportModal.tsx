@@ -14,6 +14,8 @@ import {
   Sliders,
   FileCheck
 } from "lucide-react";
+import type { StatData, TemplateLayout } from "../types";
+import { drawStatLayer } from "../utils/drawStatLayer";
 
 interface TextOverlay {
   id: string;
@@ -63,6 +65,9 @@ interface ExportModalProps {
   drawingZIndex: number;
   containerRef: React.RefObject<HTMLDivElement | null>;
   showToast: (msg: string) => void;
+  templateId: string;
+  statLayout: TemplateLayout;
+  statData: StatData;
 }
 
 type ExportFormat = "png" | "jpeg" | "webp";
@@ -82,6 +87,9 @@ export default function ExportModal({
   drawingZIndex,
   containerRef,
   showToast,
+  templateId,
+  statLayout,
+  statData,
 }: ExportModalProps) {
   const [format, setFormat] = useState<ExportFormat>("png");
   const [resolution, setResolution] = useState<ExportResolution>("1080p");
@@ -222,10 +230,19 @@ export default function ExportModal({
       });
     };
 
+    // With the base image hidden there is no image pass to follow, so the
+    // stats still need to land underneath everything else.
+    if (isBaseImageHidden) {
+      await drawStatLayer(ctx, { width, height }, templateId, statLayout, statData);
+    }
+
     // Draw all layers sequentially
     for (const layer of layers) {
       if (layer.type === "image") {
         await drawImageLayer();
+        // Template stats sit directly on the photo, beneath anything the user
+        // added afterwards.
+        await drawStatLayer(ctx, { width, height }, templateId, statLayout, statData);
       } else if (layer.type === "draw" && drawingCanvas) {
         ctx.save();
         ctx.drawImage(drawingCanvas, 0, 0, width, height);

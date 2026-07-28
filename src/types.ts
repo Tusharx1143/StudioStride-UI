@@ -1,3 +1,87 @@
+import type { ReactNode } from "react";
+
+/** The fixed set of draggable pieces every template decomposes into. */
+export type StatSlotId = "distance" | "pace" | "time" | "title" | "accent";
+
+/** Position of a slot's top-left anchor, as a percentage of the canvas. */
+export interface SlotPosition {
+  x: number;
+  y: number;
+}
+
+/** A key being absent means the template does not use that slot. */
+export type TemplateLayout = Partial<Record<StatSlotId, SlotPosition>>;
+
+/** Custom layouts the user has dragged, keyed by template id. */
+export type CustomLayouts = Record<string, TemplateLayout>;
+
+export interface StatData {
+  distance: number;
+  distanceUnit: string;
+  pace: string;
+  time: string;
+  title: string;
+}
+
+export interface SlotBackground {
+  fill: string;
+  radius: number;
+  padX: number;
+  padY: number;
+  border?: string;
+  /** Rendered as backdrop-blur in the DOM; approximated by a solid fill on canvas. */
+  blur?: boolean;
+}
+
+export interface SlotShadow {
+  color: string;
+  blur: number;
+  x?: number;
+  y?: number;
+}
+
+/**
+ * A single stat chip's look. Sizes are expressed against a 390px reference
+ * width and scaled by canvasWidth / 390, so one table drives both the phone
+ * viewfinder and a full-resolution export.
+ */
+export interface SlotStyle {
+  text: (d: StatData) => string;
+  /** Smaller trailing token rendered inline, e.g. the distance unit. */
+  suffix?: (d: StatData) => string;
+  suffixScale?: number;
+  suffixColor?: string;
+  fontFamily: string;
+  fontSize: number;
+  fontWeight: number;
+  color: string;
+  italic?: boolean;
+  uppercase?: boolean;
+  letterSpacing?: number;
+  rotation?: number;
+  bg?: SlotBackground;
+  shadow?: SlotShadow;
+}
+
+/** Pixel origin and font scale handed to a template's accent painter. */
+export interface SlotBox {
+  x: number;
+  y: number;
+  scale: number;
+}
+
+/** Every slot except `accent`, which is drawn rather than typeset. */
+export type TextSlotId = Exclude<StatSlotId, "accent">;
+
+export interface TemplateStatDesign {
+  slots: Partial<Record<TextSlotId, SlotStyle>>;
+  defaultLayout: TemplateLayout;
+  /** Non-textual decoration (rings, bars, quote marks) rendered in the DOM. */
+  accentRender?: (d: StatData) => ReactNode;
+  /** Canvas twin of accentRender, used by the exporter. */
+  accentDraw?: (ctx: CanvasRenderingContext2D, box: SlotBox, d: StatData) => void;
+}
+
 export interface MetricOption {
   id: string;
   label: string;
