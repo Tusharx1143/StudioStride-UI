@@ -49,6 +49,9 @@ import ExportModal from "./ExportModal";
 import StatLayer from "./StatLayer";
 import StatToolbar from "./StatToolbar";
 import DraggableLayer from "./DraggableLayer";
+import SnapGuides from "./SnapGuides";
+import type { SnapLine } from "../utils/snapping";
+import { triggerHaptic } from "../utils/haptics";
 import { TEMPLATE_FAMILIES } from "../data/mockData";
 import {
   loadCustomLayouts,
@@ -214,6 +217,15 @@ export default function EditorScreen() {
   const [selectedStatSlot, setSelectedStatSlot] = useState<StatSlotId | null>(() =>
     shouldAutoOpenStrip(Boolean(selectedTemplateFamily)) ? "distance" : null
   );
+
+  // Alignment guides shown only while a drag is snapped.
+  const [snapGuides, setSnapGuides] = useState<SnapLine[]>([]);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+
+  const captureCanvasSize = () => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) setCanvasSize({ width: rect.width, height: rect.height });
+  };
 
   useEffect(() => {
     if (selectedStatSlot) markStripSeen();
@@ -1119,8 +1131,15 @@ export default function EditorScreen() {
             setSelectedStickerId(null);
             setIsImageSelected(false);
           }}
-          onDragStart={() => pushHistorySnapshot()}
+          onDragStart={() => {
+            captureCanvasSize();
+            pushHistorySnapshot();
+          }}
+          onGuidesChange={setSnapGuides}
+          onSnap={() => triggerHaptic("snap")}
         />
+
+        <SnapGuides guides={snapGuides} canvas={canvasSize} />
 
         {/* CONTEXTUAL STAT TOOLBAR — template switching for the tapped stat */}
         <AnimatePresence>
@@ -1152,7 +1171,12 @@ export default function EditorScreen() {
               key={overlay.id}
               draggable={!overlay.locked}
               constraintsRef={canvasRef}
-              onDragStart={() => pushHistorySnapshot()}
+              onDragStart={() => {
+                captureCanvasSize();
+                pushHistorySnapshot();
+              }}
+              onGuidesChange={setSnapGuides}
+              onSnap={() => triggerHaptic("snap")}
               onClick={(e) => {
                 e.stopPropagation();
                 if (overlay.locked) {
@@ -1311,7 +1335,12 @@ export default function EditorScreen() {
               key={sticker.id}
               draggable={!sticker.locked}
               constraintsRef={canvasRef}
-              onDragStart={() => pushHistorySnapshot()}
+              onDragStart={() => {
+                captureCanvasSize();
+                pushHistorySnapshot();
+              }}
+              onGuidesChange={setSnapGuides}
+              onSnap={() => triggerHaptic("snap")}
               onClick={(e) => {
                 e.stopPropagation();
                 if (sticker.locked) {

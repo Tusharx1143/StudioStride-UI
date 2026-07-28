@@ -1,6 +1,11 @@
 import { motion, useMotionValue } from "motion/react";
 import type { PanInfo } from "motion/react";
-import { useEffect, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, type ReactNode, type RefObject } from "react";
+import { computeSnap, type SnapLine } from "../utils/snapping";
+import { SNAP_TARGET_ATTR, collectSnapLines, localRect } from "../utils/snapTargets";
+
+/** How close an edge must come, in px, before it snaps. */
+const SNAP_THRESHOLD = 8;
 
 interface DraggableLayerProps {
   /** Committed offset from the canvas centre, in px. */
@@ -17,6 +22,9 @@ interface DraggableLayerProps {
   onClick?: (e: React.MouseEvent) => void;
   onDoubleClick?: (e: React.MouseEvent) => void;
   className?: string;
+  /** Reports the alignment lines this drag is currently snapped to. */
+  onGuidesChange?: (guides: SnapLine[]) => void;
+  onSnap?: () => void;
   children: ReactNode;
 }
 
@@ -39,10 +47,22 @@ export default function DraggableLayer({
   onClick,
   onDoubleClick,
   className,
+  onGuidesChange,
+  onSnap,
   children,
 }: DraggableLayerProps) {
   const mx = useMotionValue(x);
   const my = useMotionValue(y);
+  const nodeRef = useRef<HTMLDivElement>(null);
+  const snapLinesRef = useRef<SnapLine[]>([]);
+  const guideCountRef = useRef(0);
+
+  const currentSnap = () => {
+    const canvasEl = constraintsRef.current;
+    if (!canvasEl || !nodeRef.current) return { dx: 0, dy: 0, guides: [] as SnapLine[] };
+    const rect = localRect(nodeRef.current, canvasEl.getBoundingClientRect());
+    return computeSnap(rect, snapLinesRef.current, SNAP_THRESHOLD);
+  };
 
   useEffect(() => {
     mx.set(x);
@@ -54,13 +74,31 @@ export default function DraggableLayer({
 
   return (
     <motion.div
+      ref={nodeRef}
+      {...{ [SNAP_TARGET_ATTR]: "" }}
       drag={draggable}
       dragConstraints={constraintsRef}
       dragElastic={0.05}
       dragMomentum={false}
-      onDragStart={onDragStart}
+      onDragStart={() => {
+        snapLinesRef.current = collectSnapLines(constraintsRef.current, nodeRef.current);
+        onDragStart?.();
+      }}
+      onDrag={() => {
+        const { guides } = currentSnap();
+        // Haptic only on the transition into a snap, not every frame.
+        if (guides.length > guideCountRef.current) onSnap?.();
+        guideCountRef.current = guides.length;
+        onGuidesChange?.(guides);
+      }}
       onDragEnd={(_: unknown, info: PanInfo) => {
-        onCommit({ x: x + info.offset.x, y: y + info.offset.y });
+        const snap = currentSnap();
+        guideCountRef.current = 0;
+        onGuidesChange?.([]);
+        onCommit({
+          x: x + info.offset.x + snap.dx,
+          y: y + info.offset.y + snap.dy,
+        });
       }}
       onClick={onClick}
       onDoubleClick={onDoubleClick}

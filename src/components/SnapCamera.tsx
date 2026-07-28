@@ -51,6 +51,8 @@ import {
 import { triggerHaptic } from "../utils/haptics";
 import TemplateCarousel from "./TemplateCarousel";
 import StatLayer from "./StatLayer";
+import SnapGuides from "./SnapGuides";
+import type { SnapLine } from "../utils/snapping";
 import {
   clearCustomLayout,
   hasCustomLayout,
@@ -175,6 +177,15 @@ export default function SnapCamera() {
   };
   const statLayout = resolveLayout(selectedTemplate.id, customLayouts);
   const templateIsCustomized = hasCustomLayout(customLayouts, selectedTemplate.id);
+
+  // Alignment guides shown only while a stat drag is snapped.
+  const [snapGuides, setSnapGuides] = useState<SnapLine[]>([]);
+  const [viewfinderSize, setViewfinderSize] = useState({ width: 0, height: 0 });
+
+  const captureViewfinderSize = () => {
+    const rect = viewfinderRef.current?.getBoundingClientRect();
+    if (rect) setViewfinderSize({ width: rect.width, height: rect.height });
+  };
 
   const handleStatLayoutChange = (next: TemplateLayout) => {
     setCustomLayouts((prev) => {
@@ -638,8 +649,14 @@ export default function SnapCamera() {
               layout={statLayout}
               onLayoutChange={handleStatLayoutChange}
               constraintsRef={viewfinderRef}
-              onDragStart={() => triggerHaptic("light")}
+              onDragStart={() => {
+                captureViewfinderSize();
+                triggerHaptic("light");
+              }}
+              onGuidesChange={setSnapGuides}
+              onSnap={() => triggerHaptic("snap")}
             />
+            <SnapGuides guides={snapGuides} canvas={viewfinderSize} />
           </div>
 
           {/* TOP BAR OVERLAY */}

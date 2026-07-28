@@ -11,6 +11,11 @@ import type {
 } from "../types";
 import { getStatDesign } from "../data/templateStatDesigns";
 import { commitDrag } from "../utils/statLayouts";
+import { computeSnap, type SnapLine } from "../utils/snapping";
+import { SNAP_TARGET_ATTR, collectSnapLines, localRect } from "../utils/snapTargets";
+
+/** How close an edge must come, in px, before it snaps. */
+const SNAP_THRESHOLD = 8;
 
 /** Slot sizes are authored against this width and scale with the canvas. */
 const REFERENCE_WIDTH = 390;
@@ -26,6 +31,9 @@ interface StatLayerProps {
   selectedSlot?: StatSlotId | null;
   onSelectSlot?: (slot: StatSlotId | null) => void;
   onDragStart?: () => void;
+  /** Reports the alignment lines a drag is currently snapped to. */
+  onGuidesChange?: (guides: SnapLine[]) => void;
+  onSnap?: () => void;
 }
 
 export default function StatLayer({
@@ -38,6 +46,8 @@ export default function StatLayer({
   selectedSlot = null,
   onSelectSlot,
   onDragStart,
+  onGuidesChange,
+  onSnap,
 }: StatLayerProps) {
   const design = getStatDesign(templateId);
   const slots = Object.keys(layout) as StatSlotId[];
@@ -67,6 +77,8 @@ export default function StatLayer({
               isSelected={selectedSlot === slot}
               onSelectSlot={onSelectSlot}
               onDragStart={onDragStart}
+              onGuidesChange={onGuidesChange}
+              onSnap={onSnap}
             >
               {design.accentRender(data)}
             </StatChip>
@@ -88,6 +100,8 @@ export default function StatLayer({
             isSelected={selectedSlot === slot}
             onSelectSlot={onSelectSlot}
             onDragStart={onDragStart}
+            onGuidesChange={onGuidesChange}
+            onSnap={onSnap}
           >
             <SlotText style={style} data={data} />
           </StatChip>
@@ -107,6 +121,8 @@ interface StatChipProps {
   isSelected: boolean;
   onSelectSlot?: (slot: StatSlotId | null) => void;
   onDragStart?: () => void;
+  onGuidesChange?: (guides: SnapLine[]) => void;
+  onSnap?: () => void;
   children: React.ReactNode;
 }
 
@@ -120,29 +136,59 @@ function StatChip({
   isSelected,
   onSelectSlot,
   onDragStart,
+  onGuidesChange,
+  onSnap,
   children,
 }: StatChipProps) {
   const chipRef = useRef<HTMLDivElement>(null);
   const x = useMotionValue(0);
   const y = useMotionValue(0);
+  const snapLinesRef = useRef<SnapLine[]>([]);
+  const guideCountRef = useRef(0);
+
+  /** Snap offset for the chip's live position, in px. */
+  const currentSnap = () => {
+    const canvasEl = constraintsRef.current as HTMLElement | null;
+    if (!canvasEl || !chipRef.current) return { dx: 0, dy: 0, guides: [] as SnapLine[] };
+    const rect = localRect(chipRef.current, canvasEl.getBoundingClientRect());
+    return computeSnap(rect, snapLinesRef.current, SNAP_THRESHOLD);
+  };
 
   return (
     <motion.div
       ref={chipRef}
+      {...{ [SNAP_TARGET_ATTR]: "" }}
       drag={interactive}
       dragConstraints={constraintsRef}
       dragElastic={0.05}
       dragMomentum={false}
       style={{ left: `${pos.x}%`, top: `${pos.y}%`, x, y }}
-      onDragStart={onDragStart}
+      onDragStart={() => {
+        snapLinesRef.current = collectSnapLines(
+          constraintsRef.current as HTMLElement | null,
+          chipRef.current
+        );
+        onDragStart?.();
+      }}
+      onDrag={() => {
+        const { guides } = currentSnap();
+        // Haptic only on the transition into a snap, not every frame.
+        if (guides.length > guideCountRef.current) onSnap?.();
+        guideCountRef.current = guides.length;
+        onGuidesChange?.(guides);
+      }}
       onDragEnd={(_, info) => {
         const canvas = constraintsRef.current?.getBoundingClientRect();
         const chip = chipRef.current?.getBoundingClientRect();
         if (!canvas || !chip) return;
 
+        const snap = currentSnap();
+        guideCountRef.current = 0;
+        onGuidesChange?.([]);
+
         const next = commitDrag({
           pos,
-          offset: info.offset,
+          offset: { x: info.offset.x + snap.dx, y: info.offset.y + snap.dy },
           canvas: { width: canvas.width, height: canvas.height },
           chip: { width: chip.width, height: chip.height },
         });
