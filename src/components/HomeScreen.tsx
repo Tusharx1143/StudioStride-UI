@@ -83,11 +83,11 @@ export default function HomeScreen() {
   const getIcon = (type: string) => {
     switch (type) {
       case "target":
-        return <Target className="text-volt w-6 h-6" />;
+        return <Target className="text-ember w-6 h-6" />;
       case "mountain":
-        return <Mountain className="text-volt w-6 h-6" />;
+        return <Mountain className="text-ember w-6 h-6" />;
       default:
-        return <Activity className="text-volt w-6 h-6" />;
+        return <Activity className="text-ember w-6 h-6" />;
     }
   };
 
@@ -140,11 +140,11 @@ export default function HomeScreen() {
             }
           >
             {/* Volt bloom effect */}
-            <div className="absolute inset-0 bg-volt opacity-20 blur-2xl rounded-2xl group-hover:opacity-30 transition-opacity"></div>
+            <div className="absolute inset-0 bg-ember opacity-20 blur-2xl rounded-2xl group-hover:opacity-30 transition-opacity"></div>
 
-            <div className="bg-surface relative z-10 rounded-xl p-5 hairline-border shadow-[0_0_40px_rgba(244,228,9,0.12)]">
+            <div className="bg-surface relative z-10 rounded-xl p-5 hairline-border shadow-[0_0_40px_rgba(255,122,26,0.12)]">
               <div className="flex justify-between items-start mb-6">
-                <div className="w-12 h-12 rounded-sm bg-volt flex items-center justify-center shrink-0">
+                <div className="w-12 h-12 rounded-sm bg-ember flex items-center justify-center shrink-0">
                   {activeActivity.iconType === "target" ? (
                     <Target className="text-ink w-6 h-6" />
                   ) : activeActivity.iconType === "mountain" ? (
@@ -182,7 +182,7 @@ export default function HomeScreen() {
                 </div>
               </div>
 
-              <div className="mt-6 pt-4 hairline-border-t flex items-center justify-between text-volt">
+              <div className="mt-6 pt-4 hairline-border-t flex items-center justify-between text-ember">
                 <span className="text-stat-value flex items-center gap-1.5">
                   <Plus className="w-4 h-4" /> Create Story for {activeActivity.type}
                 </span>
@@ -198,7 +198,7 @@ export default function HomeScreen() {
             <h2 className="text-section-header">Previous Activities</h2>
             <button
               onClick={() => navigate("/projects")}
-              className="text-xs text-text-secondary hover:text-volt transition-colors flex items-center gap-1"
+              className="text-xs text-text-secondary hover:text-ember transition-colors flex items-center gap-1"
             >
               Saved Projects <ChevronRight className="w-3.5 h-3.5" />
             </button>
@@ -219,7 +219,7 @@ export default function HomeScreen() {
                     onClick={() => handleSwapActivity(actualIndexInArray)}
                     className="bg-surface rounded-lg p-4 flex items-center hairline-border hover:bg-surface-raised active:scale-[0.99] transition-all text-left group"
                   >
-                    <div className="w-12 h-12 rounded-sm bg-volt-dim flex items-center justify-center shrink-0 mr-4 group-hover:bg-volt/20 transition-colors">
+                    <div className="w-12 h-12 rounded-sm bg-ember-dim flex items-center justify-center shrink-0 mr-4 group-hover:bg-ember/20 transition-colors">
                       {getIcon(item.iconType)}
                     </div>
                     <div className="flex-grow">
@@ -232,7 +232,7 @@ export default function HomeScreen() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-tool-caption text-text-secondary">{item.timeAgo}</span>
-                      <ChevronRight className="text-text-secondary w-5 h-5 group-hover:text-volt transition-colors" />
+                      <ChevronRight className="text-text-secondary w-5 h-5 group-hover:text-ember transition-colors" />
                     </div>
                   </motion.button>
                 );
@@ -245,7 +245,7 @@ export default function HomeScreen() {
       {/* Bottom Nav */}
       <nav className="fixed bottom-0 w-full z-50 rounded-t-xl hairline-border-t bg-surface flex justify-around items-center px-4 py-3 pb-safe" aria-label="Main navigation">
         <button
-          className="flex flex-col items-center justify-center bg-surface-raised text-volt rounded-full p-3 transition-colors"
+          className="flex flex-col items-center justify-center bg-surface-raised text-ember rounded-full p-3 transition-colors"
           aria-label="Home"
           aria-current="page"
         >
@@ -253,14 +253,14 @@ export default function HomeScreen() {
         </button>
         <button
           onClick={() => navigate("/camera")}
-          className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-volt transition-colors"
+          className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-ember transition-colors"
           aria-label="Camera"
         >
           <Camera className="w-6 h-6" />
         </button>
         <button
           onClick={() => navigate("/projects")}
-          className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-volt transition-colors"
+          className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-ember transition-colors"
           aria-label="Projects"
         >
           <FolderKanban className="w-6 h-6" />

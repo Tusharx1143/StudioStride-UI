@@ -55,7 +55,7 @@ export default function StatToolbar({
       {/* Header. Further sections (per-stat styling) slot in below the carousel. */}
       <div className="flex items-center justify-between px-4 pt-3">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[11px] font-extrabold uppercase tracking-widest text-volt shrink-0">
+          <span className="text-[11px] font-extrabold uppercase tracking-widest text-ember shrink-0">
             {selectedSlot}
           </span>
           <span className="text-[11px] text-white/40 truncate">{activeName}</span>

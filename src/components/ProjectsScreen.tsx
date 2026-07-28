@@ -134,7 +134,7 @@ export default function ProjectsScreen() {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="fixed top-12 left-1/2 -translate-x-1/2 z-50 bg-volt text-ink font-bold px-5 py-2 rounded-full text-xs shadow-2xl flex items-center gap-2"
+            className="fixed top-12 left-1/2 -translate-x-1/2 z-50 bg-ember text-ink font-bold px-5 py-2 rounded-full text-xs shadow-2xl flex items-center gap-2"
           >
             <Check className="w-4 h-4" />
             <span>{toastMessage}</span>
@@ -150,7 +150,7 @@ export default function ProjectsScreen() {
         </div>
         <button
           onClick={handleCreateNewProject}
-          className="h-10 px-4 rounded-full bg-volt text-ink font-extrabold text-xs flex items-center gap-1.5 active:scale-95 transition-transform shadow-[0_0_15px_rgba(244,228,9,0.3)] hover:bg-volt-press"
+          className="h-10 px-4 rounded-full bg-ember text-ink font-extrabold text-xs flex items-center gap-1.5 active:scale-95 transition-transform shadow-[0_0_15px_rgba(255,122,26,0.3)] hover:bg-ember-press"
         >
           <Plus className="w-4 h-4 stroke-[3]" />
           <span>New Project</span>
@@ -160,7 +160,7 @@ export default function ProjectsScreen() {
       <main className="px-screen-gutter max-w-2xl mx-auto space-y-4">
         {projects.length === 0 ? (
           <div className="text-center py-16 space-y-4 hairline-border rounded-2xl p-8 bg-surface">
-            <div className="w-16 h-16 bg-volt-dim rounded-full flex items-center justify-center mx-auto text-volt">
+            <div className="w-16 h-16 bg-ember-dim rounded-full flex items-center justify-center mx-auto text-ember">
               <FolderKanban className="w-8 h-8" />
             </div>
             <div>
@@ -171,7 +171,7 @@ export default function ProjectsScreen() {
             </div>
             <button
               onClick={handleCreateNewProject}
-              className="px-6 py-3 bg-volt text-ink font-extrabold text-sm rounded-full inline-flex items-center gap-2 hover:bg-volt-press"
+              className="px-6 py-3 bg-ember text-ink font-extrabold text-sm rounded-full inline-flex items-center gap-2 hover:bg-ember-press"
             >
               <Plus className="w-4 h-4" /> Start New Project
             </button>
@@ -188,7 +188,7 @@ export default function ProjectsScreen() {
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleOpenProject(project); } }}
                   role="button"
                   tabIndex={0}
-                  className="bg-surface rounded-2xl hairline-border overflow-hidden hover:border-volt/50 transition-all cursor-pointer group flex flex-col justify-between relative shadow-lg"
+                  className="bg-surface rounded-2xl hairline-border overflow-hidden hover:border-ember/50 transition-all cursor-pointer group flex flex-col justify-between relative shadow-lg"
                 >
                   {/* Thumbnail Banner */}
                   <div className="relative h-44 w-full bg-cover bg-center overflow-hidden" style={{ backgroundImage: `url("${project.bgImage}")` }}>
@@ -217,7 +217,7 @@ export default function ProjectsScreen() {
                         <span className="text-2xl font-black text-white tracking-tight">{project.distance}</span>
                         <div className="text-[11px] text-text-secondary">{project.pace} • {project.time}</div>
                       </div>
-                      <span className="w-8 h-8 rounded-full bg-volt text-ink flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                      <span className="w-8 h-8 rounded-full bg-ember text-ink flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
                         <Play className="w-4 h-4 fill-ink ml-0.5" />
                       </span>
                     </div>
@@ -226,14 +226,14 @@ export default function ProjectsScreen() {
                   {/* Info Footer */}
                   <div className="p-4 flex items-center justify-between">
                     <div>
-                      <h4 className="text-stat-value text-white font-bold group-hover:text-volt transition-colors">
+                      <h4 className="text-stat-value text-white font-bold group-hover:text-ember transition-colors">
                         {project.title}
                       </h4>
                       <p className="text-[11px] text-text-secondary flex items-center gap-1 mt-0.5">
                         <Clock className="w-3 h-3" /> Updated {project.updatedAt}
                       </p>
                     </div>
-                    <ChevronRight className="w-5 h-5 text-text-secondary group-hover:text-volt transition-colors" />
+                    <ChevronRight className="w-5 h-5 text-text-secondary group-hover:text-ember transition-colors" />
                   </div>
                 </div>
               );
@@ -247,10 +247,10 @@ export default function ProjectsScreen() {
         <button onClick={() => navigate("/home")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-text-primary transition-colors" aria-label="Home">
           <Home className="w-6 h-6" />
         </button>
-        <button onClick={() => navigate("/camera")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-volt transition-colors" aria-label="Camera">
+        <button onClick={() => navigate("/camera")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-ember transition-colors" aria-label="Camera">
           <Camera className="w-6 h-6" />
         </button>
-        <button onClick={() => navigate("/projects")} className="flex flex-col items-center justify-center bg-surface-raised text-volt rounded-full p-3 transition-colors" aria-label="Projects" aria-current="page">
+        <button onClick={() => navigate("/projects")} className="flex flex-col items-center justify-center bg-surface-raised text-ember rounded-full p-3 transition-colors" aria-label="Projects" aria-current="page">
           <FolderKanban className="w-6 h-6" />
         </button>
         <button onClick={() => navigate("/profile")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-text-primary transition-colors" aria-label="Profile">

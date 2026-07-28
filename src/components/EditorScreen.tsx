@@ -115,7 +115,7 @@ const STICKER_LIBRARY: StickerItem[] = [
   { id: "st_7", content: "FINISHER 2026 🥇", label: "Finisher", category: "Badges", type: "badge", bgGradient: "from-yellow-400 to-amber-600" },
 
   // Metrics
-  { id: "st_m1", content: "🏃 8.42 KM", label: "8.42 KM", category: "Metrics", type: "metric", bgGradient: "from-volt to-lime-400 text-ink" },
+  { id: "st_m1", content: "🏃 8.42 KM", label: "8.42 KM", category: "Metrics", type: "metric", bgGradient: "from-ember to-ember-lift text-ink" },
   { id: "st_m2", content: "⏱️ 5:12 /KM PACE", label: "5:12 Pace", category: "Metrics", type: "metric", bgGradient: "from-sky-500 to-blue-600" },
   { id: "st_m3", content: "❤️ 154 BPM", label: "154 BPM", category: "Metrics", type: "metric", bgGradient: "from-rose-500 to-pink-600" },
   { id: "st_m4", content: "🔥 640 KCAL", label: "640 Kcal", category: "Metrics", type: "metric", bgGradient: "from-amber-500 to-orange-600" },
@@ -162,10 +162,10 @@ const FONT_STYLES: { id: TextOverlay["fontStyle"]; label: string; className: str
 // Vibrant Snapchat style color palette
 const COLOR_PALETTE = [
   { hex: "#FFFFFF", name: "White" },
-  { hex: "#F4E409", name: "Volt Yellow" },
+  { hex: "#F4E409", name: "Yellow" },
   { hex: "#FF2A6D", name: "Hot Pink" },
   { hex: "#05D9E8", name: "Cyan" },
-  { hex: "#FF9F1C", name: "Orange" },
+  { hex: "#FF7A1A", name: "Ember" },
   { hex: "#2EC4B6", name: "Mint" },
   { hex: "#9B5DE5", name: "Purple" },
   { hex: "#FF4D3D", name: "Red" },
@@ -316,7 +316,7 @@ export default function EditorScreen() {
   const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
   const [brushType, setBrushType] = useState<"pen" | "neon" | "highlighter" | "eraser">("pen");
-  const [brushColor, setBrushColor] = useState<string>("#F4E409"); // Volt Yellow
+  const [brushColor, setBrushColor] = useState<string>("#FF7A1A"); // Ember
   const [brushSize, setBrushSize] = useState<number>(8); // In px
   const [historyStack, setHistoryStack] = useState<EditorSnapshot[]>([]);
   const [redoHistoryStack, setRedoHistoryStack] = useState<EditorSnapshot[]>([]);
@@ -1094,7 +1094,7 @@ export default function EditorScreen() {
 
           {/* CROP OVERLAY GRID (Rule of Thirds + Corner Handles) */}
           {activeTool === "crop" && (
-            <div className="absolute inset-0 pointer-events-none z-20 border-2 border-volt shadow-[0_0_0_9999px_rgba(0,0,0,0.65)] rounded-2xl">
+            <div className="absolute inset-0 pointer-events-none z-20 border-2 border-ember shadow-[0_0_0_9999px_rgba(0,0,0,0.65)] rounded-2xl">
               {/* 3x3 Grid Lines */}
               <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
                 <div className="border-r border-b border-white/40" />
@@ -1109,10 +1109,10 @@ export default function EditorScreen() {
               </div>
 
               {/* Corner Accent Handles */}
-              <div className="absolute -top-1 -left-1 w-5 h-5 border-t-4 border-l-4 border-volt rounded-tl-md" />
-              <div className="absolute -top-1 -right-1 w-5 h-5 border-t-4 border-r-4 border-volt rounded-tr-md" />
-              <div className="absolute -bottom-1 -left-1 w-5 h-5 border-b-4 border-l-4 border-volt rounded-bl-md" />
-              <div className="absolute -bottom-1 -right-1 w-5 h-5 border-b-4 border-r-4 border-volt rounded-br-md" />
+              <div className="absolute -top-1 -left-1 w-5 h-5 border-t-4 border-l-4 border-ember rounded-tl-md" />
+              <div className="absolute -top-1 -right-1 w-5 h-5 border-t-4 border-r-4 border-ember rounded-tr-md" />
+              <div className="absolute -bottom-1 -left-1 w-5 h-5 border-b-4 border-l-4 border-ember rounded-bl-md" />
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 border-b-4 border-r-4 border-ember rounded-br-md" />
             </div>
           )}
         </div>
@@ -1457,10 +1457,10 @@ export default function EditorScreen() {
                       );
                       showToast(sticker.locked ? "Sticker unlocked" : "Sticker locked");
                     }}
-                    className="p-1 hover:bg-white/20 rounded-full text-white transition-colors"
+                    className="p-1 hover:bg-white/20 rounded-full text-white/60 transition-colors"
                     title={sticker.locked ? "Unlock Sticker" : "Lock Sticker"}
                   >
-                    {sticker.locked ? <Lock className="w-3.5 h-3.5 text-amber-300" /> : <Unlock className="w-3.5 h-3.5" />}
+                    {sticker.locked ? <Lock className="w-3.5 h-3.5 text-white" /> : <Unlock className="w-3.5 h-3.5" />}
                   </button>
 
                   <button
@@ -1579,13 +1579,13 @@ export default function EditorScreen() {
               <div
                 className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md transition-all shadow-lg relative ${
                   isActive
-                    ? "bg-volt text-ink border-2 border-volt shadow-[0_0_20px_rgba(244,228,9,0.5)] scale-105"
+                    ? "bg-ember text-ink border-2 border-ember shadow-[0_0_20px_var(--color-ember-glow)] scale-105"
                     : "bg-black/60 text-white border border-white/20 hover:bg-black/80"
                 }`}
               >
                 <Icon className="w-5 h-5" />
                 {tool.id === "layers" && getAllLayers().length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-volt text-ink text-[9px] font-black flex items-center justify-center border border-black shadow">
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-ember text-ink text-[9px] font-black flex items-center justify-center border border-black shadow">
                     {getAllLayers().length}
                   </span>
                 )}
@@ -1607,7 +1607,7 @@ export default function EditorScreen() {
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             className="absolute top-24 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-full bg-black/80 backdrop-blur-md border border-white/20 text-xs text-white font-medium shadow-xl flex items-center gap-2"
           >
-            <Info className="w-3.5 h-3.5 text-volt" />
+            <Info className="w-3.5 h-3.5 text-ember" />
             <span>{toastMessage}</span>
           </motion.div>
         )}
@@ -1645,7 +1645,7 @@ export default function EditorScreen() {
               {/* Done / Confirm button */}
               <button
                 onClick={handleSaveText}
-                className="px-5 py-2 rounded-full bg-volt text-ink font-extrabold text-xs shadow-[0_0_15px_rgba(244,228,9,0.5)] active:scale-95 flex items-center gap-1.5"
+                className="px-5 py-2 rounded-full bg-ember text-ink font-extrabold text-xs shadow-[0_0_15px_var(--color-ember-glow)] active:scale-95 flex items-center gap-1.5"
               >
                 <Check className="w-4 h-4 stroke-[3]" />
                 <span>Done</span>
@@ -1695,7 +1695,7 @@ export default function EditorScreen() {
                   <button
                     onClick={() => setSelectedAlign("left")}
                     className={`p-1.5 rounded-full transition-colors ${
-                      selectedAlign === "left" ? "bg-volt text-ink" : "text-white/70"
+                      selectedAlign === "left" ? "bg-ember text-ink" : "text-white/70"
                     }`}
                   >
                     <AlignLeft className="w-4 h-4" />
@@ -1703,7 +1703,7 @@ export default function EditorScreen() {
                   <button
                     onClick={() => setSelectedAlign("center")}
                     className={`p-1.5 rounded-full transition-colors ${
-                      selectedAlign === "center" ? "bg-volt text-ink" : "text-white/70"
+                      selectedAlign === "center" ? "bg-ember text-ink" : "text-white/70"
                     }`}
                   >
                     <AlignCenter className="w-4 h-4" />
@@ -1711,7 +1711,7 @@ export default function EditorScreen() {
                   <button
                     onClick={() => setSelectedAlign("right")}
                     className={`p-1.5 rounded-full transition-colors ${
-                      selectedAlign === "right" ? "bg-volt text-ink" : "text-white/70"
+                      selectedAlign === "right" ? "bg-ember text-ink" : "text-white/70"
                     }`}
                   >
                     <AlignRight className="w-4 h-4" />
@@ -1726,7 +1726,7 @@ export default function EditorScreen() {
                       onClick={() => setSelectedBgStyle(bg.id)}
                       className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
                         selectedBgStyle === bg.id
-                          ? "bg-volt text-ink shadow-md"
+                          ? "bg-ember text-ink shadow-md"
                           : "text-white/70 hover:text-white"
                       }`}
                     >
@@ -1746,7 +1746,7 @@ export default function EditorScreen() {
                       key={sz.label}
                       onClick={() => setSelectedFontSize(sz.size)}
                       className={`w-6 h-6 rounded-full text-[11px] font-extrabold transition-colors flex items-center justify-center ${
-                        selectedFontSize === sz.size ? "bg-volt text-ink" : "text-white/70"
+                        selectedFontSize === sz.size ? "bg-ember text-ink" : "text-white/70"
                       }`}
                     >
                       {sz.label}
@@ -1768,7 +1768,7 @@ export default function EditorScreen() {
                     <button
                       className={`px-3.5 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap border transition-all ${
                         isSelected
-                          ? "bg-volt text-ink border-volt shadow-[0_0_15px_rgba(244,228,9,0.5)]"
+                          ? "bg-ember text-ink border-ember shadow-[0_0_15px_var(--color-ember-glow)]"
                           : "bg-surface-raised text-text-secondary border-hairline hover:text-white"
                       }`}
                     >
@@ -1789,7 +1789,7 @@ export default function EditorScreen() {
                       style={{ backgroundColor: c.hex }}
                       className={`w-8 h-8 rounded-full shrink-0 border-2 transition-transform active:scale-90 ${
                         isSelected
-                          ? "ring-2 ring-volt ring-offset-2 ring-offset-black scale-110 border-white"
+                          ? "ring-2 ring-ember ring-offset-2 ring-offset-black scale-110 border-white"
                           : "border-white/20"
                       }`}
                       aria-label={`Select color ${c.name}`}
@@ -1816,7 +1816,7 @@ export default function EditorScreen() {
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-volt/20 text-volt flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-full bg-ember/20 text-ember flex items-center justify-center">
                     <StickyNote className="w-4 h-4" />
                   </div>
                   <h3 className="text-sm font-extrabold text-white">Stickers & Badges</h3>
@@ -1837,7 +1837,7 @@ export default function EditorScreen() {
                   value={stickerSearch}
                   onChange={(e) => setStickerSearch(e.target.value)}
                   placeholder="Search badges, stats, emojis..."
-                  className="w-full bg-surface-raised border border-hairline rounded-full pl-10 pr-8 py-2 text-xs text-white placeholder-white/40 outline-none focus:border-volt"
+                  className="w-full bg-surface-raised border border-hairline rounded-full pl-10 pr-8 py-2 text-xs text-white placeholder-white/40 outline-none focus:border-ember"
                 />
                 {stickerSearch && (
                   <button
@@ -1865,7 +1865,7 @@ export default function EditorScreen() {
                     <button
                       className={`px-3.5 py-1.5 rounded-full text-xs font-extrabold whitespace-nowrap border transition-all ${
                         isSelected
-                          ? "bg-volt text-ink border-volt shadow-[0_0_15px_rgba(244,228,9,0.5)]"
+                          ? "bg-ember text-ink border-ember shadow-[0_0_15px_var(--color-ember-glow)]"
                           : "bg-surface-raised text-text-secondary border-hairline hover:text-white"
                       }`}
                     >
@@ -1891,7 +1891,7 @@ export default function EditorScreen() {
                       onClick={() => handleAddSticker(item)}
                       className={`flex items-center justify-center p-3 rounded-2xl border transition-all active:scale-95 group relative ${
                         item.type === "emoji"
-                          ? "bg-black/40 border-white/10 hover:border-volt hover:bg-black/60 min-h-[64px]"
+                          ? "bg-black/40 border-white/10 hover:border-ember hover:bg-black/60 min-h-[64px]"
                           : `bg-gradient-to-r ${item.bgGradient || "from-amber-500 to-yellow-400"} border-white/20 shadow-lg min-h-[56px]`
                       }`}
                     >
@@ -1948,7 +1948,7 @@ export default function EditorScreen() {
                       onClick={() => setBrushType(b.id as any)}
                       className={`px-3 py-1.5 rounded-full text-xs font-extrabold flex items-center gap-1.5 transition-all whitespace-nowrap ${
                         isSelected
-                          ? "bg-volt text-ink shadow-md scale-105"
+                          ? "bg-ember text-ink shadow-md scale-105"
                           : "text-white/70 hover:text-white"
                       }`}
                     >
@@ -1971,7 +1971,7 @@ export default function EditorScreen() {
                     key={sz.label}
                     onClick={() => setBrushSize(sz.size)}
                     className={`w-7 h-7 rounded-full text-[11px] font-extrabold flex items-center justify-center transition-colors ${
-                      brushSize === sz.size ? "bg-volt text-ink" : "text-white/70 hover:text-white"
+                      brushSize === sz.size ? "bg-ember text-ink" : "text-white/70 hover:text-white"
                     }`}
                   >
                     {sz.label}
@@ -1994,7 +1994,7 @@ export default function EditorScreen() {
                         style={{ backgroundColor: c.hex }}
                         className={`w-7 h-7 rounded-full shrink-0 border-2 transition-transform active:scale-90 ${
                           isSelected
-                            ? "ring-2 ring-volt ring-offset-2 ring-offset-black scale-110 border-white"
+                            ? "ring-2 ring-ember ring-offset-2 ring-offset-black scale-110 border-white"
                             : "border-white/20"
                         }`}
                       />
@@ -2037,7 +2037,7 @@ export default function EditorScreen() {
                     setActiveTool(null);
                     showToast("Drawing applied");
                   }}
-                  className="px-4 py-1.5 rounded-full bg-volt text-ink font-extrabold text-xs shadow-md active:scale-95 flex items-center gap-1"
+                  className="px-4 py-1.5 rounded-full bg-ember text-ink font-extrabold text-xs shadow-md active:scale-95 flex items-center gap-1"
                 >
                   <Check className="w-3.5 h-3.5 stroke-[3]" />
                   <span>Done</span>
@@ -2063,7 +2063,7 @@ export default function EditorScreen() {
                 <button
                   onClick={() => setImageSubTab("crop")}
                   className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                    imageSubTab === "crop" ? "bg-volt text-ink shadow-md" : "text-white/70 hover:text-white"
+                    imageSubTab === "crop" ? "bg-ember text-ink shadow-md" : "text-white/70 hover:text-white"
                   }`}
                 >
                   Crop
@@ -2071,7 +2071,7 @@ export default function EditorScreen() {
                 <button
                   onClick={() => setImageSubTab("perspective")}
                   className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                    imageSubTab === "perspective" ? "bg-volt text-ink shadow-md" : "text-white/70 hover:text-white"
+                    imageSubTab === "perspective" ? "bg-ember text-ink shadow-md" : "text-white/70 hover:text-white"
                   }`}
                 >
                   Perspective
@@ -2079,7 +2079,7 @@ export default function EditorScreen() {
                 <button
                   onClick={() => setImageSubTab("shadow")}
                   className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                    imageSubTab === "shadow" ? "bg-volt text-ink shadow-md" : "text-white/70 hover:text-white"
+                    imageSubTab === "shadow" ? "bg-ember text-ink shadow-md" : "text-white/70 hover:text-white"
                   }`}
                 >
                   Shadow
@@ -2126,7 +2126,7 @@ export default function EditorScreen() {
                         <button
                           className={`px-3 py-1 rounded-full text-xs font-extrabold whitespace-nowrap border transition-all ${
                             isSelected
-                              ? "bg-volt text-ink border-volt shadow-[0_0_12px_rgba(244,228,9,0.5)]"
+                              ? "bg-ember text-ink border-ember shadow-[0_0_12px_var(--color-ember-glow)]"
                               : "bg-surface-raised text-text-secondary border-hairline hover:text-white"
                           }`}
                         >
@@ -2157,7 +2157,7 @@ export default function EditorScreen() {
                     <button
                       onClick={() => setCropFlipH((prev) => !prev)}
                       className={`p-1.5 rounded-full transition-colors ${
-                        cropFlipH ? "bg-volt text-ink font-bold" : "text-white/80 hover:text-white"
+                        cropFlipH ? "bg-ember text-ink font-bold" : "text-white/80 hover:text-white"
                       }`}
                       title="Flip Horizontal"
                     >
@@ -2166,7 +2166,7 @@ export default function EditorScreen() {
                     <button
                       onClick={() => setCropFlipV((prev) => !prev)}
                       className={`p-1.5 rounded-full transition-colors ${
-                        cropFlipV ? "bg-volt text-ink font-bold" : "text-white/80 hover:text-white"
+                        cropFlipV ? "bg-ember text-ink font-bold" : "text-white/80 hover:text-white"
                       }`}
                       title="Flip Vertical"
                     >
@@ -2214,7 +2214,7 @@ export default function EditorScreen() {
                         setActiveTool(null);
                         showToast("Crop & orientation applied");
                       }}
-                      className="px-4 py-1.5 rounded-full bg-volt text-ink font-extrabold text-xs shadow-md active:scale-95 flex items-center gap-1"
+                      className="px-4 py-1.5 rounded-full bg-ember text-ink font-extrabold text-xs shadow-md active:scale-95 flex items-center gap-1"
                     >
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                       <span>Apply</span>
@@ -2239,7 +2239,7 @@ export default function EditorScreen() {
                       pushHistorySnapshot();
                       setImagePerspectiveX(Number(e.target.value));
                     }}
-                    className="w-full accent-volt cursor-pointer"
+                    className="w-full accent-ember cursor-pointer"
                   />
                   <button
                     onClick={() => setImagePerspectiveX(0)}
@@ -2261,7 +2261,7 @@ export default function EditorScreen() {
                       pushHistorySnapshot();
                       setImagePerspectiveY(Number(e.target.value));
                     }}
-                    className="w-full accent-volt cursor-pointer"
+                    className="w-full accent-ember cursor-pointer"
                   />
                   <button
                     onClick={() => setImagePerspectiveY(0)}
@@ -2288,7 +2288,7 @@ export default function EditorScreen() {
                       pushHistorySnapshot();
                       setImageShadowBlur(Number(e.target.value));
                     }}
-                    className="w-full accent-volt cursor-pointer"
+                    className="w-full accent-ember cursor-pointer"
                   />
                 </div>
 
@@ -2304,7 +2304,7 @@ export default function EditorScreen() {
                       pushHistorySnapshot();
                       setImageShadowOffsetY(Number(e.target.value));
                     }}
-                    className="w-full accent-volt cursor-pointer"
+                    className="w-full accent-ember cursor-pointer"
                   />
                 </div>
 
@@ -2329,7 +2329,7 @@ export default function EditorScreen() {
                         style={{ backgroundColor: c.hex }}
                         className={`w-6 h-6 rounded-full border border-white/20 transition-transform ${
                           imageShadowColor.toLowerCase() === c.hex.toLowerCase()
-                            ? "ring-2 ring-volt scale-110"
+                            ? "ring-2 ring-ember scale-110"
                             : "hover:scale-105"
                         }`}
                         title={c.label}
@@ -2355,7 +2355,7 @@ export default function EditorScreen() {
             {/* Header */}
             <div className="flex items-center justify-between pb-2 border-b border-white/10 shrink-0">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-volt/20 text-volt border border-volt/30 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-full bg-ember/20 text-ember border border-ember/30 flex items-center justify-center shrink-0">
                   <Layers className="w-4 h-4" />
                 </div>
                 <div>
@@ -2377,14 +2377,14 @@ export default function EditorScreen() {
                   onClick={() => openTextEditor()}
                   className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 border border-white/10 active:scale-95 transition-colors"
                 >
-                  <Plus className="w-3 h-3 text-volt" />
+                  <Plus className="w-3 h-3 text-ember" />
                   <span>Text</span>
                 </button>
                 <button
                   onClick={() => setIsStickerModalOpen(true)}
                   className="px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center gap-1 border border-white/10 active:scale-95 transition-colors"
                 >
-                  <Plus className="w-3 h-3 text-volt" />
+                  <Plus className="w-3 h-3 text-ember" />
                   <span>Sticker</span>
                 </button>
                 <button
@@ -2411,17 +2411,17 @@ export default function EditorScreen() {
                     onClick={() => handleSelectLayer(layer.id, layer.type)}
                     className={`p-2.5 rounded-2xl border flex items-center justify-between gap-2 transition-all cursor-pointer ${
                       isSelected
-                        ? "bg-volt/15 border-volt shadow-[0_0_12px_rgba(244,228,9,0.2)]"
+                        ? "bg-ember/15 border-ember shadow-[0_0_12px_rgba(255,122,26,0.2)]"
                         : "bg-white/5 hover:bg-white/10 border-white/10"
                     }`}
                   >
                     {/* Left Icon & Info */}
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center shrink-0 text-volt border border-white/10">
+                      <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center shrink-0 text-ember border border-white/10">
                         {layer.type === "image" && <ImageIcon className="w-4 h-4 text-blue-400" />}
                         {layer.type === "draw" && <PenTool className="w-4 h-4 text-emerald-400" />}
-                        {layer.type === "text" && <Type className="w-4 h-4 text-volt" />}
-                        {layer.type === "sticker" && <StickyNote className="w-4 h-4 text-amber-400" />}
+                        {layer.type === "text" && <Type className="w-4 h-4 text-ember" />}
+                        {layer.type === "sticker" && <StickyNote className="w-4 h-4 text-violet-400" />}
                       </div>
 
                       <div className="min-w-0 flex-1">
@@ -2430,7 +2430,7 @@ export default function EditorScreen() {
                             {layer.name}
                           </span>
                           {layer.locked && (
-                            <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-bold border border-amber-500/30">
+                            <span className="px-1.5 py-0.2 rounded bg-white/10 text-white/80 text-[9px] font-bold border border-white/20">
                               LOCKED
                             </span>
                           )}
@@ -2477,7 +2477,7 @@ export default function EditorScreen() {
                         onClick={() => toggleLayerLock(layer.id, layer.type)}
                         className={`p-1.5 rounded-lg transition-colors active:scale-95 ${
                           layer.locked
-                            ? "bg-amber-500/30 text-amber-300 border border-amber-500/40"
+                            ? "bg-white/25 text-white border border-white/30"
                             : "bg-white/10 text-white/70 hover:text-white"
                         }`}
                         title={layer.locked ? "Unlock Layer" : "Lock Layer"}
@@ -2521,7 +2521,7 @@ export default function EditorScreen() {
       <div className="relative z-20 px-4 pb-8 pt-2 w-full flex items-center justify-center">
         <button
           onClick={() => setIsExportModalOpen(true)}
-          className="w-full max-w-sm flex items-center justify-center gap-2 px-6 py-3.5 rounded-full bg-volt text-ink font-extrabold text-sm shadow-[0_0_20px_rgba(244,228,9,0.4)] active:scale-95 transition-transform"
+          className="w-full max-w-sm flex items-center justify-center gap-2 px-6 py-3.5 rounded-full bg-ember text-ink font-extrabold text-sm shadow-[0_0_20px_rgba(255,122,26,0.4)] active:scale-95 transition-transform"
         >
           <span>Export & Share Image</span>
           <Send className="w-4 h-4 fill-ink" />

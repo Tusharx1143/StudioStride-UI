@@ -1,18 +1,32 @@
 @import "tailwindcss";
 
 @theme {
-  --color-volt: #F4E409;
-  --color-volt-press: #CFC207;
-  --color-volt-dim: rgba(244,228,9,0.16);
+  /* Accent — tangerine. Always pair with text-ink; white on ember is 2.6:1. */
+  --color-ember: #FF7A1A;
+  --color-ember-press: #DB6410;
+  --color-ember-dim: rgba(255,122,26,0.16);
+  --color-ember-glow: rgba(255,122,26,0.45);
+  --color-ember-lift: #FFB020;
+
+  /* Neutrals — cool charcoal */
   --color-ink: #000000;
-  --color-surface: #101010;
-  --color-surface-raised: #1A1A1A;
-  --color-hairline: rgba(255,255,255,0.08);
+  --color-surface: #0E0E11;
+  --color-surface-raised: #17171A;
+  --color-surface-overlay: #212127;
+  --color-hairline: rgba(255,255,255,0.10);
+
   --color-text-primary: #FFFFFF;
-  --color-text-secondary: #9E9E9E;
-  --color-text-tertiary: #6B6B6B;
+  --color-text-secondary: #A8A8B2;
+  --color-text-tertiary: #8A8A93;
+  --color-text-disabled: #5A5A62;
+
   --color-scrim: rgba(0,0,0,0.45);
-  --color-danger: #FF4D3D;
+
+  /* Cool counter-accent — route lines, info, multi-select */
+  --color-ice: #22D3EE;
+
+  --color-danger: #FF2D55;
+  --color-strava: #FC4C02;
 
   --font-display: "Archivo", sans-serif;
   --font-ui: "Inter", sans-serif;

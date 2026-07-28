@@ -439,7 +439,7 @@ export default function SnapCamera() {
             exit={{ scale: 1.5, opacity: 0 }}
             className="absolute inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center pointer-events-none"
           >
-            <span className="text-9xl font-black text-volt drop-shadow-[0_0_40px_rgba(244,228,9,0.9)]">
+            <span className="text-9xl font-black text-ember drop-shadow-[0_0_40px_rgba(255,122,26,0.9)]">
               {countdown}
             </span>
           </motion.div>
@@ -448,7 +448,7 @@ export default function SnapCamera() {
 
       {/* Burst Counter Badge */}
       {burstCount > 0 && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-volt text-ink font-black text-3xl px-6 py-3 rounded-2xl shadow-2xl animate-bounce">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-ember text-ink font-black text-3xl px-6 py-3 rounded-2xl shadow-2xl animate-bounce">
           BURST {burstCount}
         </div>
       )}
@@ -490,7 +490,7 @@ export default function SnapCamera() {
                     <img src={item.url} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-3">
                       <span className="text-xs font-bold text-white">{item.name}</span>
-                      <span className="text-[10px] text-volt">Story #{idx + 1}</span>
+                      <span className="text-[10px] text-ember">Story #{idx + 1}</span>
                     </div>
                   </div>
                 ))}
@@ -499,7 +499,7 @@ export default function SnapCamera() {
 
             <button
               onClick={() => setViewMode("camera")}
-              className="w-full bg-volt text-ink font-bold py-3 rounded-xl mt-6"
+              className="w-full bg-ember text-ink font-bold py-3 rounded-xl mt-6"
             >
               Back to Camera
             </button>
@@ -726,7 +726,7 @@ export default function SnapCamera() {
                     className="px-3 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-[11px] font-bold text-white"
                   >
                     {selectedTemplate.name}{" "}
-                    <span className="text-volt">Selected</span>
+                    <span className="text-ember">Selected</span>
                   </motion.span>
                 )}
               </AnimatePresence>
@@ -760,11 +760,11 @@ export default function SnapCamera() {
               >
                 <div
                   className={`w-16 h-16 rounded-full transition-colors flex items-center justify-center ${
-                    isRecordingVideo ? "bg-rose-500 rounded-lg scale-75" : "bg-white hover:bg-volt"
+                    isRecordingVideo ? "bg-rose-500 rounded-lg scale-75" : "bg-white hover:bg-ember"
                   }`}
                 >
                   {isCapturing && (
-                    <div className="w-full h-full rounded-full bg-volt animate-ping"></div>
+                    <div className="w-full h-full rounded-full bg-ember animate-ping"></div>
                   )}
                 </div>
               </button>
@@ -773,7 +773,7 @@ export default function SnapCamera() {
               <button
                 onClick={() => setShowTemplateCarousel((prev) => !prev)}
                 className={`w-12 h-12 rounded-full backdrop-blur-md hairline-border flex items-center justify-center active:scale-95 transition-transform ${
-                  showTemplateCarousel ? "bg-volt text-ink" : "bg-black/60 text-volt"
+                  showTemplateCarousel ? "bg-ember text-ink" : "bg-black/60 text-ember"
                 }`}
                 title="Templates"
               >
@@ -806,11 +806,11 @@ export default function SnapCamera() {
 
         <button
           onClick={() => setViewMode("camera")}
-          className="flex flex-col items-center text-volt transition-colors"
+          className="flex flex-col items-center text-ember transition-colors"
           aria-label="Camera"
           aria-current="page"
         >
-          <div className="w-10 h-10 rounded-full bg-volt text-ink flex items-center justify-center font-black">
+          <div className="w-10 h-10 rounded-full bg-ember text-ink flex items-center justify-center font-black">
             <Camera className="w-5 h-5" />
           </div>
         </button>
@@ -930,7 +930,7 @@ export default function SnapCamera() {
                 <div>
                   <div className="flex justify-between text-xs mb-1">
                     <span>Filter Intensity</span>
-                    <span className="text-volt font-bold">{filterIntensity}%</span>
+                    <span className="text-ember font-bold">{filterIntensity}%</span>
                   </div>
                   <input
                     type="range"
@@ -938,7 +938,7 @@ export default function SnapCamera() {
                     max="100"
                     value={filterIntensity}
                     onChange={(e) => setFilterIntensity(Number(e.target.value))}
-                    className="w-full accent-volt"
+                    className="w-full accent-ember"
                   />
                 </div>
               </div>
@@ -980,7 +980,7 @@ export default function SnapCamera() {
                   <img
                     src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200&auto=format&fit=crop"
                     alt="User Avatar"
-                    className="w-20 h-20 rounded-full object-cover border-2 border-volt mb-2"
+                    className="w-20 h-20 rounded-full object-cover border-2 border-ember mb-2"
                   />
                   <h4 className="text-base font-black text-white">Alex Morgan</h4>
                   <p className="text-xs text-text-secondary">@alex_runner • Pro Athlete</p>
@@ -1037,7 +1037,7 @@ export default function SnapCamera() {
               </div>
               <button
                 onClick={() => setShowSearchModal(false)}
-                className="text-xs text-volt font-bold"
+                className="text-xs text-ember font-bold"
               >
                 Cancel
               </button>
@@ -1077,11 +1077,11 @@ export default function SnapCamera() {
               <div className="space-y-3 py-2 text-xs">
                 <div className="flex justify-between items-center py-2 border-b border-hairline">
                   <span>Auto Watermark</span>
-                  <input type="checkbox" defaultChecked className="accent-volt" />
+                  <input type="checkbox" defaultChecked className="accent-ember" />
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-hairline">
                   <span>Save Originals to Device</span>
-                  <input type="checkbox" defaultChecked className="accent-volt" />
+                  <input type="checkbox" defaultChecked className="accent-ember" />
                 </div>
               </div>
             </motion.div>

@@ -338,8 +338,8 @@ export default function ExportModal({
 
           // Draw pill badge
           const grad = ctx.createLinearGradient(-textW / 2, 0, textW / 2, 0);
-          grad.addColorStop(0, "#F4E409");
-          grad.addColorStop(1, "#E5C200");
+          grad.addColorStop(0, "#FF7A1A");
+          grad.addColorStop(1, "#FFB020");
 
           ctx.fillStyle = grad;
           ctx.beginPath();
@@ -497,7 +497,7 @@ export default function ExportModal({
           {/* Header */}
           <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-full bg-volt/20 text-volt border border-volt/30 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-full bg-ember/20 text-ember border border-ember/30 flex items-center justify-center">
                 <Sparkles className="w-4 h-4" />
               </div>
               <div>
@@ -523,11 +523,11 @@ export default function ExportModal({
               />
             ) : (
               <div className="flex flex-col items-center gap-2 text-white/50 text-xs">
-                <div className="w-6 h-6 border-2 border-volt border-t-transparent rounded-full animate-spin" />
+                <div className="w-6 h-6 border-2 border-ember border-t-transparent rounded-full animate-spin" />
                 <span>Generating high-res export...</span>
               </div>
             )}
-            <div className="absolute top-2 right-2 px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md text-[10px] font-bold text-volt border border-white/10">
+            <div className="absolute top-2 right-2 px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md text-[10px] font-bold text-ember border border-white/10">
               {resolution} • {format.toUpperCase()}
             </div>
           </div>
@@ -544,7 +544,7 @@ export default function ExportModal({
                     onClick={() => setFormat(f)}
                     className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
                       format === f
-                        ? "bg-volt text-ink border-volt font-black shadow-[0_0_12px_rgba(244,228,9,0.3)]"
+                        ? "bg-ember text-ink border-ember font-black shadow-[0_0_12px_rgba(255,122,26,0.3)]"
                         : "bg-white/5 text-white/80 border-white/10 hover:bg-white/10"
                     }`}
                   >
@@ -585,7 +585,7 @@ export default function ExportModal({
             <button
               onClick={handleDownload}
               disabled={isGenerating}
-              className="w-full py-3.5 px-4 rounded-2xl bg-volt hover:bg-yellow-300 text-ink font-black text-sm shadow-[0_0_20px_rgba(244,228,9,0.4)] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-50"
+              className="w-full py-3.5 px-4 rounded-2xl bg-ember hover:bg-ember-press text-ink font-black text-sm shadow-[0_0_20px_rgba(255,122,26,0.4)] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-50"
             >
               <Download className="w-4 h-4 fill-ink" />
               <span>Download Image ({format.toUpperCase()})</span>
@@ -617,11 +617,11 @@ export default function ExportModal({
                 onClick={handleSaveToProjects}
                 className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-colors active:scale-95 ${
                   savedSuccess
-                    ? "bg-volt/20 text-volt border-volt/40"
+                    ? "bg-ember/20 text-ember border-ember/40"
                     : "bg-white/10 text-white border-white/15 hover:bg-white/20"
                 }`}
               >
-                {savedSuccess ? <Check className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5 text-volt" />}
+                {savedSuccess ? <Check className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5 text-ember" />}
                 <span>{savedSuccess ? "Saved" : "Save App"}</span>
               </button>
             </div>

@@ -195,7 +195,7 @@ export const LENS_TEMPLATES_EXPANDED: LensTemplate[] = [
     category: "Minimal",
     icon: "🏃",
     tagline: "Clean performance typography",
-    badgeColor: "bg-volt text-ink",
+    badgeColor: "bg-ember text-ink",
     overlayType: "minimal",
     defaultElements: [
       {
@@ -481,7 +481,7 @@ export const LENS_TEMPLATES_EXPANDED: LensTemplate[] = [
     category: "Custom",
     icon: "⚙️",
     tagline: "Modular customizable layout",
-    badgeColor: "bg-volt text-ink",
+    badgeColor: "bg-ember text-ink",
     overlayType: "custom",
     defaultElements: [
       {

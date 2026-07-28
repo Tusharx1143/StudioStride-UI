@@ -20,14 +20,14 @@ export default function SnapGuides({ guides, canvas }: SnapGuidesProps) {
         return guide.axis === "x" ? (
           <div
             key={`x-${guide.position}`}
-            className="absolute top-0 bottom-0 w-px bg-volt/90"
-            style={{ left: `${pct}%`, boxShadow: "0 0 6px rgba(244,228,9,0.8)" }}
+            className="absolute top-0 bottom-0 w-px bg-ice/90"
+            style={{ left: `${pct}%`, boxShadow: "0 0 6px rgba(34,211,238,0.8)" }}
           />
         ) : (
           <div
             key={`y-${guide.position}`}
-            className="absolute left-0 right-0 h-px bg-volt/90"
-            style={{ top: `${pct}%`, boxShadow: "0 0 6px rgba(244,228,9,0.8)" }}
+            className="absolute left-0 right-0 h-px bg-ice/90"
+            style={{ top: `${pct}%`, boxShadow: "0 0 6px rgba(34,211,238,0.8)" }}
           />
         );
       })}
