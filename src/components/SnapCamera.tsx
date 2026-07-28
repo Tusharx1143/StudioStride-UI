@@ -629,7 +629,7 @@ export default function SnapCamera() {
               <button
                 onClick={() => setShowProfileDrawer(true)}
                 className="relative w-10 h-10 rounded-full bg-surface-raised border-2 border-white/20 p-0.5 overflow-hidden active:scale-95 transition-transform"
-                title="Profile"
+                aria-label="Open profile"
               >
                 <img
                   src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200&auto=format&fit=crop"
@@ -643,7 +643,7 @@ export default function SnapCamera() {
               <button
                 onClick={() => setShowSearchModal(true)}
                 className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hairline-border text-white flex items-center justify-center active:scale-95 transition-transform"
-                title="Search Lenses & Sounds"
+                aria-label="Search lenses and sounds"
               >
                 <Search className="w-5 h-5 text-white stroke-[1.75]" />
               </button>
@@ -655,7 +655,7 @@ export default function SnapCamera() {
               <button
                 onClick={() => setShowNotificationsModal(true)}
                 className="relative w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hairline-border text-white flex items-center justify-center active:scale-95 transition-transform"
-                title="Notifications"
+                aria-label="Notifications"
               >
                 <Bell className="w-5 h-5 stroke-[1.75]" />
                 <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full"></span>
@@ -665,7 +665,7 @@ export default function SnapCamera() {
               <button
                 onClick={() => setShowFriendsModal(true)}
                 className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hairline-border text-white flex items-center justify-center active:scale-95 transition-transform"
-                title="Add Friends"
+                aria-label="Add friends"
               >
                 <UserPlus className="w-5 h-5 stroke-[1.75]" />
               </button>
@@ -674,7 +674,7 @@ export default function SnapCamera() {
               <button
                 onClick={toggleCameraFacing}
                 className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hairline-border text-white flex items-center justify-center active:scale-95 transition-transform"
-                title="Switch Camera"
+                aria-label="Switch camera"
               >
                 <RefreshCw className="w-5 h-5 stroke-[1.75]" />
               </button>
@@ -683,7 +683,7 @@ export default function SnapCamera() {
               <button
                 onClick={() => setShowCameraSettings(true)}
                 className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hairline-border text-white flex items-center justify-center active:scale-95 transition-transform"
-                title="Camera Settings"
+                aria-label="Camera settings"
               >
                 <Settings className="w-5 h-5 stroke-[1.75]" />
               </button>
@@ -697,7 +697,7 @@ export default function SnapCamera() {
               <button
                 onClick={() => setIsToolbarExpanded((prev) => !prev)}
                 className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center"
-                title="Expand Toolbar"
+                aria-label="Expand toolbar"
               >
                 {isToolbarExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
               </button>
@@ -966,10 +966,11 @@ export default function SnapCamera() {
       </div>
 
       {/* BOTTOM NAVIGATION BAR */}
-      <nav className="bg-black/90 backdrop-blur-xl border-t border-white/10 px-screen-gutter py-3 flex justify-around items-center z-40">
+      <nav className="bg-black/90 backdrop-blur-xl border-t border-white/10 px-screen-gutter py-3 flex justify-around items-center z-40" aria-label="Main navigation">
         <button
           onClick={() => navigate("/home")}
           className="flex flex-col items-center text-text-secondary hover:text-white transition-colors"
+          aria-label="Home"
         >
           <Home className="w-6 h-6" />
           <span className="text-[10px] mt-0.5">Home</span>
@@ -978,6 +979,7 @@ export default function SnapCamera() {
         <button
           onClick={() => setViewMode("stories")}
           className="flex flex-col items-center text-text-secondary hover:text-white transition-colors"
+          aria-label="Discover"
         >
           <Compass className="w-6 h-6" />
           <span className="text-[10px] mt-0.5">Discover</span>
@@ -986,6 +988,8 @@ export default function SnapCamera() {
         <button
           onClick={() => setViewMode("camera")}
           className="flex flex-col items-center text-volt transition-colors"
+          aria-label="Camera"
+          aria-current="page"
         >
           <div className="w-10 h-10 rounded-full bg-volt text-ink flex items-center justify-center font-black">
             <Camera className="w-5 h-5" />
@@ -995,6 +999,7 @@ export default function SnapCamera() {
         <button
           onClick={() => setViewMode("memories")}
           className="flex flex-col items-center text-text-secondary hover:text-white transition-colors"
+          aria-label="Community"
         >
           <Layers className="w-6 h-6" />
           <span className="text-[10px] mt-0.5">Community</span>
@@ -1003,6 +1008,7 @@ export default function SnapCamera() {
         <button
           onClick={() => navigate("/profile")}
           className="flex flex-col items-center text-text-secondary hover:text-white transition-colors"
+          aria-label="Profile"
         >
           <Users className="w-6 h-6" />
           <span className="text-[10px] mt-0.5">Profile</span>
@@ -1017,6 +1023,9 @@ export default function SnapCamera() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col justify-end"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Select Workout Music"
           >
             <motion.div
               initial={{ y: "100%" }}
@@ -1078,6 +1087,9 @@ export default function SnapCamera() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col justify-end"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Lens Adjustments"
           >
             <motion.div
               initial={{ y: "100%" }}
@@ -1124,6 +1136,9 @@ export default function SnapCamera() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex justify-start"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Profile drawer"
           >
             <motion.div
               initial={{ x: "-100%" }}
@@ -1188,6 +1203,9 @@ export default function SnapCamera() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col p-screen-gutter pt-12"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Search lenses and music"
           >
             <div className="flex items-center gap-2 mb-4">
               <div className="flex-1 bg-surface-raised rounded-xl px-3 py-2 flex items-center gap-2 border border-hairline">
@@ -1217,6 +1235,9 @@ export default function SnapCamera() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col justify-end"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Camera Options"
           >
             <motion.div
               initial={{ y: "100%" }}
@@ -1257,6 +1278,9 @@ export default function SnapCamera() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col justify-end"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Select Photo Background"
           >
             <motion.div
               initial={{ y: "100%" }}

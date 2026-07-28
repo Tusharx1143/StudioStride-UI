@@ -243,26 +243,32 @@ export default function HomeScreen() {
       </main>
 
       {/* Bottom Nav */}
-      <nav className="fixed bottom-0 w-full z-50 rounded-t-xl hairline-border-t bg-surface flex justify-around items-center px-4 py-3 pb-safe">
-        <button className="flex flex-col items-center justify-center bg-surface-raised text-volt rounded-full p-3 transition-colors">
+      <nav className="fixed bottom-0 w-full z-50 rounded-t-xl hairline-border-t bg-surface flex justify-around items-center px-4 py-3 pb-safe" aria-label="Main navigation">
+        <button
+          className="flex flex-col items-center justify-center bg-surface-raised text-volt rounded-full p-3 transition-colors"
+          aria-label="Home"
+          aria-current="page"
+        >
           <Home className="w-6 h-6" />
         </button>
         <button
           onClick={() => navigate("/camera")}
           className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-volt transition-colors"
+          aria-label="Camera"
         >
           <Camera className="w-6 h-6" />
         </button>
         <button
           onClick={() => navigate("/projects")}
           className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-volt transition-colors"
-          title="Projects"
+          aria-label="Projects"
         >
           <FolderKanban className="w-6 h-6" />
         </button>
         <button
           onClick={() => navigate("/profile")}
           className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-text-primary transition-colors"
+          aria-label="Profile"
         >
           <User className="w-6 h-6" />
         </button>

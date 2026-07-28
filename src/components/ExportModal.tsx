@@ -235,11 +235,13 @@ export default function ExportModal({
         ctx.save();
 
         const fontSizePx = Math.max(16, t.fontSize * scaleX);
-        let fontFamily = "sans-serif";
+        // Map editor font styles to actual font families matching the in-app rendering
+        let fontFamily = '"Inter", sans-serif'; // Classic / Modern default
+        if (t.fontStyle === "Bold") fontFamily = '"Archivo", sans-serif';
+        if (t.fontStyle === "Modern") fontFamily = "monospace";
+        if (t.fontStyle === "Neon") fontFamily = '"Inter", sans-serif';
         if (t.fontStyle === "Serif") fontFamily = "serif";
         if (t.fontStyle === "Typewriter") fontFamily = "monospace";
-        if (t.fontStyle === "Bold") fontFamily = "Impact, sans-serif";
-        if (t.fontStyle === "Neon") fontFamily = "'Courier New', monospace";
 
         ctx.font = `bold ${fontSizePx}px ${fontFamily}`;
         ctx.textAlign = t.align;
@@ -450,7 +452,12 @@ export default function ExportModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md">
+      <div
+        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Export project"
+      >
         <motion.div
           initial={{ opacity: 0, y: 40, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
