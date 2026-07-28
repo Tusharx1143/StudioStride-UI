@@ -14,6 +14,7 @@ export default defineConfig(() => {
     test: {
       include: ['src/**/*.test.ts'],
       environment: 'node',
+      setupFiles: ['src/test-setup.ts'],
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.

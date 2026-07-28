@@ -47,12 +47,15 @@ import { StatData, StatSlotId, TemplateFamily, TemplateLayout } from "../types";
 import GestureSwipeCarousel from "./GestureSwipeCarousel";
 import ExportModal from "./ExportModal";
 import StatLayer from "./StatLayer";
+import StatToolbar from "./StatToolbar";
+import { TEMPLATE_FAMILIES } from "../data/mockData";
 import {
   loadCustomLayouts,
   resolveLayout,
   saveCustomLayouts,
   storeCustomLayout,
 } from "../utils/statLayouts";
+import { markStripSeen, shouldAutoOpenStrip } from "../utils/statStrip";
 
 // Text Overlay item model
 interface TextOverlay {
@@ -205,7 +208,25 @@ export default function EditorScreen() {
   const [statLayout, setStatLayout] = useState<TemplateLayout>(
     () => location.state?.statLayout ?? resolveLayout(templateId, loadCustomLayouts())
   );
-  const [selectedStatSlot, setSelectedStatSlot] = useState<StatSlotId | null>(null);
+  // Auto-opens once so the strip teaches that stats are tappable, then never
+  // again. Any later tap on a stat brings it back.
+  const [selectedStatSlot, setSelectedStatSlot] = useState<StatSlotId | null>(() =>
+    shouldAutoOpenStrip(Boolean(selectedTemplateFamily)) ? "distance" : null
+  );
+
+  useEffect(() => {
+    if (selectedStatSlot) markStripSeen();
+  }, [selectedStatSlot]);
+
+  // Switching template re-skins the stats and restores whatever arrangement
+  // that template was last given, matching the camera.
+  const handleSelectTemplate = (template: TemplateFamily) => {
+    if (template.id === templateId) return;
+    pushHistorySnapshot();
+    setTemplateId(template.id);
+    setStatLayout(resolveLayout(template.id, loadCustomLayouts()));
+    setSelectedStatSlot((prev) => (prev && prev !== "accent" ? prev : "distance"));
+  };
 
   const handleStatLayoutChange = (next: TemplateLayout) => {
     setStatLayout(next);
@@ -1022,6 +1043,7 @@ export default function EditorScreen() {
             setIsImageSelected(true);
             setSelectedTextId(null);
             setSelectedStickerId(null);
+            setSelectedStatSlot(null);
           }}
           className={`relative transition-all duration-300 flex items-center justify-center ${
             currentRatio !== "free" ? "rounded-2xl shadow-2xl border border-white/20 overflow-hidden" : "w-full h-full"
@@ -1099,6 +1121,20 @@ export default function EditorScreen() {
           onDragStart={() => pushHistorySnapshot()}
         />
 
+        {/* CONTEXTUAL STAT TOOLBAR — template switching for the tapped stat */}
+        <AnimatePresence>
+          {selectedStatSlot && statLayout[selectedStatSlot] && (
+            <StatToolbar
+              templates={TEMPLATE_FAMILIES}
+              selectedTemplateId={templateId}
+              onSelectTemplate={handleSelectTemplate}
+              slotY={statLayout[selectedStatSlot]!.y}
+              selectedSlot={selectedStatSlot}
+              onClose={() => setSelectedStatSlot(null)}
+            />
+          )}
+        </AnimatePresence>
+
         {/* DRAGGABLE TEXT OVERLAYS ON CANVAS */}
         {textOverlays.map((overlay) => {
           if (overlay.hidden) return null;
@@ -1127,6 +1163,7 @@ export default function EditorScreen() {
                 setSelectedTextId(overlay.id);
                 setSelectedStickerId(null);
                 setIsImageSelected(false);
+                setSelectedStatSlot(null);
               }}
               onDoubleClick={(e) => {
                 e.stopPropagation();
@@ -1281,6 +1318,7 @@ export default function EditorScreen() {
                 setSelectedStickerId(sticker.id);
                 setSelectedTextId(null);
                 setIsImageSelected(false);
+                setSelectedStatSlot(null);
               }}
               style={{
                 transform: `scale(${sticker.scale}) rotate(${sticker.rotation}deg)`,
