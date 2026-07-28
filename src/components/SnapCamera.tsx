@@ -40,7 +40,7 @@ import {
   Layers,
   Sparkle
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { LENS_TEMPLATES_EXPANDED, STOCK_PHOTOS, MUSIC_TRACKS, MusicTrack } from "../data/mockData";
 import { LensTemplate, PhotoSource } from "../types";
 import GestureSwipeCarousel from "./GestureSwipeCarousel";
@@ -66,6 +66,24 @@ type CameraViewMode = "camera" | "stories" | "memories";
 
 export default function SnapCamera() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const activityState = (location.state as {
+    title?: string;
+    distance?: string;
+    pace?: string;
+    time?: string;
+  }) || {};
+
+  // Extract activity data from navigation state with sensible defaults
+  const activityTitle = activityState.title || "Morning Run";
+  const activityDistance = activityState.distance || "8.4 km";
+  const activityPace = activityState.pace || "6:12 /km";
+  const activityTime = activityState.time || "52:18";
+
+  // Parse distance for numeric display
+  const distanceNumeric = parseFloat(activityDistance) || 8.4;
+  const paceRaw = activityPace.replace(" /km", "");
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -202,6 +220,10 @@ export default function SnapCamera() {
             capturedImage: imageUrl,
             selectedLensId: activeLens?.id || "minimal",
             appliedMusic: selectedMusic ? selectedMusic.title : null,
+            activityTitle,
+            activityDistance,
+            activityPace,
+            activityTime,
           },
         });
       };
@@ -222,6 +244,10 @@ export default function SnapCamera() {
         capturedImage: photo.url,
         selectedLensId: activeLens?.id || "minimal",
         appliedMusic: selectedMusic ? selectedMusic.title : null,
+        activityTitle,
+        activityDistance,
+        activityPace,
+        activityTime,
       },
     });
   };
@@ -320,6 +346,10 @@ export default function SnapCamera() {
           appliedMusic: selectedMusic ? selectedMusic.title : null,
           aspectRatio: aspectRatio,
           hdQuality: hdQuality,
+          activityTitle,
+          activityDistance,
+          activityPace,
+          activityTime,
         },
       });
     }, 250);
@@ -547,16 +577,16 @@ export default function SnapCamera() {
                 <div className="space-y-2">
                   <div className="flex items-baseline gap-2">
                     <span className="text-5xl font-black text-white tracking-tighter drop-shadow-lg">
-                      8.42
+                      {distanceNumeric.toFixed(2)}
                     </span>
                     <span className="text-lg text-volt font-bold">km</span>
                   </div>
                   <div className="flex gap-2">
                     <div className="bg-black/60 backdrop-blur-md hairline-border rounded-xl px-3 py-1.5 text-xs text-white">
-                      Pace: <span className="text-volt font-bold">6:12</span>
+                      Pace: <span className="text-volt font-bold">{paceRaw}</span>
                     </div>
                     <div className="bg-black/60 backdrop-blur-md hairline-border rounded-xl px-3 py-1.5 text-xs text-white">
-                      Time: <span className="font-bold">52:18</span>
+                      Time: <span className="font-bold">{activityTime}</span>
                     </div>
                   </div>
                 </div>
@@ -567,8 +597,8 @@ export default function SnapCamera() {
                   <div className="text-[10px] font-black uppercase tracking-widest text-amber-200 mb-1">
                     STRAVA ACTIVITY ⚡
                   </div>
-                  <div className="text-3xl font-extrabold">8.42 KM</div>
-                  <div className="text-xs opacity-90 mt-1">Golden Gate Trail Run</div>
+                  <div className="text-3xl font-extrabold">{distanceNumeric.toFixed(2)} KM</div>
+                  <div className="text-xs opacity-90 mt-1">{activityTitle}</div>
                 </div>
               )}
 
@@ -578,14 +608,14 @@ export default function SnapCamera() {
                     <span>[ CYBER HUD ]</span>
                     <span className="animate-pulse text-red-400">● RECORDING</span>
                   </div>
-                  <div className="text-3xl font-black text-white">08.40 KM</div>
+                  <div className="text-3xl font-black text-white">{String(distanceNumeric.toFixed(2)).padStart(5, "0")} KM</div>
                 </div>
               )}
 
               {activeLens?.overlayType === "vintage" && (
                 <div className="bg-amber-50/90 text-zinc-900 p-3 rounded-xl font-serif rotate-[-1deg]">
-                  <div className="text-[10px] text-zinc-600">JUL 27, 2026 — 06:42 AM</div>
-                  <div className="text-2xl font-bold">8.4 kilometers</div>
+                  <div className="text-[10px] text-zinc-600">{new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }).toUpperCase()}</div>
+                  <div className="text-2xl font-bold">{distanceNumeric.toFixed(1)} kilometers</div>
                 </div>
               )}
             </div>
