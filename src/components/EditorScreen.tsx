@@ -48,6 +48,7 @@ import GestureSwipeCarousel from "./GestureSwipeCarousel";
 import ExportModal from "./ExportModal";
 import StatLayer from "./StatLayer";
 import StatToolbar from "./StatToolbar";
+import DraggableLayer from "./DraggableLayer";
 import { TEMPLATE_FAMILIES } from "../data/mockData";
 import {
   loadCustomLayouts,
@@ -1147,12 +1148,10 @@ export default function EditorScreen() {
           const isOutlineBg = overlay.bgStyle === "outline";
 
           return (
-            <motion.div
+            <DraggableLayer
               key={overlay.id}
-              drag={!overlay.locked}
-              dragConstraints={canvasRef}
-              dragElastic={0.1}
-              dragMomentum={false}
+              draggable={!overlay.locked}
+              constraintsRef={canvasRef}
               onDragStart={() => pushHistorySnapshot()}
               onClick={(e) => {
                 e.stopPropagation();
@@ -1171,10 +1170,16 @@ export default function EditorScreen() {
                   openTextEditor(overlay);
                 }
               }}
-              style={{
-                transform: `rotate(${overlay.rotation || 0}deg) scale(${overlay.scale || 1})`,
-                zIndex: overlay.zIndex ?? 20,
+              onCommit={(next) => {
+                setTextOverlays((prev) =>
+                  prev.map((t) => (t.id === overlay.id ? { ...t, ...next } : t))
+                );
               }}
+              x={overlay.x}
+              y={overlay.y}
+              rotate={overlay.rotation || 0}
+              scale={overlay.scale || 1}
+              zIndex={overlay.zIndex ?? 20}
               className={`absolute touch-none flex items-center group transition-all ${
                 overlay.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
               } ${
@@ -1293,7 +1298,7 @@ export default function EditorScreen() {
                   </button>
                 </motion.div>
               )}
-            </motion.div>
+            </DraggableLayer>
           );
         })}
 
@@ -1302,12 +1307,10 @@ export default function EditorScreen() {
           if (sticker.hidden) return null;
           const isSelected = selectedStickerId === sticker.id;
           return (
-            <motion.div
+            <DraggableLayer
               key={sticker.id}
-              drag={!sticker.locked}
-              dragConstraints={canvasRef}
-              dragElastic={0.1}
-              dragMomentum={false}
+              draggable={!sticker.locked}
+              constraintsRef={canvasRef}
               onDragStart={() => pushHistorySnapshot()}
               onClick={(e) => {
                 e.stopPropagation();
@@ -1320,10 +1323,16 @@ export default function EditorScreen() {
                 setIsImageSelected(false);
                 setSelectedStatSlot(null);
               }}
-              style={{
-                transform: `scale(${sticker.scale}) rotate(${sticker.rotation}deg)`,
-                zIndex: sticker.zIndex ?? 30,
+              onCommit={(next) => {
+                setStickerOverlays((prev) =>
+                  prev.map((s) => (s.id === sticker.id ? { ...s, ...next } : s))
+                );
               }}
+              x={sticker.x}
+              y={sticker.y}
+              rotate={sticker.rotation}
+              scale={sticker.scale}
+              zIndex={sticker.zIndex ?? 30}
               className={`absolute touch-none flex items-center justify-center p-2 rounded-2xl transition-all ${
                 sticker.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
               } ${
@@ -1442,7 +1451,7 @@ export default function EditorScreen() {
                   </button>
                 </motion.div>
               )}
-            </motion.div>
+            </DraggableLayer>
           );
         })}
 
