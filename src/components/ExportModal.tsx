@@ -349,11 +349,24 @@ export default function ExportModal({
     return dataUrl;
   };
 
-  // Update preview whenever settings change
+  // Debounced preview regeneration to avoid expensive recomputation on every change
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
-    if (isOpen) {
-      renderComposite().then((url) => setPreviewDataUrl(url));
+    if (!isOpen) {
+      setPreviewDataUrl(null);
+      return;
     }
+
+    if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    setPreviewDataUrl(null); // clear stale preview while debouncing
+    previewTimerRef.current = setTimeout(() => {
+      renderComposite().then((url) => setPreviewDataUrl(url));
+    }, 400);
+
+    return () => {
+      if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    };
   }, [isOpen, format, resolution, quality]);
 
   if (!isOpen) return null;

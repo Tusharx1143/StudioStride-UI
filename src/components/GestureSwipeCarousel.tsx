@@ -14,6 +14,65 @@ interface GestureSwipeCarouselProps<T> {
   itemClassName?: string;
 }
 
+// Memoized carousel item to prevent re-renders when only selection state changes
+const CarouselItem = React.memo(function CarouselItem({
+  item,
+  index,
+  isSelected,
+  itemGap,
+  isLast,
+  selectedScale,
+  unselectedOpacity,
+  itemClassName,
+  renderItem,
+  onSelect,
+  onRef,
+  isDraggingRef,
+}: {
+  item: any;
+  index: number;
+  isSelected: boolean;
+  itemGap: number;
+  isLast: boolean;
+  selectedScale: number;
+  unselectedOpacity: number;
+  itemClassName: string;
+  renderItem: (item: any, index: number, isSelected: boolean) => React.ReactNode;
+  onSelect: (index: number) => void;
+  onRef: (el: HTMLDivElement | null) => void;
+  isDraggingRef: React.RefObject<boolean>;
+}) {
+  return (
+    <div
+      ref={onRef}
+      onClick={() => {
+        if (!isDraggingRef.current) {
+          triggerHaptic("selection");
+          onSelect(index);
+        }
+      }}
+      style={{
+        marginRight: isLast ? "0px" : `${itemGap}px`,
+      }}
+      className={`shrink-0 transition-all duration-300 ${itemClassName}`}
+    >
+      <motion.div
+        animate={{
+          scale: isSelected ? selectedScale : 0.92,
+          opacity: isSelected ? 1 : unselectedOpacity,
+        }}
+        transition={{
+          type: "spring",
+          stiffness: 350,
+          damping: 25,
+        }}
+      >
+        {renderItem(item, index, isSelected)}
+      </motion.div>
+    </div>
+  );
+});
+
 export default function GestureSwipeCarousel<T>({
   items,
   selectedIndex,
@@ -30,7 +89,7 @@ export default function GestureSwipeCarousel<T>({
   const x = useMotionValue(0);
 
   const [containerWidth, setContainerWidth] = useState<number>(0);
-  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const isDraggingRef = useRef<boolean>(false);
 
   // Keep itemRefs array size in sync
   useEffect(() => {
@@ -87,7 +146,7 @@ export default function GestureSwipeCarousel<T>({
 
   // Handle Drag End (Finger release or flick gesture)
   const handleDragEnd = (_: unknown, info: PanInfo) => {
-    setIsDragging(false);
+    isDraggingRef.current = false;
 
     if (!containerRef.current || items.length === 0) return;
 
@@ -147,44 +206,28 @@ export default function GestureSwipeCarousel<T>({
       <motion.div
         drag="x"
         dragElastic={0.25}
-        onDragStart={() => setIsDragging(true)}
+        onDragStart={() => { isDraggingRef.current = true; }}
         onDragEnd={handleDragEnd}
         style={{ x }}
         className="flex items-center w-max cursor-grab active:cursor-grabbing py-2"
       >
-        {items.map((item, index) => {
-          const isSelected = index === selectedIndex;
-          return (
-            <div
-              key={index}
-              ref={(el) => (itemRefs.current[index] = el)}
-              onClick={() => {
-                if (!isDragging) {
-                  triggerHaptic("selection");
-                  onSelectIndex(index);
-                }
-              }}
-              style={{
-                marginRight: index < items.length - 1 ? `${itemGap}px` : "0px",
-              }}
-              className={`shrink-0 transition-all duration-300 ${itemClassName}`}
-            >
-              <motion.div
-                animate={{
-                  scale: isSelected ? selectedScale : 0.92,
-                  opacity: isSelected ? 1 : unselectedOpacity,
-                }}
-                transition={{
-                  type: "spring",
-                  stiffness: 350,
-                  damping: 25,
-                }}
-              >
-                {renderItem(item, index, isSelected)}
-              </motion.div>
-            </div>
-          );
-        })}
+        {items.map((item, index) => (
+          <CarouselItem
+            key={index}
+            item={item}
+            index={index}
+            isSelected={index === selectedIndex}
+            itemGap={itemGap}
+            isLast={index >= items.length - 1}
+            selectedScale={selectedScale}
+            unselectedOpacity={unselectedOpacity}
+            itemClassName={itemClassName}
+            renderItem={renderItem}
+            onSelect={onSelectIndex}
+            onRef={(el) => (itemRefs.current[index] = el)}
+            isDraggingRef={isDraggingRef}
+          />
+        ))}
       </motion.div>
     </div>
   );

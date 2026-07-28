@@ -355,17 +355,13 @@ export default function SnapCamera() {
     }, 250);
   };
 
-  // Zoom scale multiplier
-  const getZoomScaleClass = () => {
+  // Zoom scale multiplier — returns CSS scale value (avoids purged Tailwind classes)
+  const getZoomScale = (): number => {
     switch (zoomLevel) {
-      case "0.5x":
-        return "scale-100 object-cover"; // ultra wide simulation
-      case "2x":
-        return "scale-125 transition-transform duration-300";
-      case "3x":
-        return "scale-150 transition-transform duration-300";
-      default:
-        return "scale-105 transition-transform duration-300";
+      case "0.5x": return 1;
+      case "2x": return 1.25;
+      case "3x": return 1.5;
+      default: return 1.05;
     }
   };
 
@@ -517,18 +513,19 @@ export default function SnapCamera() {
               autoPlay
               playsInline
               muted
-              className={`absolute inset-0 w-full h-full object-cover ${
+              className={`absolute inset-0 w-full h-full object-cover transition-transform duration-300 ${
                 facingMode === "user" ? "scale-x-[-1]" : ""
-              } ${getZoomScaleClass()} ${
+              } ${
                 isNightMode ? "brightness-125 contrast-125 saturate-150" : ""
               } ${isBeautyMode ? "blur-[0.3px]" : ""}`}
+              style={{ transform: `scale(${getZoomScale()})` }}
             />
           ) : (
             <div
-              className={`absolute inset-0 bg-cover bg-center transition-all duration-500 ${getZoomScaleClass()} ${
+              className={`absolute inset-0 bg-cover bg-center transition-transform duration-500 ${
                 isNightMode ? "brightness-125 contrast-125" : ""
               }`}
-              style={{ backgroundImage: `url("${STOCK_PHOTOS[1].url}")` }}
+              style={{ backgroundImage: `url("${STOCK_PHOTOS[1].url}")`, transform: `scale(${getZoomScale()})` }}
             ></div>
           )}
 
