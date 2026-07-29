@@ -117,6 +117,10 @@ export default function ProjectsScreen() {
         distance: project.distance,
         pace: project.pace,
         time: project.time,
+        // Restore the placed route layer, and its geometry with it, so the
+        // Route tool stays available on reopen.
+        routeOverlay: project.route,
+        route: project.route?.geometry,
       },
     });
   };

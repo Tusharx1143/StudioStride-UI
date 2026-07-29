@@ -7,6 +7,7 @@
  */
 
 import type { StatData } from "../types";
+import type { RouteGeometry } from "../utils/routeGeometry";
 
 // ---------------------------------------------------------------------------
 // Source identification
@@ -46,6 +47,14 @@ export interface UnifiedActivity {
   distanceMeters: number;
   /** Moving time in seconds. */
   movingTime: number;
+
+  // ── Route ─────────────────────────────────────────────────────────────
+  /**
+   * Normalized GPS path, when the source provides one. Absent for treadmill
+   * and gym activities, and for every Health Connect activity — consumers
+   * gate the route UI on this being present.
+   */
+  route?: RouteGeometry;
 
   // ── Camera / Editor pipeline ──────────────────────────────────────────
   /** Generate a StatData object for templates, overlays, and export. */

@@ -39,6 +39,7 @@ import {
   ArrowDown,
   Copy,
   Plus,
+  Route as RouteIcon,
   Image as ImageIcon
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -71,6 +72,9 @@ import CameraCaptureOverlay from "./editor/CameraCaptureOverlay";
 import LensStrip from "./editor/LensStrip";
 import StatChipsBar from "./editor/StatChipsBar";
 import ToolRail, { type RailTool } from "./editor/ToolRail";
+import { RouteLayer } from "./editor/RouteLayer";
+import RouteLayerControls from "./editor/RouteLayerControls";
+import type { RouteGeometry, RouteOverlay } from "../types";
 
 // Text Overlay item model
 interface TextOverlay {
@@ -345,6 +349,15 @@ export default function EditorScreen() {
   // Sticker Overlays state
   const [stickerOverlays, setStickerOverlays] = useState<StickerOverlay[]>([]);
   const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
+
+  // Route layer state. The geometry arrives with the activity — absent for
+  // treadmill runs, gym sessions, and every Health Connect activity, which is
+  // what gates the Route tool out of the rail entirely.
+  const routeGeometry = (routeState.route as RouteGeometry | undefined) ?? undefined;
+  const [routeOverlay, setRouteOverlay] = useState<RouteOverlay | null>(
+    (routeState.routeOverlay as RouteOverlay | undefined) ?? null
+  );
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
 
   // Sticker Picker Modal state
   const [isStickerModalOpen, setIsStickerModalOpen] = useState<boolean>(false);
@@ -622,6 +635,19 @@ export default function EditorScreen() {
         locked: !!s.locked,
         zIndex: s.zIndex ?? (30 + idx),
       })),
+      ...(routeOverlay
+        ? [
+            {
+              id: routeOverlay.id,
+              type: "route" as const,
+              name: "Route",
+              subtext: `GPS path • ${routeOverlay.strokeWidth}px`,
+              hidden: !!routeOverlay.hidden,
+              locked: !!routeOverlay.locked,
+              zIndex: routeOverlay.zIndex ?? 40,
+            },
+          ]
+        : []),
     ];
 
     return items.sort((a, b) => b.zIndex - a.zIndex);
@@ -642,6 +668,8 @@ export default function EditorScreen() {
       setStickerOverlays((prev) =>
         prev.map((s) => (s.id === id ? { ...s, hidden: !s.hidden } : s))
       );
+    } else if (type === "route") {
+      setRouteOverlay((prev) => (prev ? { ...prev, hidden: !prev.hidden } : prev));
     }
   };
 
@@ -660,6 +688,8 @@ export default function EditorScreen() {
       setStickerOverlays((prev) =>
         prev.map((s) => (s.id === id ? { ...s, locked: !s.locked } : s))
       );
+    } else if (type === "route") {
+      setRouteOverlay((prev) => (prev ? { ...prev, locked: !prev.locked } : prev));
     }
   };
 
@@ -692,6 +722,8 @@ export default function EditorScreen() {
         setStickerOverlays((prev) =>
           prev.map((s) => (s.id === layerId ? { ...s, zIndex: newZ } : s))
         );
+      } else if (layerType === "route") {
+        setRouteOverlay((prev) => (prev ? { ...prev, zIndex: newZ } : prev));
       }
     };
 
@@ -738,6 +770,11 @@ export default function EditorScreen() {
       handleDeleteText(id);
     } else if (type === "sticker") {
       handleDeleteSticker(id);
+    } else if (type === "route") {
+      pushHistorySnapshot();
+      setRouteOverlay(null);
+      setSelectedRouteId(null);
+      showToast("Route removed");
     } else if (type === "draw") {
       handleClearDraw();
       showToast("Drawing layer cleared");
@@ -751,9 +788,16 @@ export default function EditorScreen() {
     if (type === "text") {
       setSelectedTextId(id);
       setSelectedStickerId(null);
+      setSelectedRouteId(null);
     } else if (type === "sticker") {
       setSelectedStickerId(id);
       setSelectedTextId(null);
+      setSelectedRouteId(null);
+    } else if (type === "route") {
+      setSelectedRouteId(id);
+      setSelectedTextId(null);
+      setSelectedStickerId(null);
+      setActiveTool("route");
     } else if (type === "draw") {
       setActiveTool("draw");
     } else if (type === "image") {
@@ -1046,10 +1090,53 @@ export default function EditorScreen() {
     showToast("Text deleted");
   };
 
+  /**
+   * Add the activity's route to the canvas, or select it if it's already
+   * there — a second copy of the same run isn't something anyone wants.
+   */
+  const addOrSelectRoute = () => {
+    if (!routeGeometry) return;
+
+    setSelectedTextId(null);
+    setSelectedStickerId(null);
+    setIsImageSelected(false);
+    setSelectedStatSlot(null);
+    setActiveTool("route");
+
+    if (routeOverlay) {
+      setSelectedRouteId(routeOverlay.id);
+      return;
+    }
+
+    pushHistorySnapshot();
+    const created: RouteOverlay = {
+      id: `route_${Date.now()}`,
+      geometry: routeGeometry,
+      x: 0,
+      y: 0,
+      // Sized off the shorter canvas edge: 40% of the width alone would
+      // overflow a portrait canvas vertically and dominate a landscape one.
+      size: Math.round(
+        Math.min(canvasRef.current?.clientWidth ?? 360, canvasRef.current?.clientHeight ?? 640) * 0.4
+      ),
+      color: "#FFFFFF",
+      strokeWidth: 3,
+      opacity: 1,
+      scale: 1,
+      rotation: 0,
+      zIndex: 40,
+    };
+    setRouteOverlay(created);
+    setSelectedRouteId(created.id);
+    showToast("Route added");
+  };
+
   // Tool rail contents (only implemented features)
   const tools: RailTool[] = [
     { id: "layers", label: "Layers", icon: Layers },
     { id: "text", label: "Text", icon: Type },
+    // Only offered when the activity actually carries GPS geometry.
+    ...(routeGeometry ? [{ id: "route", label: "Route", icon: RouteIcon }] : []),
     { id: "draw", label: "Draw", icon: PenTool },
     { id: "stickers", label: "Stickers", icon: StickyNote },
     { id: "crop", label: "Crop", icon: Crop },
@@ -1062,6 +1149,8 @@ export default function EditorScreen() {
     switch (toolId) {
       case "text":
         return textOverlays.length > 0;
+      case "route":
+        return routeOverlay !== null;
       case "draw":
         return hasDrawnStrokes;
       case "stickers":
@@ -1086,6 +1175,8 @@ export default function EditorScreen() {
       showToast(activeTool === "layers" ? "Layers closed" : "Layer Manager opened");
     } else if (toolId === "text") {
       openTextEditor();
+    } else if (toolId === "route") {
+      addOrSelectRoute();
     } else if (toolId === "stickers") {
       setIsStickerModalOpen(true);
       setActiveTool("stickers");
@@ -1329,7 +1420,9 @@ export default function EditorScreen() {
                 overlay.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
               } ${
                 isSelected
-                  ? "p-2 border-2 border-blue-500 rounded-2xl shadow-[0_0_15px_rgba(59,130,246,0.6)] relative z-30"
+                  ? // See the sticker layer: `relative` would override the
+                    // base `absolute` and pull this out of position.
+                    "p-2 border-2 border-blue-500 rounded-2xl shadow-[0_0_15px_rgba(59,130,246,0.6)] z-30"
                   : "p-1"
               }`}
             >
@@ -1448,6 +1541,62 @@ export default function EditorScreen() {
         })}
 
         {/* DRAGGABLE STICKER OVERLAYS ON CANVAS */}
+        {routeOverlay && !routeOverlay.hidden && (
+          <DraggableLayer
+            key={routeOverlay.id}
+            draggable={!routeOverlay.locked}
+            constraintsRef={canvasRef}
+            onDragStart={() => {
+              captureCanvasSize();
+              pushHistorySnapshot();
+            }}
+            onGuidesChange={setSnapGuides}
+            onSnap={() => triggerHaptic("snap")}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (routeOverlay.locked) {
+                showToast("Layer is locked");
+                return;
+              }
+              setSelectedRouteId(routeOverlay.id);
+              setSelectedTextId(null);
+              setSelectedStickerId(null);
+              setIsImageSelected(false);
+              setSelectedStatSlot(null);
+            }}
+            onCommit={(next) => {
+              setRouteOverlay((prev) => (prev ? { ...prev, ...next } : prev));
+            }}
+            x={routeOverlay.x}
+            y={routeOverlay.y}
+            rotate={routeOverlay.rotation}
+            scale={routeOverlay.scale}
+            zIndex={routeOverlay.zIndex ?? 40}
+            className={`absolute touch-none flex items-center justify-center rounded-2xl transition-all ${
+              routeOverlay.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
+            } ${
+              selectedRouteId === routeOverlay.id
+                ? // No `relative` here, deliberately: Tailwind emits it after
+                  // `absolute`, so it would win and drop this layer back into
+                  // flex flow, displacing the photo. No fill or blur either —
+                  // a route's box is large, so a tint would darken a big
+                  // region of the photo rather than hint at a small element.
+                  "border border-dashed border-blue-400/70 z-30"
+                : ""
+            }`}
+          >
+            {selectedRouteId === routeOverlay.id && (
+              <>
+                <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full z-30" />
+                <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full z-30" />
+                <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full z-30" />
+                <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full z-30" />
+              </>
+            )}
+            <RouteLayer overlay={routeOverlay} />
+          </DraggableLayer>
+        )}
+
         {stickerOverlays.map((sticker) => {
           if (sticker.hidden) return null;
           const isSelected = selectedStickerId === sticker.id;
@@ -1487,7 +1636,10 @@ export default function EditorScreen() {
                 sticker.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
               } ${
                 isSelected
-                  ? "border-2 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.6)] bg-black/30 backdrop-blur-xs relative z-30"
+                  ? // No `relative`: Tailwind emits it after `absolute`, so it
+                    // would win and drop this layer into flex flow, shifting
+                    // the photo. z-30 alone gives the stacking this needs.
+                    "border-2 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.6)] bg-black/30 backdrop-blur-xs z-30"
                   : ""
               }`}
             >
@@ -2016,6 +2168,25 @@ export default function EditorScreen() {
 
       {/* DRAWING TOOL FLOATING CONTROL PANEL */}
       <AnimatePresence>
+        {activeTool === "route" && routeOverlay && (
+          <RouteLayerControls
+            overlay={routeOverlay}
+            palette={COLOR_PALETTE}
+            onChange={(next) => {
+              pushHistorySnapshot();
+              setRouteOverlay((prev) => (prev ? { ...prev, ...next } : prev));
+            }}
+            onDelete={() => {
+              pushHistorySnapshot();
+              setRouteOverlay(null);
+              setSelectedRouteId(null);
+              setActiveTool(null);
+              showToast("Route removed");
+            }}
+            onClose={() => setActiveTool(null)}
+          />
+        )}
+
         {activeTool === "draw" && (
           <motion.div
             initial={{ y: 50, opacity: 0 }}
@@ -2498,7 +2669,8 @@ export default function EditorScreen() {
                 const isBottom = index === getAllLayers().length - 1;
                 const isSelected =
                   (layer.type === "text" && selectedTextId === layer.id) ||
-                  (layer.type === "sticker" && selectedStickerId === layer.id);
+                  (layer.type === "sticker" && selectedStickerId === layer.id) ||
+                  (layer.type === "route" && selectedRouteId === layer.id);
 
                 return (
                   <div
@@ -2517,6 +2689,7 @@ export default function EditorScreen() {
                         {layer.type === "draw" && <PenTool className="w-4 h-4 text-emerald-400" />}
                         {layer.type === "text" && <Type className="w-4 h-4 text-ember" />}
                         {layer.type === "sticker" && <StickyNote className="w-4 h-4 text-violet-400" />}
+                        {layer.type === "route" && <RouteIcon className="w-4 h-4 text-sky-400" />}
                       </div>
 
                       <div className="min-w-0 flex-1">
@@ -2679,6 +2852,7 @@ export default function EditorScreen() {
         capturedImage={capturedImage}
         textOverlays={textOverlays}
         stickerOverlays={stickerOverlays}
+        routeOverlay={routeOverlay}
         drawingCanvas={drawingCanvasRef.current}
         committedCrop={committedCrop}
         isBaseImageHidden={isBaseImageHidden}

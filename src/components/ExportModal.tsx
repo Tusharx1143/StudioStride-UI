@@ -14,8 +14,9 @@ import {
   Sliders,
   FileCheck
 } from "lucide-react";
-import type { StatData, TemplateLayout } from "../types";
+import type { RouteOverlay, StatData, TemplateLayout } from "../types";
 import { drawStatLayer } from "../utils/drawStatLayer";
+import { drawRouteLayer } from "../utils/drawRouteLayer";
 
 interface TextOverlay {
   id: string;
@@ -52,6 +53,8 @@ interface ExportModalProps {
   capturedImage: string;
   textOverlays: TextOverlay[];
   stickerOverlays: StickerOverlay[];
+  /** The activity's GPS path, when one was placed on the canvas. */
+  routeOverlay?: RouteOverlay | null;
   drawingCanvas: HTMLCanvasElement | null;
   committedCrop: {
     ratio: string;
@@ -79,6 +82,7 @@ export default function ExportModal({
   capturedImage,
   textOverlays,
   stickerOverlays,
+  routeOverlay,
   drawingCanvas,
   committedCrop,
   isBaseImageHidden,
@@ -158,7 +162,7 @@ export default function ExportModal({
 
     // Collect layers to render in order of zIndex
     interface LayerToDraw {
-      type: "image" | "draw" | "text" | "sticker";
+      type: "image" | "draw" | "text" | "sticker" | "route";
       zIndex: number;
       data?: any;
     }
@@ -184,6 +188,10 @@ export default function ExportModal({
         layers.push({ type: "sticker", zIndex: s.zIndex ?? 20, data: s });
       }
     });
+
+    if (routeOverlay && !routeOverlay.hidden) {
+      layers.push({ type: "route", zIndex: routeOverlay.zIndex ?? 40, data: routeOverlay });
+    }
 
     layers.sort((a, b) => a.zIndex - b.zIndex);
 
@@ -247,6 +255,13 @@ export default function ExportModal({
         ctx.save();
         ctx.drawImage(drawingCanvas, 0, 0, width, height);
         ctx.restore();
+      } else if (layer.type === "route" && layer.data) {
+        drawRouteLayer(ctx, layer.data as RouteOverlay, {
+          containerWidth,
+          containerHeight,
+          scaleX,
+          scaleY,
+        });
       } else if (layer.type === "text" && layer.data) {
         const t: TextOverlay = layer.data;
         ctx.save();
@@ -472,6 +487,9 @@ export default function ExportModal({
       time: "-",
       updatedAt: "Just now",
       placedTextsCount: textOverlays.length,
+      // Kept so reopening the project restores the route rather than
+      // silently dropping the layer.
+      ...(routeOverlay ? { route: routeOverlay } : {}),
     };
 
     localStorage.setItem("stride_projects", JSON.stringify([newProject, ...projectsList]));

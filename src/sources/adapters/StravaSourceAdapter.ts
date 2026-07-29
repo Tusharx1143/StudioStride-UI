@@ -9,6 +9,8 @@ import type { ActivitySource, SourceFetchParams, SourceStats, UnifiedActivity } 
 import type { StravaActivity } from "../../types";
 import { fetchActivities, fetchAthleteStats, logout as apiLogout } from "../../services/stravaApi";
 import { activityToStatData, activityToActivityData, aggregateTotals } from "../../services/stravaTransformers";
+import { decodePolyline } from "../../utils/decodePolyline";
+import { toRouteGeometry } from "../../utils/routeGeometry";
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -78,10 +80,12 @@ export function createStravaSourceAdapter(
 // Mapping
 // ---------------------------------------------------------------------------
 
-function toUnifiedActivity(a: StravaActivity): UnifiedActivity {
+/** Exported for testing — the pure mapping half of `fetchActivities`. */
+export function toUnifiedActivity(a: StravaActivity): UnifiedActivity {
   const ad = activityToActivityData(a);
   const statData = activityToStatData(a);
   const distKm = a.distance / 1000;
+  const route = toRoute(a);
 
   return {
     id: ad.id,
@@ -98,6 +102,23 @@ function toUnifiedActivity(a: StravaActivity): UnifiedActivity {
     date: a.start_date_local,
     distanceMeters: a.distance,
     movingTime: a.moving_time || a.elapsed_time,
+    ...(route ? { route } : {}),
     toStatData: () => statData,
   };
+}
+
+/**
+ * Decode and project the summary polyline, if there is a usable one.
+ *
+ * Every failure — no map, a hidden map, a malformed string, a GPS lock —
+ * collapses to `undefined`, which is what hides the route UI downstream.
+ */
+function toRoute(a: StravaActivity) {
+  const encoded = a.map?.summary_polyline;
+  if (!encoded) return undefined;
+
+  const points = decodePolyline(encoded);
+  if (!points) return undefined;
+
+  return toRouteGeometry(points) ?? undefined;
 }

@@ -50,6 +50,9 @@ export default function HomeScreen() {
         distance: `${statData.distance} ${statData.distanceUnit}`,
         pace: `${statData.pace} /km`,
         time: statData.time,
+        // Absent for treadmill runs, gym sessions, and Health Connect
+        // activities — the editor hides the Route tool when it's missing.
+        route: activity.route,
       },
     });
   };

@@ -1,4 +1,7 @@
 import type { ReactNode } from "react";
+import type { RouteGeometry } from "./utils/routeGeometry";
+
+export type { RouteGeometry };
 
 /** The fixed set of draggable pieces every template decomposes into. */
 export type StatSlotId = "distance" | "pace" | "time" | "title" | "accent";
@@ -135,6 +138,36 @@ export interface PhotoSource {
   thumbnailUrl?: string;
 }
 
+/**
+ * A route path placed on the canvas.
+ *
+ * Declared here rather than in the editor component so the preview, the
+ * export pass, and saved projects all share one definition — TextOverlay and
+ * StickerOverlay are currently duplicated across EditorScreen and ExportModal,
+ * and two copies of a shape that must agree is exactly the drift this feature
+ * is built to avoid.
+ */
+export interface RouteOverlay {
+  id: string;
+  /** Normalized geometry from the activity source. */
+  geometry: RouteGeometry;
+  /** Centre offset in preview px, matching every other overlay. */
+  x: number;
+  y: number;
+  /** Longest edge in preview px. */
+  size: number;
+  color: string;
+  /** Stroke width in preview px. */
+  strokeWidth: number;
+  opacity: number;
+  /** Applied by DraggableLayer as a CSS transform; export mirrors it. */
+  scale?: number;
+  rotation?: number;
+  zIndex?: number;
+  hidden?: boolean;
+  locked?: boolean;
+}
+
 export interface SavedProject {
   id: string;
   title: string;
@@ -148,6 +181,8 @@ export interface SavedProject {
   time: string;
   updatedAt: string;
   placedTextsCount: number;
+  /** Present only when the activity had GPS geometry and the user placed it. */
+  route?: RouteOverlay;
 }
 
 export interface TemplateFamily {
