@@ -2,7 +2,7 @@ import React from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Activity, Target, ChevronRight, User, Home, Plus, Camera, FolderKanban,
-  Flame, Mountain, Heart, Footprints, Moon, RefreshCw, Zap, Loader2,
+  Flame, Mountain, Heart, Footprints, Moon, RefreshCw, Loader2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
@@ -40,34 +40,12 @@ export default function HomeScreen() {
     ? `${athlete.firstname}'s Stride`
     : "STRIDE";
 
-  // ── Navigate to camera ────────────────────────────────────────────────
+  // ── Straight to the editor with this activity's stats ─────────────────
 
-  const openCamera = (activity: UnifiedActivity) => {
+  const openEditor = (activity: UnifiedActivity) => {
     const statData = activity.toStatData();
-    navigate("/camera", {
+    navigate("/editor", {
       state: {
-        title: statData.title,
-        distance: `${statData.distance} ${statData.distanceUnit}`,
-        pace: `${statData.pace} /km`,
-        time: statData.time,
-      },
-    });
-  };
-
-  // ── Quick Make — 1-tap straight to editor with defaults ──────────────
-
-  const quickMake = (activity: UnifiedActivity) => {
-    const statData = activity.toStatData();
-    const fallbackImage =
-      "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=1200&auto=format&fit=crop";
-    try {
-      sessionStorage.setItem("temp_captured_image", fallbackImage);
-    } catch { /* quota */ }
-    navigate("/camera", {
-      state: {
-        quickEditor: true,
-        capturedImage: fallbackImage,
-        selectedLensId: "minimal",
         title: statData.title,
         distance: `${statData.distance} ${statData.distanceUnit}`,
         pace: `${statData.pace} /km`,
@@ -112,9 +90,9 @@ export default function HomeScreen() {
         <button
           onClick={() => {
             if (activeActivity) {
-              openCamera(activeActivity);
+              openEditor(activeActivity);
             } else {
-              navigate("/camera", {
+              navigate("/editor", {
                 state: {
                   title: "Ready to Move",
                   distance: "0 km",
@@ -148,7 +126,7 @@ export default function HomeScreen() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ type: "spring", stiffness: 300, damping: 25 }}
               className="relative group cursor-pointer"
-              onClick={() => openCamera(activeActivity)}
+              onClick={() => openEditor(activeActivity)}
             >
               <div className="absolute inset-0 bg-ember opacity-20 blur-2xl rounded-2xl group-hover:opacity-30 transition-opacity"></div>
 
@@ -190,18 +168,11 @@ export default function HomeScreen() {
 
                 <div className="mt-6 pt-4 hairline-border-t flex items-center justify-between gap-3">
                   <button
-                    onClick={(e) => { e.stopPropagation(); openCamera(activeActivity); }}
+                    onClick={(e) => { e.stopPropagation(); openEditor(activeActivity); }}
                     className="flex items-center gap-1.5 text-ember hover:opacity-80 transition-opacity"
                   >
                     <Plus className="w-4 h-4" />
                     <span className="text-stat-value">Create Story</span>
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); quickMake(activeActivity); }}
-                    className="flex items-center gap-1.5 text-text-secondary hover:text-ember transition-colors text-label font-semibold"
-                  >
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>Quick Make</span>
                   </button>
                 </div>
               </div>
@@ -363,7 +334,7 @@ export default function HomeScreen() {
                     exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.2 } }}
                     whileHover={{ scale: 1.005 }}
                     whileTap={{ scale: 0.99 }}
-                    onClick={() => openCamera(item)}
+                    onClick={() => openEditor(item)}
                     className="bg-surface rounded-lg p-4 flex items-center hairline-border hover:bg-surface-raised transition-all text-left group"
                   >
                     <div className="w-12 h-12 rounded-sm bg-ember-dim flex items-center justify-center shrink-0 mr-4 group-hover:bg-ember/20 transition-colors">
@@ -410,9 +381,9 @@ export default function HomeScreen() {
           <Home className="w-6 h-6" />
         </button>
         <button
-          onClick={() => navigate("/camera")}
+          onClick={() => navigate("/editor")}
           className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-ember transition-colors"
-          aria-label="Camera"
+          aria-label="Create"
         >
           <Camera className="w-6 h-6" />
         </button>

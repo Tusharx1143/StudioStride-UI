@@ -101,7 +101,7 @@ export default function ProfileScreen() {
               <Heart className={`w-5 h-5 ${hcState.authorized ? "fill-emerald-400" : ""}`} />
             </button>
           )}
-          <button onClick={() => navigate("/camera")} className="w-10 h-10 flex items-center justify-center rounded-full bg-ember text-ink transition-colors">
+          <button onClick={() => navigate("/editor")} className="w-10 h-10 flex items-center justify-center rounded-full bg-ember text-ink transition-colors">
             <Camera className="w-5 h-5 fill-ink" />
           </button>
           <button onClick={toggleTheme} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface transition-colors" title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
@@ -205,9 +205,8 @@ export default function ProfileScreen() {
                   whileTap={{ scale: 0.99 }}
                   onClick={() => {
                     const statData = item.toStatData();
-                    navigate("/camera", {
+                    navigate("/editor", {
                       state: {
-                        quickEditor: true,
                         title: statData.title,
                         distance: `${statData.distance} ${statData.distanceUnit}`,
                         pace: `${statData.pace} /km`,
@@ -387,7 +386,7 @@ export default function ProfileScreen() {
         <button onClick={() => navigate("/home")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-text-primary transition-colors" aria-label="Home">
           <Home className="w-6 h-6" />
         </button>
-        <button onClick={() => navigate("/camera")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-ember transition-colors" aria-label="Camera">
+        <button onClick={() => navigate("/editor")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-ember transition-colors" aria-label="Create">
           <Camera className="w-6 h-6" />
         </button>
         <button onClick={() => navigate("/projects")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-ember transition-colors" aria-label="Projects">

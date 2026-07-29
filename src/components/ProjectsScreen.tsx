@@ -108,9 +108,8 @@ export default function ProjectsScreen() {
   };
 
   const handleOpenProject = (project: SavedProject) => {
-    navigate("/camera", {
+    navigate("/editor", {
       state: {
-        quickEditor: true,
         projectId: project.id,
         capturedImage: project.bgImage,
         selectedLensId: project.lensId,
@@ -123,7 +122,7 @@ export default function ProjectsScreen() {
   };
 
   const handleCreateNewProject = () => {
-    navigate("/camera");
+    navigate("/editor");
   };
 
   return (
@@ -259,7 +258,7 @@ export default function ProjectsScreen() {
         <button onClick={() => navigate("/home")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-text-primary transition-colors" aria-label="Home">
           <Home className="w-6 h-6" />
         </button>
-        <button onClick={() => navigate("/camera")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-ember transition-colors" aria-label="Camera">
+        <button onClick={() => navigate("/editor")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-ember transition-colors" aria-label="Create">
           <Camera className="w-6 h-6" />
         </button>
         <button onClick={() => navigate("/projects")} className="flex flex-col items-center justify-center bg-surface-raised text-ember rounded-full p-3 transition-colors" aria-label="Projects" aria-current="page">

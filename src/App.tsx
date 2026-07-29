@@ -14,7 +14,7 @@ import AuthScreen from "./components/AuthScreen";
 import HomeScreen from "./components/HomeScreen";
 import ProfileScreen from "./components/ProfileScreen";
 import ProjectsScreen from "./components/ProjectsScreen";
-import SnapCamera from "./components/SnapCamera";
+import EditorScreen from "./components/EditorScreen";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 // ---------------------------------------------------------------------------
@@ -116,12 +116,12 @@ function AnimatedRoutes() {
           }
         />
         <Route
-          path="/camera"
+          path="/editor"
           element={
             <ErrorBoundary>
               <RequireAnyAuth>
                 <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
-                  <SnapCamera />
+                  <EditorScreen />
                 </motion.div>
               </RequireAnyAuth>
             </ErrorBoundary>

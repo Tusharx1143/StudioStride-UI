@@ -6,7 +6,7 @@ import {
   PenTool,
   StickyNote,
   Download,
-  Send,
+  Camera,
   Undo,
   Redo,
   Sparkles,
@@ -43,23 +43,34 @@ import {
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { LENS_TEMPLATES_EXPANDED, LENS_FILTER_MAP, STOCK_PHOTOS } from "../data/mockData";
-import type { StatData, StatSlotId, TemplateFamily, TemplateLayout } from "../types";
+import type {
+  CustomLayouts,
+  StatData,
+  StatSlotId,
+  TemplateFamily,
+  TemplateLayout,
+} from "../types";
 import GestureSwipeCarousel from "./GestureSwipeCarousel";
 import ExportModal from "./ExportModal";
 import StatLayer from "./StatLayer";
-import StatToolbar from "./StatToolbar";
 import DraggableLayer from "./DraggableLayer";
 import SnapGuides from "./SnapGuides";
 import type { SnapLine } from "../utils/snapping";
 import { triggerHaptic } from "../utils/haptics";
 import { TEMPLATE_FAMILIES } from "../data/mockData";
 import {
+  clearCustomLayout,
+  hasCustomLayout,
   loadCustomLayouts,
   resolveLayout,
   saveCustomLayouts,
   storeCustomLayout,
 } from "../utils/statLayouts";
-import { markStripSeen, shouldAutoOpenStrip } from "../utils/statStrip";
+import BackgroundSheet from "./editor/BackgroundSheet";
+import CameraCaptureOverlay from "./editor/CameraCaptureOverlay";
+import LensStrip from "./editor/LensStrip";
+import StatChipsBar from "./editor/StatChipsBar";
+import ToolRail, { type RailTool } from "./editor/ToolRail";
 
 // Text Overlay item model
 interface TextOverlay {
@@ -155,88 +166,89 @@ const BG_STYLES: { id: TextOverlay["bgStyle"]; label: string }[] = [
   { id: "outline", label: "Outline" },
 ];
 
-// ---------------------------------------------------------------------------
-// Embedded props — when EditorScreen is rendered inline inside SnapCamera
-// instead of as a standalone route, all data comes through this interface.
-// ---------------------------------------------------------------------------
-export interface EditorEmbeddedProps {
-  capturedImage: string;
-  selectedTemplateFamily: TemplateFamily | null;
-  selectedLensId: string | undefined;
-  lensFilter: string;
-  statData: StatData;
-  statLayout: TemplateLayout;
-  appliedMusic: string | null;
-  aspectRatio: string;
-  onExit: () => void;
-}
-
-interface EditorScreenProps {
-  embeddedProps?: EditorEmbeddedProps;
-}
-
-export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
+export default function EditorScreen() {
   const navigate = useNavigate();
-  const location = useLocation();
   const canvasRef = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+  // Router state is read once — later navigations never re-enter this screen
+  // without a remount, and re-reading it would clobber edits in progress.
+  const routeState = useRef<Record<string, unknown>>(
+    (location.state as Record<string, unknown> | null) ?? {}
+  ).current;
 
-  // Image source captured from camera or gallery.
-  // When embedded, use embeddedProps; otherwise fall back to sessionStorage
-  // + router state + stock default.
-  const capturedImage =
-    embeddedProps?.capturedImage ??
-    sessionStorage.getItem("temp_captured_image") ??
-    (location.state?.capturedImage as string | undefined) ??
-    STOCK_PHOTOS[0].url;
+  // Background photo. An explicit image on the route always wins — that's how a
+  // saved project opens on its own artwork.
+  const [capturedImage, setCapturedImage] = useState<string>(() => {
+    const fromRoute = routeState.capturedImage as string | undefined;
+    if (fromRoute) return fromRoute;
 
-  // Selected template family, carried over from the camera
-  const selectedTemplateFamily: TemplateFamily | null =
-    embeddedProps?.selectedTemplateFamily ??
-    (location.state?.selectedTemplateFamily as TemplateFamily | null) ??
-    null;
-  // Selected lens, carried over from the camera viewfinder
-  const selectedLensId: string | undefined =
-    embeddedProps?.selectedLensId ??
-    (location.state?.selectedLensId as string | undefined);
+    // Arriving from an activity starts on a clean canvas. Only a bare entry
+    // (the Create button) resumes whatever photo this tab last captured, so
+    // picking a second activity never inherits the first one's photo.
+    const isActivityEntry = Boolean(routeState.title ?? routeState.activityTitle);
+    if (!isActivityEntry) {
+      const stored = sessionStorage.getItem("temp_captured_image");
+      if (stored) return stored;
+    }
+    return STOCK_PHOTOS[0].url;
+  });
 
-  // Lens filter (CSS filter string) carried over from the camera — the base
-  // image shows this filter so lens effects are editable in the editor.
-  const cameraLensFilter: string =
-    embeddedProps?.lensFilter ??
-    (location.state?.lensFilter as string) ??
-    "";
-  const [lensFilter, setLensFilter] = useState<string>(cameraLensFilter);
+  const [lensFilter, setLensFilter] = useState<string>(
+    (routeState.lensFilter as string | undefined) ?? ""
+  );
 
   // Filter picker
   const [isFilterPickerOpen, setIsFilterPickerOpen] = useState<boolean>(false);
   const [filterIntensity, setFilterIntensity] = useState<number>(85);
   // Editor state, not a derived constant: undo has to be able to restore it.
   const [templateId, setTemplateId] = useState<string>(
-    selectedTemplateFamily?.id ?? "default"
+    (routeState.templateId as string | undefined) ?? TEMPLATE_FAMILIES[0].id
   );
 
-  // Stat data and slot positions handed over from the camera. The layout the
-  // user arranged there is the starting point here.
-  const routeStatData = {
-    distance: parseFloat((location.state?.activityDistance as string) ?? "") || 8.4,
+  // Activity stats carried in on the route. Both the short keys used by the
+  // activity screens and the `activity*` keys used by saved projects resolve.
+  const statData: StatData = {
+    distance:
+      parseFloat((routeState.distance as string) ?? "") ||
+      parseFloat((routeState.activityDistance as string) ?? "") ||
+      8.4,
     distanceUnit: "km",
-    pace: ((location.state?.activityPace as string) ?? "6:12 /km").replace(" /km", ""),
-    time: (location.state?.activityTime as string) ?? "52:18",
-    title: (location.state?.activityTitle as string) ?? "Morning Run",
+    pace: (
+      (routeState.pace as string) ??
+      (routeState.activityPace as string) ??
+      "6:12 /km"
+    ).replace(" /km", ""),
+    time: (routeState.time as string) ?? (routeState.activityTime as string) ?? "52:18",
+    title: (routeState.title as string) ?? (routeState.activityTitle as string) ?? "Morning Run",
   };
-  const statData: StatData = embeddedProps?.statData ?? routeStatData;
 
-  const [statLayout, setStatLayout] = useState<TemplateLayout>(
-    () =>
-      embeddedProps?.statLayout ??
-      (location.state?.statLayout as TemplateLayout | undefined) ??
-      resolveLayout(templateId, loadCustomLayouts())
+  // Slot positions the user has dragged, remembered per template.
+  const [customLayouts, setCustomLayouts] = useState<CustomLayouts>(() =>
+    loadCustomLayouts()
   );
-  // Auto-opens once so the strip teaches that stats are tappable, then never
-  // again. Any later tap on a stat brings it back.
-  const [selectedStatSlot, setSelectedStatSlot] = useState<StatSlotId | null>(() =>
-    shouldAutoOpenStrip(Boolean(selectedTemplateFamily ?? null)) ? "distance" : null
+  const [statLayout, setStatLayout] = useState<TemplateLayout>(() =>
+    resolveLayout(
+      (routeState.templateId as string | undefined) ?? TEMPLATE_FAMILIES[0].id,
+      loadCustomLayouts()
+    )
   );
+
+  // Stat slots the user has switched off, and whether dragging one stat drags
+  // them all. Both act on the template's stats as a set.
+  const [hiddenSlots, setHiddenSlots] = useState<Set<StatSlotId>>(new Set());
+  const [isGrouped, setIsGrouped] = useState<boolean>(false);
+
+  // Background sources
+  const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
+  const [isBackgroundSheetOpen, setIsBackgroundSheetOpen] = useState<boolean>(false);
+
+  const visibleStatLayout: TemplateLayout = Object.fromEntries(
+    Object.entries(statLayout).filter(([slot]) => !hiddenSlots.has(slot as StatSlotId))
+  ) as TemplateLayout;
+
+  // Which stat carries the selection outline. Templates are switched from the
+  // lens strip, so tapping a stat only selects it.
+  const [selectedStatSlot, setSelectedStatSlot] = useState<StatSlotId | null>(null);
 
   // Alignment guides shown only while a drag is snapped.
   const [snapGuides, setSnapGuides] = useState<SnapLine[]>([]);
@@ -247,24 +259,80 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     if (rect) setCanvasSize({ width: rect.width, height: rect.height });
   };
 
-  useEffect(() => {
-    if (selectedStatSlot) markStripSeen();
-  }, [selectedStatSlot]);
-
   // Switching template re-skins the stats and restores whatever arrangement
-  // that template was last given, matching the camera.
+  // that template was last given.
   const handleSelectTemplate = (template: TemplateFamily) => {
     if (template.id === templateId) return;
     pushHistorySnapshot();
     setTemplateId(template.id);
-    setStatLayout(resolveLayout(template.id, loadCustomLayouts()));
+    setStatLayout(resolveLayout(template.id, customLayouts));
+    setHiddenSlots(new Set());
     setSelectedStatSlot((prev) => (prev && prev !== "accent" ? prev : "distance"));
   };
 
   const handleStatLayoutChange = (next: TemplateLayout) => {
-    setStatLayout(next);
-    const updated = storeCustomLayout(loadCustomLayouts(), templateId, next);
+    // `next` carries only the visible slots, so fold it onto the full layout —
+    // otherwise dragging one stat would drop every hidden one.
+    const resolved: TemplateLayout = { ...statLayout, ...next };
+
+    // Grouped: the delta applied to the dragged stat applies to all of them.
+    if (isGrouped) {
+      const changedSlot = (Object.keys(next) as StatSlotId[]).find(
+        (slot) =>
+          next[slot]?.x !== statLayout[slot]?.x || next[slot]?.y !== statLayout[slot]?.y
+      );
+      const oldPos = changedSlot ? statLayout[changedSlot] : undefined;
+      const newPos = changedSlot ? next[changedSlot] : undefined;
+      if (changedSlot && oldPos && newPos) {
+        const dx = newPos.x - oldPos.x;
+        const dy = newPos.y - oldPos.y;
+        for (const slot of Object.keys(statLayout) as StatSlotId[]) {
+          if (slot === changedSlot) continue;
+          const pos = statLayout[slot];
+          if (!pos) continue;
+          resolved[slot] = {
+            x: Math.max(0, Math.min(100, pos.x + dx)),
+            y: Math.max(0, Math.min(100, pos.y + dy)),
+          };
+        }
+      }
+    }
+
+    setStatLayout(resolved);
+    const updated = storeCustomLayout(customLayouts, templateId, resolved);
     saveCustomLayouts(updated);
+    setCustomLayouts(updated);
+  };
+
+  /** Drops the user's drags for this template, back to its designed layout. */
+  const handleResetStatLayout = () => {
+    pushHistorySnapshot();
+    const updated = clearCustomLayout(customLayouts, templateId);
+    saveCustomLayouts(updated);
+    setCustomLayouts(updated);
+    setStatLayout(resolveLayout(templateId, updated));
+  };
+
+  const handleToggleSlot = (slot: StatSlotId) => {
+    setHiddenSlots((prev) => {
+      const nextSlots = new Set(prev);
+      if (nextSlots.has(slot)) nextSlots.delete(slot);
+      else nextSlots.add(slot);
+      return nextSlots;
+    });
+  };
+
+  /** Swaps the background photo from the camera or the background sheet. */
+  const applyBackground = (url: string) => {
+    pushHistorySnapshot();
+    setCapturedImage(url);
+    setIsCameraOpen(false);
+    setIsBackgroundSheetOpen(false);
+    try {
+      sessionStorage.setItem("temp_captured_image", url);
+    } catch {
+      // Quota exceeded — the image still lives in state for this session.
+    }
   };
 
   const [activeTool, setActiveTool] = useState<string | null>(null);
@@ -311,6 +379,9 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     stickerOverlays: StickerOverlay[];
     templateId: string;
     statLayout: TemplateLayout;
+    capturedImage: string;
+    /** Serialised as an array so the snapshot stays a plain JSON value. */
+    hiddenSlots: StatSlotId[];
     committedCrop: {
       ratio: string;
       rotation: number;
@@ -361,6 +432,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
       stickerOverlays: JSON.parse(JSON.stringify(stickerOverlays)),
       templateId,
       statLayout: JSON.parse(JSON.stringify(statLayout)),
+      capturedImage,
+      hiddenSlots: [...hiddenSlots],
       committedCrop: { ...committedCrop },
       isBaseImageHidden,
       isBaseImageLocked,
@@ -392,6 +465,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     // Snapshots taken before stats were tracked carry neither field.
     if (snapshot.templateId) setTemplateId(snapshot.templateId);
     if (snapshot.statLayout) setStatLayout(snapshot.statLayout);
+    if (snapshot.capturedImage) setCapturedImage(snapshot.capturedImage);
+    if (snapshot.hiddenSlots) setHiddenSlots(new Set(snapshot.hiddenSlots));
     setCommittedCrop(snapshot.committedCrop);
     setIsBaseImageHidden(snapshot.isBaseImageHidden);
     setIsBaseImageLocked(snapshot.isBaseImageLocked);
@@ -502,7 +577,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [historyStack, redoHistoryStack, textOverlays, stickerOverlays, committedCrop, isBaseImageHidden, isBaseImageLocked, baseImageZIndex, isDrawingHidden, isDrawingLocked, drawingZIndex, hasDrawnStrokes]);
+  }, [historyStack, redoHistoryStack, textOverlays, stickerOverlays, committedCrop, isBaseImageHidden, isBaseImageLocked, baseImageZIndex, isDrawingHidden, isDrawingLocked, drawingZIndex, hasDrawnStrokes, templateId, statLayout, capturedImage, hiddenSlots]);
 
   // Get list of all active layers sorted by zIndex descending (topmost first)
   const getAllLayers = () => {
@@ -971,8 +1046,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     showToast("Text deleted");
   };
 
-  // Floating toolbar tools list (only implemented features)
-  const tools = [
+  // Tool rail contents (only implemented features)
+  const tools: RailTool[] = [
     { id: "layers", label: "Layers", icon: Layers },
     { id: "text", label: "Text", icon: Type },
     { id: "draw", label: "Draw", icon: PenTool },
@@ -980,6 +1055,30 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     { id: "crop", label: "Crop", icon: Crop },
     { id: "filters", label: "Filter", icon: Sparkles },
   ];
+
+  /** A tool lights up while its panel is open or its effect is on the canvas. */
+  const isToolActive = (toolId: string): boolean => {
+    if (activeTool === toolId) return true;
+    switch (toolId) {
+      case "text":
+        return textOverlays.length > 0;
+      case "draw":
+        return hasDrawnStrokes;
+      case "stickers":
+        return stickerOverlays.length > 0 || isStickerModalOpen;
+      case "crop":
+        return (
+          committedCrop.ratio !== "free" ||
+          committedCrop.rotation !== 0 ||
+          committedCrop.flipH ||
+          committedCrop.flipV
+        );
+      case "filters":
+        return lensFilter !== "" || isFilterPickerOpen;
+      default:
+        return false;
+    }
+  };
 
   const handleToolClick = (toolId: string) => {
     if (toolId === "layers") {
@@ -1157,7 +1256,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         <StatLayer
           templateId={templateId}
           data={statData}
-          layout={statLayout}
+          layout={visibleStatLayout}
           onLayoutChange={handleStatLayoutChange}
           constraintsRef={canvasRef}
           selectedSlot={selectedStatSlot}
@@ -1176,20 +1275,6 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         />
 
         <SnapGuides guides={snapGuides} canvas={canvasSize} />
-
-        {/* CONTEXTUAL STAT TOOLBAR — template switching for the tapped stat */}
-        <AnimatePresence>
-          {selectedStatSlot && statLayout[selectedStatSlot] && (
-            <StatToolbar
-              templates={TEMPLATE_FAMILIES}
-              selectedTemplateId={templateId}
-              onSelectTemplate={handleSelectTemplate}
-              slotY={statLayout[selectedStatSlot]!.y}
-              selectedSlot={selectedStatSlot}
-              onClose={() => setSelectedStatSlot(null)}
-            />
-          )}
-        </AnimatePresence>
 
         {/* DRAGGABLE TEXT OVERLAYS ON CANVAS */}
         {textOverlays.map((overlay) => {
@@ -1537,37 +1622,44 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none z-0" />
       </div>
 
-      {/* 2. TOP BAR */}
-      <div className="relative z-20 flex items-center justify-between px-4 pt-12 pb-3 w-full">
-        {/* Close / Back to Camera */}
+      {/* 2. TOP BAR — close, the Editor badge and stat chips, then history */}
+      <div className="relative z-20 flex items-center gap-2 px-4 pt-12 pb-3 w-full">
+        {/* Close */}
         <button
-          onClick={() => embeddedProps?.onExit ? embeddedProps.onExit() : navigate("/home")}
-          className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-95 transition-transform"
+          onClick={() => navigate("/home")}
+          className="shrink-0 w-10 h-10 rounded-full bg-black/50 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-95 transition-transform"
           aria-label="Close Editor"
         >
           <X className="w-5 h-5" />
         </button>
 
-        {/* Center Title or Indicator — shows active lens filter */}
-        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-xs font-semibold text-white/90">
-          <span>Editor</span>
-          {lensFilter && (
-            <>
-              <span className="w-[3px] h-[3px] rounded-full bg-white/30" />
-              <span className="flex items-center gap-1 text-ember">
-                <Sparkles className="w-3 h-3" />
-                <span>
-                  {LENS_TEMPLATES_EXPANDED.find(
-                    (l) => LENS_FILTER_MAP[l.overlayType] === lensFilter
-                  )?.name || "Filtered"}
-                </span>
-              </span>
-            </>
-          )}
+        {/* Badge + stat chips share the middle, scrolling on narrow screens */}
+        <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        {/* Active lens filter — only present once a filter is applied */}
+        {lensFilter && (
+          <div className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-xs font-semibold text-ember">
+            <Sparkles className="w-3 h-3" />
+            <span>
+              {LENS_TEMPLATES_EXPANDED.find(
+                (l) => LENS_FILTER_MAP[l.overlayType] === lensFilter
+              )?.name || "Filtered"}
+            </span>
+          </div>
+        )}
+
+          {/* Stat chips — act on the template's stats as a set */}
+          <StatChipsBar
+            hiddenSlots={hiddenSlots}
+            onToggleSlot={handleToggleSlot}
+            isGrouped={isGrouped}
+            onToggleGroup={() => setIsGrouped((prev) => !prev)}
+            isCustomized={hasCustomLayout(customLayouts, templateId)}
+            onReset={handleResetStatLayout}
+          />
         </div>
 
         {/* Right Actions: Undo, Redo, Save */}
-        <div className="flex items-center gap-2">
+        <div className="shrink-0 flex items-center gap-2">
           <button
             onClick={handleGlobalUndo}
             disabled={historyStack.length === 0}
@@ -1597,50 +1689,13 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         </div>
       </div>
 
-      {/* 3. FLOATING TOOLBAR (RIGHT SIDE) */}
-      <div className="absolute right-4 top-28 z-20 flex flex-col gap-3.5">
-        {tools.map((tool) => {
-          const Icon = tool.icon;
-          const isActive =
-            activeTool === tool.id ||
-            (tool.id === "layers" && activeTool === "layers") ||
-            (tool.id === "text" && textOverlays.length > 0) ||
-            (tool.id === "draw" && (hasDrawnStrokes || activeTool === "draw")) ||
-            (tool.id === "stickers" && (stickerOverlays.length > 0 || isStickerModalOpen)) ||
-            (tool.id === "crop" &&
-              (committedCrop.ratio !== "free" ||
-                committedCrop.rotation !== 0 ||
-                committedCrop.flipH ||
-                committedCrop.flipV ||
-                activeTool === "crop")) ||
-            (tool.id === "filters" && (lensFilter !== "" || isFilterPickerOpen));
-          return (
-            <button
-              key={tool.id}
-              onClick={() => handleToolClick(tool.id)}
-              className={`flex flex-col items-center gap-1 group relative transition-all duration-200 active:scale-90`}
-            >
-              <div
-                className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md transition-all shadow-lg relative ${
-                  isActive
-                    ? "bg-ember text-ink border-2 border-ember shadow-[0_0_20px_var(--color-ember-glow)] scale-105"
-                    : "bg-black/60 text-white border border-white/20 hover:bg-black/80"
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                {tool.id === "layers" && getAllLayers().length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-ember text-ink text-[9px] font-black flex items-center justify-center border border-black shadow">
-                    {getAllLayers().length}
-                  </span>
-                )}
-              </div>
-              <span className="text-[10px] font-medium text-white/90 drop-shadow-md">
-                {tool.label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {/* 3. COLLAPSIBLE TOOL RAIL (RIGHT SIDE) */}
+      <ToolRail
+        tools={tools}
+        onToolClick={handleToolClick}
+        isToolActive={isToolActive}
+        layerCount={getAllLayers().length}
+      />
 
       {/* TOAST NOTIFICATION FOR TOOLS */}
       <AnimatePresence>
@@ -2086,9 +2141,11 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         )}
       </AnimatePresence>
 
-      {/* IMAGE TOOL FLOATING CONTROL PANEL (Crop, Perspective, Shadow) */}
+      {/* IMAGE TOOL FLOATING CONTROL PANEL (Crop, Perspective, Shadow) —
+          opens only from the Crop tool. The base photo covers the canvas, so
+          keying this off image selection meant any tap anywhere opened it. */}
       <AnimatePresence>
-        {(activeTool === "crop" || isImageSelected) && (
+        {activeTool === "crop" && (
           <motion.div
             initial={{ y: 50, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -2555,16 +2612,65 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         )}
       </AnimatePresence>
 
-      {/* 5. BOTTOM CONTEXT BAR */}
-      <div className="relative z-20 px-4 pb-8 pt-2 w-full flex items-center justify-center">
-        <button
-          onClick={() => setIsExportModalOpen(true)}
-          className="w-full max-w-sm flex items-center justify-center gap-2 px-6 py-3.5 rounded-full bg-ember text-ink font-extrabold text-sm shadow-[0_0_20px_rgba(255,122,26,0.4)] active:scale-95 transition-transform"
+      {/* 5. BOTTOM STACK — lens strip over the capture row */}
+      <div className="relative z-20 w-full pb-safe pb-4 pt-2 flex flex-col items-center gap-1.5">
+        <LensStrip
+          templates={TEMPLATE_FAMILIES}
+          selectedId={templateId}
+          onSelect={handleSelectTemplate}
+        />
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.2, ease: "easeOut" }}
+          className="w-full px-4 flex items-center justify-center gap-8 pt-1"
         >
-          <span>Export & Share Image</span>
-          <Send className="w-4 h-4 fill-ink" />
-        </button>
+          {/* Background — device import or the stock library */}
+          <button
+            onClick={() => setIsBackgroundSheetOpen(true)}
+            className="w-[44px] h-[44px] rounded-full bg-black/60 backdrop-blur-md border border-white/15 flex items-center justify-center text-white/60 hover:text-white active:scale-90 transition-all shrink-0"
+            title="Change background"
+            aria-label="Change background"
+          >
+            <ImageIcon className="w-4 h-4" />
+          </button>
+
+          {/* Shutter — opens the live viewfinder */}
+          <motion.button
+            onClick={() => setIsCameraOpen(true)}
+            whileTap={{ scale: 0.88 }}
+            className="relative w-[78px] h-[78px] rounded-full flex items-center justify-center shadow-2xl"
+            style={{
+              background:
+                "conic-gradient(from 0deg, rgba(255,255,255,0.3), rgba(255,255,255,0.05), rgba(255,255,255,0.3))",
+            }}
+            title="Take a photo"
+            aria-label="Take a photo"
+          >
+            <div className="w-[62px] h-[62px] rounded-full bg-white shadow-[0_0_12px_rgba(0,0,0,0.5)] flex items-center justify-center">
+              <Camera className="w-6 h-6 text-black/70" />
+            </div>
+          </motion.button>
+        </motion.div>
       </div>
+
+      {/* 5b. BACKGROUND SOURCES */}
+      <CameraCaptureOverlay
+        isOpen={isCameraOpen}
+        onCapture={applyBackground}
+        onClose={() => setIsCameraOpen(false)}
+        onFallbackToGallery={() => {
+          setIsCameraOpen(false);
+          setIsBackgroundSheetOpen(true);
+        }}
+      />
+
+      <BackgroundSheet
+        isOpen={isBackgroundSheetOpen}
+        onSelect={applyBackground}
+        onClose={() => setIsBackgroundSheetOpen(false)}
+      />
 
       {/* 6. EXPORT & SHARE MODAL */}
       <ExportModal
