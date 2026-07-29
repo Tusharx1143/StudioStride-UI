@@ -1,7 +1,10 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Activity, Target, ChevronRight, User, Home, Plus, Camera, FolderKanban, Flame, Mountain } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+import { fetchActivities } from "../services/stravaApi";
+import { activityToActivityData } from "../services/stravaTransformers";
 
 interface ActivityData {
   id: string;
@@ -64,7 +67,24 @@ const INITIAL_ACTIVITIES: ActivityData[] = [
 
 export default function HomeScreen() {
   const navigate = useNavigate();
+  const { athlete } = useAuth();
   const [activities, setActivities] = useState<ActivityData[]>(INITIAL_ACTIVITIES);
+  const [hasLoaded, setHasLoaded] = useState(false);
+
+  // Fetch real activities from Strava on mount
+  useEffect(() => {
+    fetchActivities({ per_page: 10 })
+      .then((stravaActs) => {
+        if (stravaActs && stravaActs.length > 0) {
+          setActivities(stravaActs.map(activityToActivityData));
+        }
+      })
+      .catch((err) => {
+        // Graceful degradation: keep the mock data as fallback
+        console.warn("Could not load Strava activities, using mock data:", err);
+      })
+      .finally(() => setHasLoaded(true));
+  }, []);
 
   // Swap clicked activity with the top (Ready to share) activity
   const handleSwapActivity = (indexToPromote: number) => {
@@ -91,10 +111,15 @@ export default function HomeScreen() {
     }
   };
 
+  // Greeting derived from athlete name if available
+  const greeting = athlete?.firstname
+    ? `${athlete.firstname}'s Stride`
+    : "STRIDE";
+
   return (
     <div className="bg-ink text-text-primary min-h-screen pb-24 md:pb-0 font-ui relative">
       <header className="px-screen-gutter pt-12 pb-6 flex justify-between items-center">
-        <h1 className="text-wordmark text-[32px] leading-none tracking-tighter">STRIDE</h1>
+        <h1 className="text-wordmark text-[32px] leading-none tracking-tighter">{greeting}</h1>
         <button
           onClick={() =>
             navigate("/camera", {
@@ -276,4 +301,3 @@ export default function HomeScreen() {
     </div>
   );
 }
-

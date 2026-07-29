@@ -5,6 +5,7 @@
 
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
+import { AuthProvider, RequireAuth } from "./contexts/AuthContext";
 import AuthScreen from "./components/AuthScreen";
 import HomeScreen from "./components/HomeScreen";
 import ProfileScreen from "./components/ProfileScreen";
@@ -46,9 +47,11 @@ function AnimatedRoutes() {
           path="/home"
           element={
             <ErrorBoundary>
-              <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
-                <HomeScreen />
-              </motion.div>
+              <RequireAuth>
+                <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
+                  <HomeScreen />
+                </motion.div>
+              </RequireAuth>
             </ErrorBoundary>
           }
         />
@@ -56,9 +59,11 @@ function AnimatedRoutes() {
           path="/profile"
           element={
             <ErrorBoundary>
-              <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
-                <ProfileScreen />
-              </motion.div>
+              <RequireAuth>
+                <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
+                  <ProfileScreen />
+                </motion.div>
+              </RequireAuth>
             </ErrorBoundary>
           }
         />
@@ -66,9 +71,11 @@ function AnimatedRoutes() {
           path="/editor"
           element={
             <ErrorBoundary>
-              <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
-                <EditorScreen />
-              </motion.div>
+              <RequireAuth>
+                <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
+                  <EditorScreen />
+                </motion.div>
+              </RequireAuth>
             </ErrorBoundary>
           }
         />
@@ -76,9 +83,11 @@ function AnimatedRoutes() {
           path="/projects"
           element={
             <ErrorBoundary>
-              <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
-                <ProjectsScreen />
-              </motion.div>
+              <RequireAuth>
+                <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
+                  <ProjectsScreen />
+                </motion.div>
+              </RequireAuth>
             </ErrorBoundary>
           }
         />
@@ -86,9 +95,11 @@ function AnimatedRoutes() {
           path="/camera"
           element={
             <ErrorBoundary>
-              <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
-                <SnapCamera />
-              </motion.div>
+              <RequireAuth>
+                <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
+                  <SnapCamera />
+                </motion.div>
+              </RequireAuth>
             </ErrorBoundary>
           }
         />
@@ -101,7 +112,9 @@ function AnimatedRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AnimatedRoutes />
+      <AuthProvider>
+        <AnimatedRoutes />
+      </AuthProvider>
     </BrowserRouter>
   );
 }

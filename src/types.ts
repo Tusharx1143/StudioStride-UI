@@ -158,3 +158,118 @@ export interface TemplateFamily {
   tagline: string;
   accentColor: string;
 }
+
+// ====================================================================
+// Strava API Response Types
+// ====================================================================
+
+/** Summary athlete returned by GET /athlete */
+export interface StravaAthlete {
+  id: number;
+  firstname: string;
+  lastname: string;
+  profile_medium: string;
+  profile: string;
+  city: string;
+  state: string;
+  country: string;
+  sex: string;
+  premium: boolean;
+  created_at: string;
+  updated_at: string;
+  follower_count?: number;
+  friend_count?: number;
+  measurement_preference?: string;
+  weight?: number;
+  bikes?: StravaGear[];
+  shoes?: StravaGear[];
+}
+
+export interface StravaGear {
+  id: string;
+  name: string;
+  distance: number;
+}
+
+/** Summary activity from GET /athlete/activities */
+export interface StravaActivity {
+  id: number;
+  name: string;
+  distance: number; // meters
+  moving_time: number; // seconds
+  elapsed_time: number; // seconds
+  type: string;
+  sport_type: string;
+  start_date: string; // ISO 8601
+  start_date_local: string; // ISO 8601
+  average_speed: number; // m/s
+  max_speed: number; // m/s
+  average_watts?: number;
+  has_heartrate: boolean;
+  suffer_score?: number;
+  map?: { summary_polyline?: string };
+  total_elevation_gain?: number;
+  calories?: number;
+  kudos_count: number;
+  achievement_count: number;
+  gear_id?: string;
+  average_heartrate?: number;
+  max_heartrate?: number;
+  elev_high?: number;
+  elev_low?: number;
+}
+
+/** Activity stats from GET /athletes/{id}/stats */
+export interface StravaActivityStats {
+  biggest_ride_distance: number;
+  biggest_climb_elevation_gain: number;
+  recent_run_totals: StravaTotals;
+  recent_ride_totals: StravaTotals;
+  recent_swim_totals: StravaTotals;
+  ytd_run_totals: StravaTotals;
+  ytd_ride_totals: StravaTotals;
+  ytd_swim_totals: StravaTotals;
+  all_run_totals: StravaTotals;
+  all_ride_totals: StravaTotals;
+  all_swim_totals: StravaTotals;
+}
+
+export interface StravaTotals {
+  count: number;
+  distance: number; // meters
+  moving_time: number; // seconds
+  elapsed_time: number; // seconds
+  elevation_gain: number; // meters
+}
+
+// ====================================================================
+// Auth Types
+// ====================================================================
+
+export type AuthStatus = "loading" | "unauthenticated" | "authenticated";
+
+export interface AuthState {
+  status: AuthStatus;
+  athlete: StravaAthlete | null;
+  error: string | null;
+}
+
+// ====================================================================
+// API Error Classes
+// ====================================================================
+
+export class AuthExpiredError extends Error {
+  constructor() {
+    super("Authentication expired");
+    this.name = "AuthExpiredError";
+  }
+}
+
+export class StravaApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "StravaApiError";
+    this.status = status;
+  }
+}
