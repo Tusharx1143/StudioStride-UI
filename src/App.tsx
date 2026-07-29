@@ -10,11 +10,15 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider, RequireAuth, useAuth } from "./contexts/AuthContext";
 import { HealthConnectProvider, useHealthConnect } from "./contexts/HealthConnectContext";
 import { ActivitySourcesProvider } from "./contexts/ActivitySourcesContext";
+import { ContentProvider } from "./contexts/ContentContext";
+import { AdminAuthProvider, RequireAdminAuth } from "./contexts/AdminAuthContext";
 import AuthScreen from "./components/AuthScreen";
 import HomeScreen from "./components/HomeScreen";
 import ProfileScreen from "./components/ProfileScreen";
 import ProjectsScreen from "./components/ProjectsScreen";
 import SnapCamera from "./components/SnapCamera";
+import AdminLoginScreen from "./components/admin/AdminLoginScreen";
+import AdminDashboard from "./components/admin/AdminDashboard";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 // ---------------------------------------------------------------------------
@@ -127,6 +131,33 @@ function AnimatedRoutes() {
             </ErrorBoundary>
           }
         />
+        {/*
+         * Admin routes — outside RequireAnyAuth so unauthenticated users
+         * can reach /admin/login.  The dashboard itself is protected by
+         * RequireAdminAuth.
+         */}
+        <Route
+          path="/admin/login"
+          element={
+            <ErrorBoundary>
+              <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
+                <AdminLoginScreen />
+              </motion.div>
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="/admin/*"
+          element={
+            <ErrorBoundary>
+              <RequireAdminAuth>
+                <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
+                  <AdminDashboard />
+                </motion.div>
+              </RequireAdminAuth>
+            </ErrorBoundary>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AnimatePresence>
@@ -140,7 +171,11 @@ export default function App() {
         <AuthProvider>
           <HealthConnectProvider>
             <ActivitySourcesProvider>
-              <AnimatedRoutes />
+              <ContentProvider>
+                <AdminAuthProvider>
+                  <AnimatedRoutes />
+                </AdminAuthProvider>
+              </ContentProvider>
             </ActivitySourcesProvider>
           </HealthConnectProvider>
         </AuthProvider>

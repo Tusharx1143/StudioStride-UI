@@ -6,7 +6,8 @@ import {
   ChevronRight, Sliders, Grid, Timer as TimerIcon,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { STOCK_PHOTOS, MUSIC_TRACKS, MusicTrack, TEMPLATE_FAMILIES } from "../data/mockData";
+import { useContent } from "../contexts/ContentContext";
+import { MUSIC_TRACKS, MusicTrack } from "../data/mockData";
 import {
   CustomLayouts,
   PhotoSource,
@@ -39,6 +40,7 @@ type CameraViewMode = "camera" | "stories" | "memories";
 export default function SnapCamera() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { templateFamilies, stockPhotos } = useContent();
   const activityState = (location.state as {
     title?: string;
     distance?: string;
@@ -107,8 +109,7 @@ export default function SnapCamera() {
   const [showCameraSettings, setShowCameraSettings] = useState<boolean>(false);
 
   // Template family — the camera's "lenses" are template families (stat layouts)
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateFamily>(TEMPLATE_FAMILIES[0]);
-
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateFamily>(templateFamilies[0]);
   // Capture state
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
 
@@ -242,7 +243,7 @@ export default function SnapCamera() {
       const fallbackImage = sessionStorage.getItem("temp_captured_image") ?? "";
       const ls = location.state as Record<string, unknown> | null;
       setEditorData({
-        capturedImage: (ls?.capturedImage as string) || fallbackImage || STOCK_PHOTOS[0].url,
+        capturedImage: (ls?.capturedImage as string) || fallbackImage || (stockPhotos[0]?.url ?? ""),
         selectedTemplateFamily: null,
         selectedLensId: (ls?.selectedLensId as string) || undefined,
         lensFilter: "",
@@ -395,7 +396,7 @@ export default function SnapCamera() {
     setIsCapturing(true);
 
     setTimeout(() => {
-      let imageUrl = STOCK_PHOTOS[0].url;
+      let imageUrl = stockPhotos[0]?.url ?? "";
 
       if (videoRef.current && cameraActive) {
         const canvas = document.createElement("canvas");
@@ -502,7 +503,7 @@ export default function SnapCamera() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                {STOCK_PHOTOS.slice(0, 4).map((item, idx) => (
+                {stockPhotos.slice(0, 4).map((item, idx) => (
                   <div
                     key={item.id}
                     onClick={() => {
@@ -547,7 +548,7 @@ export default function SnapCamera() {
               </div>
 
               <div className="grid grid-cols-3 gap-2">
-                {STOCK_PHOTOS.map((item) => (
+                {stockPhotos.map((item) => (
                   <div
                     key={item.id}
                     onClick={() => {
@@ -596,7 +597,7 @@ export default function SnapCamera() {
               className={`absolute inset-0 bg-cover bg-center transition-all duration-500 ${
                 isNightMode ? "brightness-125 contrast-125" : ""
               }`}
-              style={{ backgroundImage: `url("${STOCK_PHOTOS[1].url}")`, filter: lensFilter || undefined }}
+              style={{ backgroundImage: `url("${stockPhotos[1].url}")`, filter: lensFilter || undefined }}
             ></div>
           )}
 
@@ -758,7 +759,7 @@ export default function SnapCamera() {
                   className="flex items-start gap-3 px-3 overflow-x-auto pb-1"
                   style={{ scrollbarWidth: "none" }}
                 >
-                  {TEMPLATE_FAMILIES.map((tmpl, idx) => {
+                  {templateFamilies.map((tmpl, idx) => {
                     const isActive = tmpl.id === selectedTemplate.id;
                     return (
                       <motion.button
@@ -1119,7 +1120,7 @@ export default function SnapCamera() {
                 </button>
               </div>
               <TemplateCarousel
-                templates={TEMPLATE_FAMILIES}
+                templates={templateFamilies}
                 selectedId={selectedTemplate.id}
                 onSelect={(template) => {
                   setSelectedTemplate(template);

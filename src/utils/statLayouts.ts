@@ -1,4 +1,4 @@
-import type { CustomLayouts, SlotPosition, TemplateLayout } from "../types";
+import type { CustomLayouts, SlotPosition, TemplateLayout, TemplateStatDesign } from "../types";
 import { getStatDesign } from "../data/templateStatDesigns";
 
 const STORAGE_KEY = "stride_stat_layouts";
@@ -6,9 +6,13 @@ const STORAGE_KEY = "stride_stat_layouts";
 /** The layout in effect for a template: the user's drags, else its design. */
 export function resolveLayout(
   templateId: string,
-  customs: CustomLayouts
+  customs: CustomLayouts,
+  /** Optional runtime designs from ContentContext. Falls back to hardcoded designs. */
+  designs?: Record<string, TemplateStatDesign>
 ): TemplateLayout {
-  return customs[templateId] ?? getStatDesign(templateId).defaultLayout;
+  if (customs[templateId]) return customs[templateId];
+  if (designs?.[templateId]) return designs[templateId].defaultLayout;
+  return getStatDesign(templateId).defaultLayout;
 }
 
 /** Clear the stored custom layout for a template — resets to design default. */

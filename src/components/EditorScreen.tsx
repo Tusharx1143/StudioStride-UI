@@ -42,7 +42,7 @@ import {
   Image as ImageIcon
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LENS_TEMPLATES_EXPANDED, LENS_FILTER_MAP, STOCK_PHOTOS } from "../data/mockData";
+import { useContent } from "../contexts/ContentContext";
 import type { StatData, StatSlotId, TemplateFamily, TemplateLayout } from "../types";
 import GestureSwipeCarousel from "./GestureSwipeCarousel";
 import ExportModal from "./ExportModal";
@@ -52,7 +52,6 @@ import DraggableLayer from "./DraggableLayer";
 import SnapGuides from "./SnapGuides";
 import type { SnapLine } from "../utils/snapping";
 import { triggerHaptic } from "../utils/haptics";
-import { TEMPLATE_FAMILIES } from "../data/mockData";
 import {
   loadCustomLayouts,
   resolveLayout,
@@ -60,6 +59,8 @@ import {
   storeCustomLayout,
 } from "../utils/statLayouts";
 import { markStripSeen, shouldAutoOpenStrip } from "../utils/statStrip";
+import { FONT_STYLES, COLOR_PALETTE, BG_STYLES } from "../data/editorConstants";
+import type { StickerItem } from "../types/content";
 
 // Text Overlay item model
 interface TextOverlay {
@@ -94,66 +95,10 @@ interface StickerOverlay {
   zIndex?: number;
 }
 
-// Pre-defined Sticker Item interface
-interface StickerItem {
-  id: string;
-  content: string;
-  label: string;
-  category: "Badges" | "Stats" | "Locations";
-  type: "badge" | "metric" | "location";
-  bgGradient?: string;
-  /** If set, replaces content with the stat value from statData on add. */
-  statKey?: string;
-}
-
-const STICKER_LIBRARY: StickerItem[] = [
-  // Activity Stats — dynamic values from the current activity
-  { id: "st_s1", content: "DISTANCE", label: "Distance", category: "Stats", type: "metric", bgGradient: "from-ember to-ember-lift text-ink", statKey: "distance" },
-  { id: "st_s2", content: "PACE", label: "Pace", category: "Stats", type: "metric", bgGradient: "from-sky-500 to-blue-600", statKey: "pace" },
-  { id: "st_s3", content: "TIME", label: "Time", category: "Stats", type: "metric", bgGradient: "from-rose-500 to-pink-600", statKey: "time" },
-  { id: "st_s4", content: "TITLE", label: "Activity Title", category: "Stats", type: "metric", bgGradient: "from-amber-500 to-orange-600", statKey: "title" },
-
-  // Badges & Milestones
-  { id: "st_2", content: "BEAST MODE 🔥", label: "Beast Mode", category: "Badges", type: "badge", bgGradient: "from-orange-600 to-red-500" },
-  { id: "st_5", content: "RUNNER'S HIGH ⚡", label: "Runner's High", category: "Badges", type: "badge", bgGradient: "from-cyan-500 to-blue-600" },
-  { id: "st_7", content: "FINISHER", label: "Finisher", category: "Badges", type: "badge", bgGradient: "from-yellow-400 to-amber-600" },
-
-  // Locations — without trailing emojis
-  { id: "st_l1", content: "CENTRAL PARK", label: "Central Park", category: "Locations", type: "location", bgGradient: "from-emerald-600 to-green-500" },
-  { id: "st_l2", content: "SEA OCEAN TRAIL", label: "Sea Trail", category: "Locations", type: "location", bgGradient: "from-indigo-600 to-blue-500" },
-  { id: "st_l4", content: "GOLDEN GATE", label: "Golden Gate", category: "Locations", type: "location", bgGradient: "from-rose-600 to-orange-500" },
-];
-
-// Available Fonts
-const FONT_STYLES: { id: TextOverlay["fontStyle"]; label: string; className: string }[] = [
-  { id: "Classic", label: "Classic", className: "font-sans font-semibold tracking-normal" },
-  { id: "Modern", label: "Modern", className: "font-mono tracking-wider text-transform uppercase" },
-  { id: "Bold", label: "Bold", className: "font-black tracking-tighter uppercase font-display" },
-  { id: "Neon", label: "Neon", className: "font-sans font-extrabold tracking-wide drop-shadow-[0_0_12px_rgba(255,255,255,0.9)]" },
-  { id: "Serif", label: "Serif", className: "font-serif italic font-medium" },
-  { id: "Typewriter", label: "Typewriter", className: "font-mono font-medium tracking-tight" },
-];
-
-// Vibrant Snapchat style color palette
-const COLOR_PALETTE = [
-  { hex: "#FFFFFF", name: "White" },
-  { hex: "#F4E409", name: "Yellow" },
-  { hex: "#FF2A6D", name: "Hot Pink" },
-  { hex: "#05D9E8", name: "Cyan" },
-  { hex: "#FF7A1A", name: "Ember" },
-  { hex: "#2EC4B6", name: "Mint" },
-  { hex: "#9B5DE5", name: "Purple" },
-  { hex: "#FF4D3D", name: "Red" },
-  { hex: "#000000", name: "Black" },
-];
-
-// Background Styles
-const BG_STYLES: { id: TextOverlay["bgStyle"]; label: string }[] = [
-  { id: "none", label: "Transparent" },
-  { id: "solid", label: "Solid" },
-  { id: "semi", label: "Translucent" },
-  { id: "outline", label: "Outline" },
-];
+//
+// Inline constants — extracted to src/data/editorConstants.ts
+// StickerItem lives in src/types/content.ts
+//
 
 // ---------------------------------------------------------------------------
 // Embedded props — when EditorScreen is rendered inline inside SnapCamera
@@ -179,6 +124,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const canvasRef = useRef<HTMLDivElement>(null);
+  const { templateFamilies, lensTemplates, lensFilters, stockPhotos, stickers } = useContent();
 
   // Image source captured from camera or gallery.
   // When embedded, use embeddedProps; otherwise fall back to sessionStorage
@@ -187,7 +133,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     embeddedProps?.capturedImage ??
     sessionStorage.getItem("temp_captured_image") ??
     (location.state?.capturedImage as string | undefined) ??
-    STOCK_PHOTOS[0].url;
+    stockPhotos[0]?.url ?? "";
 
   // Selected template family, carried over from the camera
   const selectedTemplateFamily: TemplateFamily | null =
@@ -1007,7 +953,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
   };
 
   // Filtered stickers for the picker modal
-  const filteredStickers = STICKER_LIBRARY.filter((item) => {
+  const filteredStickers = stickers.filter((item) => {
     const matchesCategory =
       selectedStickerCategory === "All" || item.category === selectedStickerCategory;
     const matchesSearch =
@@ -1181,7 +1127,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         <AnimatePresence>
           {selectedStatSlot && statLayout[selectedStatSlot] && (
             <StatToolbar
-              templates={TEMPLATE_FAMILIES}
+              templates={templateFamilies}
               selectedTemplateId={templateId}
               onSelectTemplate={handleSelectTemplate}
               slotY={statLayout[selectedStatSlot]!.y}
@@ -1557,8 +1503,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
               <span className="flex items-center gap-1 text-ember">
                 <Sparkles className="w-3 h-3" />
                 <span>
-                  {LENS_TEMPLATES_EXPANDED.find(
-                    (l) => LENS_FILTER_MAP[l.overlayType] === lensFilter
+                  {lensTemplates.find(
+                    (l) => lensFilters[l.overlayType] === lensFilter
                   )?.name || "Filtered"}
                 </span>
               </span>
@@ -2647,8 +2593,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                   </button>
 
                   {/* Lens filters as circular carousel */}
-                  {LENS_TEMPLATES_EXPANDED.map((lens) => {
-                    const filterVal = LENS_FILTER_MAP[lens.overlayType] || "";
+                  {lensTemplates.map((lens) => {
+                    const filterVal = lensFilters[lens.overlayType] || "";
                     const isActive = lensFilter === filterVal;
                     return (
                       <button
