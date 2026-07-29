@@ -42,8 +42,8 @@ import {
   Image as ImageIcon
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { STOCK_PHOTOS } from "../data/mockData";
-import { StatData, StatSlotId, TemplateFamily, TemplateLayout } from "../types";
+import { LENS_TEMPLATES_EXPANDED, LENS_FILTER_MAP, STOCK_PHOTOS } from "../data/mockData";
+import type { StatData, StatSlotId, TemplateFamily, TemplateLayout } from "../types";
 import GestureSwipeCarousel from "./GestureSwipeCarousel";
 import ExportModal from "./ExportModal";
 import StatLayer from "./StatLayer";
@@ -99,54 +99,29 @@ interface StickerItem {
   id: string;
   content: string;
   label: string;
-  category: "Badges" | "Emojis" | "Metrics" | "Locations";
-  type: "emoji" | "badge" | "metric" | "location";
+  category: "Badges" | "Stats" | "Locations";
+  type: "badge" | "metric" | "location";
   bgGradient?: string;
+  /** If set, replaces content with the stat value from statData on add. */
+  statKey?: string;
 }
 
 const STICKER_LIBRARY: StickerItem[] = [
+  // Activity Stats — dynamic values from the current activity
+  { id: "st_s1", content: "DISTANCE", label: "Distance", category: "Stats", type: "metric", bgGradient: "from-ember to-ember-lift text-ink", statKey: "distance" },
+  { id: "st_s2", content: "PACE", label: "Pace", category: "Stats", type: "metric", bgGradient: "from-sky-500 to-blue-600", statKey: "pace" },
+  { id: "st_s3", content: "TIME", label: "Time", category: "Stats", type: "metric", bgGradient: "from-rose-500 to-pink-600", statKey: "time" },
+  { id: "st_s4", content: "TITLE", label: "Activity Title", category: "Stats", type: "metric", bgGradient: "from-amber-500 to-orange-600", statKey: "title" },
+
   // Badges & Milestones
-  { id: "st_1", content: "PR 5K 🏆", label: "PR 5K", category: "Badges", type: "badge", bgGradient: "from-amber-500 to-yellow-400" },
   { id: "st_2", content: "BEAST MODE 🔥", label: "Beast Mode", category: "Badges", type: "badge", bgGradient: "from-orange-600 to-red-500" },
-  { id: "st_3", content: "10K CLUB 🏅", label: "10K Club", category: "Badges", type: "badge", bgGradient: "from-emerald-500 to-teal-400" },
-  { id: "st_4", content: "NO PAIN NO GAIN 💪", label: "No Pain No Gain", category: "Badges", type: "badge", bgGradient: "from-purple-600 to-indigo-500" },
   { id: "st_5", content: "RUNNER'S HIGH ⚡", label: "Runner's High", category: "Badges", type: "badge", bgGradient: "from-cyan-500 to-blue-600" },
-  { id: "st_6", content: "STRAVA VERIFIED ✔️", label: "Verified", category: "Badges", type: "badge", bgGradient: "from-orange-500 to-amber-500" },
-  { id: "st_7", content: "FINISHER 2026 🥇", label: "Finisher", category: "Badges", type: "badge", bgGradient: "from-yellow-400 to-amber-600" },
+  { id: "st_7", content: "FINISHER", label: "Finisher", category: "Badges", type: "badge", bgGradient: "from-yellow-400 to-amber-600" },
 
-  // Metrics
-  { id: "st_m1", content: "🏃 8.42 KM", label: "8.42 KM", category: "Metrics", type: "metric", bgGradient: "from-ember to-ember-lift text-ink" },
-  { id: "st_m2", content: "⏱️ 5:12 /KM PACE", label: "5:12 Pace", category: "Metrics", type: "metric", bgGradient: "from-sky-500 to-blue-600" },
-  { id: "st_m3", content: "❤️ 154 BPM", label: "154 BPM", category: "Metrics", type: "metric", bgGradient: "from-rose-500 to-pink-600" },
-  { id: "st_m4", content: "🔥 640 KCAL", label: "640 Kcal", category: "Metrics", type: "metric", bgGradient: "from-amber-500 to-orange-600" },
-  { id: "st_m5", content: "⛰️ +142M ELEVATION", label: "+142m Elev", category: "Metrics", type: "metric", bgGradient: "from-emerald-600 to-teal-500" },
-  { id: "st_m6", content: "🕒 05:30 AM DAWN", label: "Dawn Miles", category: "Metrics", type: "metric", bgGradient: "from-indigo-600 to-purple-600" },
-
-  // Locations
-  { id: "st_l1", content: "📍 CENTRAL PARK 🌲", label: "Central Park", category: "Locations", type: "location", bgGradient: "from-emerald-600 to-green-500" },
-  { id: "st_l2", content: "🏙️ SEOUL TRAIL", label: "Seoul Trail", category: "Locations", type: "location", bgGradient: "from-indigo-600 to-blue-500" },
-  { id: "st_l3", content: "🌊 PACIFIC COAST ☀️", label: "Pacific Coast", category: "Locations", type: "location", bgGradient: "from-sky-400 to-cyan-500" },
-  { id: "st_l4", content: "🌉 GOLDEN GATE 🏃", label: "Golden Gate", category: "Locations", type: "location", bgGradient: "from-rose-600 to-orange-500" },
-
-  // Emojis
-  { id: "st_e1", content: "🏃‍♂️", label: "Runner M", category: "Emojis", type: "emoji" },
-  { id: "st_e2", content: "🏃‍♀️", label: "Runner F", category: "Emojis", type: "emoji" },
-  { id: "st_e3", content: "🔥", label: "Fire", category: "Emojis", type: "emoji" },
-  { id: "st_e4", content: "⚡", label: "Lightning", category: "Emojis", type: "emoji" },
-  { id: "st_e5", content: "🏅", label: "Medal", category: "Emojis", type: "emoji" },
-  { id: "st_e6", content: "🏆", label: "Trophy", category: "Emojis", type: "emoji" },
-  { id: "st_e7", content: "👟", label: "Sneaker", category: "Emojis", type: "emoji" },
-  { id: "st_e8", content: "💪", label: "Flex", category: "Emojis", type: "emoji" },
-  { id: "st_e9", content: "💯", label: "100", category: "Emojis", type: "emoji" },
-  { id: "st_e10", content: "🚀", label: "Rocket", category: "Emojis", type: "emoji" },
-  { id: "st_e11", content: "🚴‍♂️", label: "Cyclist", category: "Emojis", type: "emoji" },
-  { id: "st_e12", content: "⌚", label: "Smartwatch", category: "Emojis", type: "emoji" },
-  { id: "st_e13", content: "💧", label: "Sweat", category: "Emojis", type: "emoji" },
-  { id: "st_e14", content: "🎯", label: "Target", category: "Emojis", type: "emoji" },
-  { id: "st_e15", content: "🌟", label: "Star", category: "Emojis", type: "emoji" },
-  { id: "st_e16", content: "🍌", label: "Banana", category: "Emojis", type: "emoji" },
-  { id: "st_e17", content: "🥤", label: "Smoothie", category: "Emojis", type: "emoji" },
-  { id: "st_e18", content: "🌶️", label: "Spicy", category: "Emojis", type: "emoji" },
+  // Locations — without trailing emojis
+  { id: "st_l1", content: "CENTRAL PARK", label: "Central Park", category: "Locations", type: "location", bgGradient: "from-emerald-600 to-green-500" },
+  { id: "st_l2", content: "SEA OCEAN TRAIL", label: "Sea Trail", category: "Locations", type: "location", bgGradient: "from-indigo-600 to-blue-500" },
+  { id: "st_l4", content: "GOLDEN GATE", label: "Golden Gate", category: "Locations", type: "location", bgGradient: "from-rose-600 to-orange-500" },
 ];
 
 // Available Fonts
@@ -185,15 +160,30 @@ export default function EditorScreen() {
   const location = useLocation();
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  // Image source captured from camera or gallery
+  // Image source captured from camera or gallery.
+  // sessionStorage is the primary source (survives React Router state limits).
+  // Router state is a faster fallback, stock photo is the last resort.
   const capturedImage =
-    location.state?.capturedImage ||
     sessionStorage.getItem("temp_captured_image") ||
+    location.state?.capturedImage ||
     STOCK_PHOTOS[0].url;
 
   // Selected template family, carried over from the camera
   const selectedTemplateFamily: TemplateFamily | null =
     location.state?.selectedTemplateFamily || null;
+  // Selected lens, carried over from the camera viewfinder
+  const selectedLensId: string | undefined =
+    (location.state?.selectedLensId as string) || undefined;
+
+  // Lens filter (CSS filter string) carried over from the camera — the base
+  // image shows this filter so lens effects are editable in the editor.
+  const cameraLensFilter: string =
+    (location.state?.lensFilter as string) || "";
+  const [lensFilter, setLensFilter] = useState<string>(cameraLensFilter);
+
+  // Filter picker
+  const [isFilterPickerOpen, setIsFilterPickerOpen] = useState<boolean>(false);
+  const [filterIntensity, setFilterIntensity] = useState<number>(85);
   // Editor state, not a derived constant: undo has to be able to restore it.
   const [templateId, setTemplateId] = useState<string>(
     selectedTemplateFamily?.id ?? "default"
@@ -250,7 +240,7 @@ export default function EditorScreen() {
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Text Overlays state
+  // Text Overlays state — starts empty. Users add text manually via the Text tool.
   const [textOverlays, setTextOverlays] = useState<TextOverlay[]>([]);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
 
@@ -825,9 +815,20 @@ export default function EditorScreen() {
   // Add Sticker to canvas
   const handleAddSticker = (item: StickerItem) => {
     pushHistorySnapshot();
+    // Interpolate stat data if this sticker references a stat
+    let stickerContent = item.content;
+    if (item.statKey) {
+      const statValue = statData[item.statKey as keyof StatData];
+      if (statValue !== undefined && statValue !== null) {
+        stickerContent = String(statValue).toUpperCase();
+        if (item.statKey === "distance") stickerContent += " KM";
+        if (item.statKey === "pace") stickerContent += " /KM";
+        if (item.statKey === "time") stickerContent += "";
+      }
+    }
     const newSticker: StickerOverlay = {
       id: `sticker_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      content: item.content,
+      content: stickerContent,
       type: item.type,
       scale: 1.0,
       rotation: 0,
@@ -947,6 +948,7 @@ export default function EditorScreen() {
     { id: "draw", label: "Draw", icon: PenTool },
     { id: "stickers", label: "Stickers", icon: StickyNote },
     { id: "crop", label: "Crop", icon: Crop },
+    { id: "filters", label: "Filter", icon: Sparkles },
   ];
 
   const handleToolClick = (toolId: string) => {
@@ -968,6 +970,9 @@ export default function EditorScreen() {
     } else if (toolId === "draw") {
       setActiveTool(activeTool === "draw" ? null : "draw");
       showToast(activeTool === "draw" ? "Drawing mode closed" : "Drawing mode active");
+    } else if (toolId === "filters") {
+      setIsFilterPickerOpen(true);
+      setActiveTool("filters");
     }
   };
 
@@ -1087,7 +1092,8 @@ export default function EditorScreen() {
               transform: `rotate(${currentRotation}deg) scaleX(${currentFlipH ? -1 : 1}) scaleY(${
                 currentFlipV ? -1 : 1
               })`,
-              transition: "transform 0.3s ease",
+              filter: lensFilter || undefined,
+              transition: "transform 0.3s ease, filter 0.4s ease",
             }}
             className="w-full h-full object-cover select-none pointer-events-none"
           />
@@ -1380,19 +1386,13 @@ export default function EditorScreen() {
                 </>
               )}
 
-              {sticker.type === "emoji" ? (
-                <span className="text-6xl drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)] select-none">
-                  {sticker.content}
-                </span>
-              ) : (
-                <div
-                  className={`px-4 py-2 rounded-2xl bg-gradient-to-r ${
-                    sticker.bgGradient || "from-amber-500 to-yellow-400"
-                  } text-white font-extrabold text-lg tracking-wider uppercase shadow-2xl border border-white/30 flex items-center gap-2 select-none`}
-                >
-                  {sticker.content}
-                </div>
-              )}
+              <div
+                className={`px-4 py-2 rounded-2xl bg-gradient-to-r ${
+                  sticker.bgGradient || "from-amber-500 to-yellow-400"
+                } text-white font-extrabold text-lg tracking-wider uppercase shadow-2xl border border-white/30 flex items-center gap-2 select-none`}
+              >
+                {sticker.content}
+              </div>
 
               {/* Sticker Layer Floating Blue Action Toolbar */}
               {isSelected && (
@@ -1511,16 +1511,29 @@ export default function EditorScreen() {
       <div className="relative z-20 flex items-center justify-between px-4 pt-12 pb-3 w-full">
         {/* Close / Back to Camera */}
         <button
-          onClick={() => navigate("/")}
+          onClick={() => navigate("/home")}
           className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-95 transition-transform"
           aria-label="Close Editor"
         >
           <X className="w-5 h-5" />
         </button>
 
-        {/* Center Title or Indicator */}
+        {/* Center Title or Indicator — shows active lens filter */}
         <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-xs font-semibold text-white/90">
           <span>Editor</span>
+          {lensFilter && (
+            <>
+              <span className="w-[3px] h-[3px] rounded-full bg-white/30" />
+              <span className="flex items-center gap-1 text-ember">
+                <Sparkles className="w-3 h-3" />
+                <span>
+                  {LENS_TEMPLATES_EXPANDED.find(
+                    (l) => LENS_FILTER_MAP[l.overlayType] === lensFilter
+                  )?.name || "Filtered"}
+                </span>
+              </span>
+            </>
+          )}
         </div>
 
         {/* Right Actions: Undo, Redo, Save */}
@@ -1569,7 +1582,8 @@ export default function EditorScreen() {
                 committedCrop.rotation !== 0 ||
                 committedCrop.flipH ||
                 committedCrop.flipV ||
-                activeTool === "crop"));
+                activeTool === "crop")) ||
+            (tool.id === "filters" && (lensFilter !== "" || isFilterPickerOpen));
           return (
             <button
               key={tool.id}
@@ -1852,10 +1866,10 @@ export default function EditorScreen() {
               {/* CATEGORY TABS */}
               <div className="w-full">
                 <GestureSwipeCarousel
-                  items={["All", "Badges", "Metrics", "Locations", "Emojis"]}
-                  selectedIndex={["All", "Badges", "Metrics", "Locations", "Emojis"].indexOf(selectedStickerCategory)}
+                  items={["All", "Badges", "Stats", "Locations"]}
+                  selectedIndex={["All", "Badges", "Stats", "Locations"].indexOf(selectedStickerCategory)}
                   onSelectIndex={(index) => {
-                    const cats = ["All", "Badges", "Metrics", "Locations", "Emojis"];
+                    const cats = ["All", "Badges", "Stats", "Locations"];
                     setSelectedStickerCategory(cats[index]);
                   }}
                   itemGap={8}
@@ -1890,18 +1904,12 @@ export default function EditorScreen() {
                       key={item.id}
                       onClick={() => handleAddSticker(item)}
                       className={`flex items-center justify-center p-3 rounded-2xl border transition-all active:scale-95 group relative ${
-                        item.type === "emoji"
-                          ? "bg-black/40 border-white/10 hover:border-ember hover:bg-black/60 min-h-[64px]"
-                          : `bg-gradient-to-r ${item.bgGradient || "from-amber-500 to-yellow-400"} border-white/20 shadow-lg min-h-[56px]`
+                        `bg-gradient-to-r ${item.bgGradient || "from-amber-500 to-yellow-400"} border-white/20 shadow-lg min-h-[56px]`
                       }`}
                     >
-                      {item.type === "emoji" ? (
-                        <span className="text-4xl group-hover:scale-110 transition-transform">{item.content}</span>
-                      ) : (
-                        <span className="text-xs font-extrabold text-white tracking-wider uppercase text-center drop-shadow-md leading-tight">
-                          {item.content}
-                        </span>
-                      )}
+                      <span className="text-xs font-extrabold text-white tracking-wider uppercase text-center drop-shadow-md leading-tight">
+                        {item.content}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -2547,6 +2555,143 @@ export default function EditorScreen() {
         statLayout={statLayout}
         statData={statData}
       />
+
+      {/* 7. LENS FILTER PICKER BOTTOM SHEET */}
+      <AnimatePresence>
+        {isFilterPickerOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col justify-end"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Lens Filter Selector"
+          >
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 350, damping: 30 }}
+              className="glass-surface rounded-t-3xl p-screen-gutter space-y-4 max-h-[65vh] overflow-y-auto"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center pb-2 border-b border-white/5">
+                <div>
+                  <h3 className="text-section-header flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-ember" />
+                    Lens Filters
+                  </h3>
+                  <p className="text-xs text-text-secondary mt-0.5">Apply or change the camera lens effect</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setIsFilterPickerOpen(false);
+                    setActiveTool(null);
+                  }}
+                  className="w-8 h-8 rounded-full glass flex items-center justify-center text-white/70 hover:text-white"
+                  aria-label="Close filter picker"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Filter carousel — Snapchat-style horizontal scroll */}
+              <div className="w-full overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+                <div className="flex items-start gap-3 px-1 py-2 min-w-max">
+                  {/* No filter */}
+                  <button
+                    onClick={() => setLensFilter("")}
+                    className="flex flex-col items-center gap-1.5 shrink-0 w-[58px]"
+                  >
+                    <div
+                      className={`w-[56px] h-[56px] rounded-full flex items-center justify-center border-2 transition-all ${
+                        lensFilter === ""
+                          ? "border-ember shadow-[0_0_16px_var(--color-ember-glow)] bg-white/15"
+                          : "border-white/20 bg-white/5"
+                      }`}
+                    >
+                      <X className="w-4 h-4 text-white/60" />
+                    </div>
+                    <span className="text-[9px] font-semibold text-white/70">None</span>
+                  </button>
+
+                  {/* Lens filters as circular carousel */}
+                  {LENS_TEMPLATES_EXPANDED.map((lens) => {
+                    const filterVal = LENS_FILTER_MAP[lens.overlayType] || "";
+                    const isActive = lensFilter === filterVal;
+                    return (
+                      <button
+                        key={lens.id}
+                        onClick={() => setLensFilter(filterVal)}
+                        className="flex flex-col items-center gap-1.5 shrink-0 w-[58px]"
+                      >
+                        <div className="relative">
+                          {isActive && (
+                            <motion.div
+                              layoutId="editorFilterRing"
+                              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                              className="absolute -inset-[3px] rounded-full"
+                              style={{
+                                background: `conic-gradient(from 0deg, rgba(255,255,255,0.6), rgba(255,255,255,0.1), rgba(255,255,255,0.6))`,
+                                boxShadow: "0 0 16px rgba(255,255,255,0.25)",
+                              }}
+                            />
+                          )}
+                          <div
+                            className={`w-[56px] h-[56px] rounded-full flex items-center justify-center text-xl border-2 transition-all overflow-hidden ${
+                              isActive
+                                ? "border-white bg-white/15"
+                                : "border-white/15 bg-white/5"
+                            }`}
+                          >
+                            <span className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">{lens.icon}</span>
+                          </div>
+                        </div>
+                        <span
+                          className={`text-[9px] font-semibold text-center leading-tight max-w-[56px] ${
+                            isActive ? "text-white" : "text-white/60"
+                          }`}
+                        >
+                          {lens.name}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Intensity slider (for filter adjustment) */}
+              <div className="bg-white/5 rounded-2xl p-3.5 border border-white/5 space-y-2">
+                <div className="flex justify-between text-xs px-1">
+                  <span className="font-semibold text-white/80">Filter Intensity</span>
+                  <span className="text-ember font-bold">{filterIntensity}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={filterIntensity}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setFilterIntensity(val);
+                    // Dynamically adjust the filter strength if a custom filter is active
+                    if (/custom/i.test(lensFilter) || lensFilter === "") {
+                      setLensFilter(
+                        `contrast(${1 + val / 200}) saturate(${1 + val / 200})`
+                      );
+                    }
+                  }}
+                  className="w-full accent-ember cursor-pointer"
+                />
+                <p className="text-[10px] text-text-secondary text-center">
+                  Adjust the overall intensity of the applied lens effect
+                </p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -182,13 +182,18 @@ export default function ProjectsScreen() {
               const lens = LENS_TEMPLATES_EXPANDED.find((l) => l.id === project.lensId) || LENS_TEMPLATES_EXPANDED[0];
 
               return (
-                <div
+                <motion.div
                   key={project.id}
+                  layout
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => handleOpenProject(project)}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleOpenProject(project); } }}
                   role="button"
                   tabIndex={0}
-                  className="bg-surface rounded-2xl hairline-border overflow-hidden hover:border-ember/50 transition-all cursor-pointer group flex flex-col justify-between relative shadow-lg"
+                  className="bg-surface rounded-2xl hairline-border overflow-hidden hover:border-ember/50 transition-colors cursor-pointer group flex flex-col justify-between relative shadow-lg"
                 >
                   {/* Thumbnail Banner */}
                   <div className="relative h-44 w-full bg-cover bg-center overflow-hidden" style={{ backgroundImage: `url("${project.bgImage}")` }}>
@@ -235,7 +240,7 @@ export default function ProjectsScreen() {
                     </div>
                     <ChevronRight className="w-5 h-5 text-text-secondary group-hover:text-ember transition-colors" />
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
@@ -243,7 +248,13 @@ export default function ProjectsScreen() {
       </main>
 
       {/* Navigation */}
-      <nav className="fixed bottom-0 w-full z-50 rounded-t-xl hairline-border-t bg-surface flex justify-around items-center px-4 py-3 pb-safe" aria-label="Main navigation">
+      <motion.nav
+        initial={{ y: 60, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.2, duration: 0.4, ease: "easeOut" }}
+        className="fixed bottom-0 w-full z-50 rounded-t-xl hairline-border-t bg-surface flex justify-around items-center px-4 py-3 pb-safe"
+        aria-label="Main navigation"
+      >
         <button onClick={() => navigate("/home")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-text-primary transition-colors" aria-label="Home">
           <Home className="w-6 h-6" />
         </button>
@@ -256,7 +267,7 @@ export default function ProjectsScreen() {
         <button onClick={() => navigate("/profile")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-text-primary transition-colors" aria-label="Profile">
           <User className="w-6 h-6" />
         </button>
-      </nav>
+      </motion.nav>
     </div>
   );
 }

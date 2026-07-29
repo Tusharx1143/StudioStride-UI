@@ -2,7 +2,7 @@ import React from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Activity, Target, ChevronRight, User, Home, Plus, Camera, FolderKanban,
-  Flame, Mountain, Heart, Footprints, Moon,
+  Flame, Mountain, Heart, Footprints, Moon, RefreshCw, Zap, Loader2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
@@ -23,6 +23,7 @@ export default function HomeScreen() {
   const {
     filteredActivities,
     loading,
+    refreshAll,
     activeSourceFilter,
     setSourceFilter,
     activeTypeFilter,
@@ -49,6 +50,27 @@ export default function HomeScreen() {
         distance: `${statData.distance} ${statData.distanceUnit}`,
         pace: `${statData.pace} /km`,
         time: statData.time,
+      },
+    });
+  };
+
+  // ── Quick Make — 1-tap straight to editor with defaults ──────────────
+
+  const quickMake = (activity: UnifiedActivity) => {
+    const statData = activity.toStatData();
+    const fallbackImage =
+      "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=1200&auto=format&fit=crop";
+    try {
+      sessionStorage.setItem("temp_captured_image", fallbackImage);
+    } catch { /* quota */ }
+    navigate("/editor", {
+      state: {
+        capturedImage: fallbackImage,
+        selectedLensId: "minimal",
+        activityTitle: statData.title,
+        activityDistance: `${statData.distance} ${statData.distanceUnit}`,
+        activityPace: `${statData.pace} /km`,
+        activityTime: statData.time,
       },
     });
   };
@@ -165,11 +187,21 @@ export default function HomeScreen() {
                   </div>
                 </div>
 
-                <div className="mt-6 pt-4 hairline-border-t flex items-center justify-between text-ember">
-                  <span className="text-stat-value flex items-center gap-1.5">
-                    <Plus className="w-4 h-4" /> Create Story
-                  </span>
-                  <ChevronRight className="w-5 h-5" />
+                <div className="mt-6 pt-4 hairline-border-t flex items-center justify-between gap-3">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openCamera(activeActivity); }}
+                    className="flex items-center gap-1.5 text-ember hover:opacity-80 transition-opacity"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span className="text-stat-value">Create Story</span>
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); quickMake(activeActivity); }}
+                    className="flex items-center gap-1.5 text-text-secondary hover:text-ember transition-colors text-label font-semibold"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Quick Make</span>
+                  </button>
                 </div>
               </div>
             </motion.div>
@@ -181,15 +213,35 @@ export default function HomeScreen() {
               <Activity className="text-text-secondary w-8 h-8" />
             </div>
             <h2 className="text-section-header mb-2">No activities yet</h2>
-            <p className="text-body text-text-secondary">
-              Connect a data source to see your activities here.
+            <p className="text-body text-text-secondary mb-6">
+              {loading ? "Syncing your data…" : "Pull your latest activities from connected sources."}
             </p>
+            {!loading && (
+              <button
+                onClick={refreshAll}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-surface hover:bg-surface-raised text-text-primary text-label font-semibold hairline-border active:scale-[0.97] transition-all"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Sync Now</span>
+              </button>
+            )}
+            {loading && (
+              <div className="flex items-center justify-center gap-2 text-text-secondary text-label">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Refreshing…</span>
+              </div>
+            )}
           </section>
         )}
 
         {/* ── Health Today ──────────────────────────────────────────── */}
         {healthDaily && (
-          <section className="mb-section-v-rhythm">
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="mb-section-v-rhythm"
+          >
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-section-header">Health Today</h2>
               {hcState.available && !hcState.authorized && (
@@ -202,37 +254,68 @@ export default function HomeScreen() {
               )}
             </div>
 
-            <div className="bg-surface rounded-lg p-4 hairline-border grid grid-cols-4 gap-3">
-              <div className="flex flex-col items-center text-center gap-1">
-                <Footprints className="text-ember w-5 h-5" />
+            <motion.div
+              initial="hidden"
+              animate="visible"
+              variants={{
+                visible: { transition: { staggerChildren: 0.08 } },
+              }}
+              className="bg-surface rounded-lg p-4 hairline-border grid grid-cols-4 gap-3"
+            >
+              <motion.div
+                variants={{
+                  hidden: { opacity: 0, y: 12 },
+                  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
+                }}
+                className="flex flex-col items-center text-center gap-1"
+              >
+                <Footprints className="text-success w-5 h-5" />
                 <span className="text-stat-value text-text-primary">
                   {healthDaily.steps.toLocaleString()}
                 </span>
                 <span className="text-tool-caption text-text-secondary">Steps</span>
-              </div>
-              <div className="flex flex-col items-center text-center gap-1">
+              </motion.div>
+              <motion.div
+                variants={{
+                  hidden: { opacity: 0, y: 12 },
+                  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
+                }}
+                className="flex flex-col items-center text-center gap-1"
+              >
                 <Activity className="text-ember w-5 h-5" />
                 <span className="text-stat-value text-text-primary">
                   {healthDaily.distanceKm.toFixed(1)}
                 </span>
                 <span className="text-tool-caption text-text-secondary">Km</span>
-              </div>
-              <div className="flex flex-col items-center text-center gap-1">
+              </motion.div>
+              <motion.div
+                variants={{
+                  hidden: { opacity: 0, y: 12 },
+                  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
+                }}
+                className="flex flex-col items-center text-center gap-1"
+              >
                 <Heart className="text-ember w-5 h-5" />
                 <span className="text-stat-value text-text-primary">
                   {healthDaily.heartRate.avg > 0 ? healthDaily.heartRate.avg : "--"}
                 </span>
                 <span className="text-tool-caption text-text-secondary">Avg HR</span>
-              </div>
-              <div className="flex flex-col items-center text-center gap-1">
-                <Moon className="text-ember w-5 h-5" />
+              </motion.div>
+              <motion.div
+                variants={{
+                  hidden: { opacity: 0, y: 12 },
+                  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
+                }}
+                className="flex flex-col items-center text-center gap-1"
+              >
+                <Moon className="text-ice w-5 h-5" />
                 <span className="text-stat-value text-text-primary">
                   {healthDaily.sleepHours > 0 ? `${healthDaily.sleepHours}h` : "--"}
                 </span>
                 <span className="text-tool-caption text-text-secondary">Sleep</span>
-              </div>
-            </div>
-          </section>
+              </motion.div>
+            </motion.div>
+          </motion.section>
         )}
 
         {/* ── Filter Bar ────────────────────────────────────────────── */}
@@ -259,18 +342,28 @@ export default function HomeScreen() {
               </button>
             </div>
 
-            <div className="flex flex-col gap-card-stack-gap">
+            <motion.div
+              initial="hidden"
+              animate="visible"
+              variants={{
+                visible: { transition: { staggerChildren: 0.05, delayChildren: 0.1 } },
+              }}
+              className="flex flex-col gap-card-stack-gap"
+            >
               <AnimatePresence>
                 {previousActivities.map((item) => (
                   <motion.button
                     layout
                     key={item.id}
-                    initial={{ opacity: 0, scale: 0.98 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.98 }}
-                    transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                    variants={{
+                      hidden: { opacity: 0, x: -12 },
+                      visible: { opacity: 1, x: 0, transition: { duration: 0.3, ease: "easeOut" } },
+                    }}
+                    exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.2 } }}
+                    whileHover={{ scale: 1.005 }}
+                    whileTap={{ scale: 0.99 }}
                     onClick={() => openCamera(item)}
-                    className="bg-surface rounded-lg p-4 flex items-center hairline-border hover:bg-surface-raised active:scale-[0.99] transition-all text-left group"
+                    className="bg-surface rounded-lg p-4 flex items-center hairline-border hover:bg-surface-raised transition-all text-left group"
                   >
                     <div className="w-12 h-12 rounded-sm bg-ember-dim flex items-center justify-center shrink-0 mr-4 group-hover:bg-ember/20 transition-colors">
                       {getIcon(item.iconType)}
@@ -295,13 +388,19 @@ export default function HomeScreen() {
                   </motion.button>
                 ))}
               </AnimatePresence>
-            </div>
+            </motion.div>
           </section>
         )}
       </main>
 
       {/* ── Bottom Nav ─────────────────────────────────────────────── */}
-      <nav className="fixed bottom-0 w-full z-50 rounded-t-xl hairline-border-t bg-surface flex justify-around items-center px-4 py-3 pb-safe" aria-label="Main navigation">
+      <motion.nav
+        initial={{ y: 60, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.2, duration: 0.4, ease: "easeOut" }}
+        className="fixed bottom-0 w-full z-50 rounded-t-xl hairline-border-t bg-surface flex justify-around items-center px-4 py-3 pb-safe"
+        aria-label="Main navigation"
+      >
         <button
           className="flex flex-col items-center justify-center bg-surface-raised text-ember rounded-full p-3 transition-colors"
           aria-label="Home"
@@ -330,7 +429,7 @@ export default function HomeScreen() {
         >
           <User className="w-6 h-6" />
         </button>
-      </nav>
+      </motion.nav>
     </div>
   );
 }

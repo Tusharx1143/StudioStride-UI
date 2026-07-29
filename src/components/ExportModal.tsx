@@ -581,18 +581,29 @@ export default function ExportModal({
 
           {/* Primary Action Buttons */}
           <div className="space-y-2.5">
-            {/* Main Download Button */}
-            <button
-              onClick={handleDownload}
-              disabled={isGenerating}
-              className="w-full py-3.5 px-4 rounded-2xl bg-ember hover:bg-ember-press text-ink font-black text-sm shadow-[0_0_20px_rgba(255,122,26,0.4)] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-50"
-            >
-              <Download className="w-4 h-4 fill-ink" />
-              <span>Download Image ({format.toUpperCase()})</span>
-            </button>
+            {/* Primary Row: Download + Share side by side */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={handleDownload}
+                disabled={isGenerating}
+                className="w-full py-3.5 px-4 rounded-2xl bg-ember hover:bg-ember-press text-ink font-black text-sm shadow-[0_0_20px_rgba(255,122,26,0.4)] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-50"
+              >
+                <Download className="w-4 h-4 fill-ink" />
+                <span>Download</span>
+              </button>
 
-            {/* Grid of Secondary Actions: Copy, Share, Save to Gallery */}
-            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={handleShare}
+                disabled={isGenerating}
+                className="w-full py-3.5 px-4 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-sm shadow-[0_0_20px_rgba(14,165,233,0.3)] flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-50"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>Share</span>
+              </button>
+            </div>
+
+            {/* Secondary Row: Copy + Save */}
+            <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={handleCopy}
                 className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-colors active:scale-95 ${
@@ -603,14 +614,6 @@ export default function ExportModal({
               >
                 {copiedSuccess ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copiedSuccess ? "Copied" : "Copy"}</span>
-              </button>
-
-              <button
-                onClick={handleShare}
-                className="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/15 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors active:scale-95"
-              >
-                <Share2 className="w-3.5 h-3.5 text-sky-400" />
-                <span>Share</span>
               </button>
 
               <button

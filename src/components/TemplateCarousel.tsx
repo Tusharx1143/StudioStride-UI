@@ -102,9 +102,46 @@ const CarouselItem = memo(function CarouselItem({
             ? `0 0 24px ${style.ringColor}40, 0 0 48px ${style.ringColor}20`
             : "0 2px 8px rgba(0,0,0,0.3)",
           transition: "box-shadow 0.3s ease, border-color 0.3s ease",
+          overflow: "hidden",
+          position: "relative",
         }}
       >
-        {template.icon}
+        {/* Template thumbnail preview — accent color + abstract stat dots */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: `radial-gradient(circle at 30% 30%, ${template.accentColor}44, ${template.accentColor}22 60%, transparent 80%)`,
+          }}
+        />
+        {/* Abstract stat-position dots */}
+        <div
+          className="absolute inset-0 flex items-center justify-center"
+          style={{ opacity: isSelected ? 0.7 : 0.4 }}
+        >
+          <svg viewBox="0 0 40 40" width="40" height="40" className="absolute">
+            <circle cx="12" cy="14" r="3" fill={template.accentColor} opacity="0.8" />
+            <circle cx="28" cy="20" r="2.5" fill={template.accentColor} opacity="0.6" />
+            <rect x="8" y="26" width="14" height="2.5" rx="1.25" fill={template.accentColor} opacity="0.4" />
+            <rect x="24" y="28" width="10" height="2" rx="1" fill={template.accentColor} opacity="0.3" />
+          </svg>
+        </div>
+        {/* Dim letter */}
+        <span
+          style={{
+            position: "absolute",
+            fontSize: "15px",
+            fontWeight: 800,
+            color: `${template.accentColor}33`,
+            fontFamily: "var(--font-display)",
+            letterSpacing: "-0.05em",
+            bottom: "4px",
+            right: "5px",
+            lineHeight: 1,
+          }}
+        >
+          {template.name.charAt(0)}
+        </span>
       </motion.div>
       <motion.span
         animate={{

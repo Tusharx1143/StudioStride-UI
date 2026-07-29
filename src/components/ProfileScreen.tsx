@@ -2,12 +2,13 @@ import { motion } from "motion/react";
 import {
   Share, Settings, ChevronRight, Activity, Timer, Mountain, Flame,
   Home, User, Camera, FolderKanban, Target, LogOut, Loader2,
-  Heart, Footprints, Moon, Sparkles,
+  Heart, Footprints, Moon, Sparkles, Sun,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useHealthConnect } from "../contexts/HealthConnectContext";
 import { useActivitySources } from "../contexts/ActivitySourcesContext";
+import { useTheme } from "../contexts/ThemeContext";
 import SourceBadge from "./SourceBadge";
 import { getEnabledSources } from "../sources/registry";
 
@@ -38,6 +39,7 @@ function showDistance(km: number): string {
 export default function ProfileScreen() {
   const navigate = useNavigate();
   const { athlete, logout } = useAuth();
+  const { resolved: theme, toggle: toggleTheme } = useTheme();
   const { state: hcState, daily: healthDaily, connect: hcConnect, disconnect: hcDisconnect } = useHealthConnect();
   const { sourceStates, combinedActivities, loading } = useActivitySources();
 
@@ -76,7 +78,12 @@ export default function ProfileScreen() {
     recentActivities.reduce((sum, a) => sum + a.distanceMeters, 0) / 1000;
 
   return (
-    <div className="bg-ink text-text-primary min-h-screen pb-24 md:pb-0 font-ui relative">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+      className="bg-ink text-text-primary min-h-screen pb-24 md:pb-0 font-ui relative"
+    >
       {/* ── Header ──────────────────────────────────────────────────── */}
       <header className="flex justify-end items-center px-screen-gutter pt-12 pb-6">
         <div className="flex gap-3">
@@ -96,6 +103,9 @@ export default function ProfileScreen() {
           )}
           <button onClick={() => navigate("/camera")} className="w-10 h-10 flex items-center justify-center rounded-full bg-ember text-ink transition-colors">
             <Camera className="w-5 h-5 fill-ink" />
+          </button>
+          <button onClick={toggleTheme} className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface transition-colors" title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+            {theme === "dark" ? <Sun className="text-text-primary w-5 h-5" /> : <Moon className="text-text-primary w-5 h-5" />}
           </button>
           <button className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface transition-colors">
             <Share className="text-text-primary w-5 h-5" />
@@ -177,11 +187,22 @@ export default function ProfileScreen() {
           )}
 
           {/* Activity list from combined sources */}
-          <div className="flex flex-col gap-card-stack-gap">
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={{ visible: { transition: { staggerChildren: 0.05 } } }}
+            className="flex flex-col gap-card-stack-gap"
+          >
             {recentActivities.length > 0 ? (
               recentActivities.map((item) => (
-                <button
+                <motion.button
                   key={item.id}
+                  variants={{
+                    hidden: { opacity: 0, x: -12 },
+                    visible: { opacity: 1, x: 0, transition: { duration: 0.3, ease: "easeOut" } },
+                  }}
+                  whileHover={{ scale: 1.005 }}
+                  whileTap={{ scale: 0.99 }}
                   onClick={() => navigate("/editor")}
                   className="bg-surface rounded-lg p-4 flex items-center hairline-border hover:bg-surface-raised transition-colors text-left"
                 >
@@ -209,14 +230,18 @@ export default function ProfileScreen() {
                     <span className="text-tool-caption text-text-secondary">{item.displayTimeAgo}</span>
                     <ChevronRight className="text-text-secondary w-5 h-5" />
                   </div>
-                </button>
+                </motion.button>
               ))
             ) : (
-              <div className="text-center py-8 text-text-secondary text-label">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-center py-8 text-text-secondary text-label"
+              >
                 {loading ? "Loading activities…" : "No activities yet"}
-              </div>
+              </motion.div>
             )}
-          </div>
+          </motion.div>
         </section>
 
         {/* ── Per-Source Highlights ─────────────────────────────────── */}
@@ -281,38 +306,73 @@ export default function ProfileScreen() {
                 </button>
               )}
             </div>
-            <div className="bg-surface rounded-lg p-6 hairline-border grid grid-cols-4 gap-4">
-              <div className="flex flex-col items-center text-center">
-                <Footprints className="text-ember w-6 h-6 mb-3" />
+            <motion.div
+              initial="hidden"
+              animate="visible"
+              variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
+              className="bg-surface rounded-lg p-6 hairline-border grid grid-cols-4 gap-4"
+            >
+              <motion.div
+                variants={{
+                  hidden: { opacity: 0, y: 12 },
+                  visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
+                }}
+                className="flex flex-col items-center text-center"
+              >
+                <Footprints className="text-success w-6 h-6 mb-3" />
                 <span className="text-stat-value mb-1">{healthDaily.steps.toLocaleString()}</span>
                 <span className="text-tool-caption text-text-secondary">Steps</span>
-              </div>
-              <div className="flex flex-col items-center text-center">
+              </motion.div>
+              <motion.div
+                variants={{
+                  hidden: { opacity: 0, y: 12 },
+                  visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
+                }}
+                className="flex flex-col items-center text-center"
+              >
                 <Heart className="text-ember w-6 h-6 mb-3" />
                 <span className="text-stat-value mb-1">
                   {healthDaily.heartRate.resting > 0 ? healthDaily.heartRate.resting : "--"}
                 </span>
                 <span className="text-tool-caption text-text-secondary">Resting HR</span>
-              </div>
-              <div className="flex flex-col items-center text-center">
-                <Moon className="text-ember w-6 h-6 mb-3" />
+              </motion.div>
+              <motion.div
+                variants={{
+                  hidden: { opacity: 0, y: 12 },
+                  visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
+                }}
+                className="flex flex-col items-center text-center"
+              >
+                <Moon className="text-ice w-6 h-6 mb-3" />
                 <span className="text-stat-value mb-1">
                   {healthDaily.sleepHours > 0 ? `${healthDaily.sleepHours}h` : "--"}
                 </span>
                 <span className="text-tool-caption text-text-secondary">Sleep</span>
-              </div>
-              <div className="flex flex-col items-center text-center">
+              </motion.div>
+              <motion.div
+                variants={{
+                  hidden: { opacity: 0, y: 12 },
+                  visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
+                }}
+                className="flex flex-col items-center text-center"
+              >
                 <Flame className="text-ember w-6 h-6 mb-3" />
                 <span className="text-stat-value mb-1">{healthDaily.caloriesBurned.toLocaleString()}</span>
                 <span className="text-tool-caption text-text-secondary">Calories</span>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
           </section>
         )}
       </main>
 
       {/* ── Bottom Nav ─────────────────────────────────────────────── */}
-      <nav className="fixed bottom-0 w-full z-50 rounded-t-xl hairline-border-t bg-surface flex justify-around items-center px-4 py-3 pb-safe" aria-label="Main navigation">
+      <motion.nav
+        initial={{ y: 60, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.2, duration: 0.4, ease: "easeOut" }}
+        className="fixed bottom-0 w-full z-50 rounded-t-xl hairline-border-t bg-surface flex justify-around items-center px-4 py-3 pb-safe"
+        aria-label="Main navigation"
+      >
         <button onClick={() => navigate("/home")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-text-primary transition-colors" aria-label="Home">
           <Home className="w-6 h-6" />
         </button>
@@ -325,7 +385,7 @@ export default function ProfileScreen() {
         <button className="flex flex-col items-center justify-center bg-surface-raised text-ember rounded-full p-3 transition-colors" aria-label="Profile" aria-current="page">
           <User className="w-6 h-6" />
         </button>
-      </nav>
-    </div>
+      </motion.nav>
+    </motion.div>
   );
 }

@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { motion } from "motion/react";
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowDown,
   ArrowRight,
@@ -19,6 +19,7 @@ export default function AuthScreen() {
   const { state: hcState, daily: healthDaily, connect: hcConnect } = useHealthConnect();
 
   const isBusy = status === "loading";
+  const [isConnecting, setIsConnecting] = useState(false);
 
   // Already authenticated with Strava — redirect
   useEffect(() => {
@@ -37,6 +38,7 @@ export default function AuthScreen() {
   // ── Source login handlers ─────────────────────────────────────────────
 
   const handleSourceConnect = async (sourceId: ActivitySourceId) => {
+    setIsConnecting(true);
     switch (sourceId) {
       case "strava":
         stravaLogin();
@@ -49,12 +51,39 @@ export default function AuthScreen() {
         }
         break;
     }
+    setIsConnecting(false);
   };
 
   const sources = getEnabledSources();
 
   return (
     <main className="flex-grow flex flex-col items-center justify-center px-screen-gutter relative z-10 w-full max-w-md mx-auto min-h-screen pt-12 pb-safe bg-ink">
+      {/* Auth loading overlay */}
+      <AnimatePresence>
+        {(isConnecting || hcState.loading) && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 bg-ink/90 backdrop-blur-md flex items-center justify-center"
+          >
+            <div className="text-center max-w-xs">
+              <div className="w-16 h-16 mx-auto rounded-full bg-ember-dim border-2 border-ember flex items-center justify-center mb-5">
+                <Loader2 className="text-ember w-8 h-8 animate-spin" strokeWidth={2.5} />
+              </div>
+              <h3 className="text-section-header text-text-primary mb-2">
+                {hcState.loading ? "Requesting Health Permissions…" : "Connecting to Strava…"}
+              </h3>
+              <p className="text-body text-text-secondary leading-relaxed">
+                {hcState.loading
+                  ? "This allows us to read your activity data and create workout stories."
+                  : "You'll be redirected to Strava to authorize your account. Hang tight!"}
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Background glow */}
       <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full bg-ember-dim blur-[100px] opacity-20"></div>

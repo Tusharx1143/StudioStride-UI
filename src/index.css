@@ -1,14 +1,20 @@
 @import "tailwindcss";
 
 @theme {
-  /* Accent — tangerine. Always pair with text-ink; white on ember is 2.6:1. */
+  /* ── Accent — ember orange ─────────────────────────────────────────────── */
   --color-ember: #FF7A1A;
   --color-ember-press: #DB6410;
   --color-ember-dim: rgba(255,122,26,0.16);
   --color-ember-glow: rgba(255,122,26,0.45);
   --color-ember-lift: #FFB020;
 
-  /* Neutrals — cool charcoal */
+  /* ── Success / green accent (new) ──────────────────────────────────────── */
+  --color-success: #22C55E;
+  --color-success-dim: rgba(34,197,94,0.16);
+  --color-success-press: #16A34A;
+  --color-success-text: #14532D;
+
+  /* ── Neutrals — cool charcoal ──────────────────────────────────────────── */
   --color-ink: #000000;
   --color-surface: #0E0E11;
   --color-surface-raised: #17171A;
@@ -22,24 +28,76 @@
 
   --color-scrim: rgba(0,0,0,0.45);
 
-  /* Cool counter-accent — route lines, info, multi-select */
+  /* ── Accents ────────────────────────────────────────────────────────────── */
   --color-ice: #22D3EE;
-
   --color-danger: #FF2D55;
   --color-strava: #FC4C02;
 
-  --font-display: "Archivo", sans-serif;
-  --font-ui: "Inter", sans-serif;
+  /* ── Typography ─────────────────────────────────────────────────────────── */
+  --font-display: "Archivo", "Barlow Condensed", sans-serif;
+  --font-ui: "Inter", "Barlow", sans-serif;
 
+  /* ── Spacing ────────────────────────────────────────────────────────────── */
   --spacing-screen-gutter: 20px;
   --spacing-section-v-rhythm: 32px;
   --spacing-card-stack-gap: 12px;
   --spacing-safe: env(safe-area-inset-bottom);
 
+  /* ── Radius ─────────────────────────────────────────────────────────────── */
   --radius-sm: 10px;
   --radius-md: 16px;
   --radius-lg: 20px;
   --radius-xl: 28px;
+
+  /* ── Shadows ────────────────────────────────────────────────────────────── */
+  --shadow-ember-sm: 0 0 20px rgba(255,122,26,0.08);
+  --shadow-ember-md: 0 0 40px rgba(255,122,26,0.12);
+  --shadow-ember-lg: 0 0 60px rgba(255,122,26,0.18);
+  --shadow-success-sm: 0 0 20px rgba(34,197,94,0.08);
+}
+
+/* ── Light Mode ──────────────────────────────────────────────────────────── */
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-ink: #F8FAFC;
+    --color-surface: #FFFFFF;
+    --color-surface-raised: #F1F5F9;
+    --color-surface-overlay: #E2E8F0;
+    --color-hairline: rgba(0,0,0,0.08);
+
+    --color-text-primary: #0F172A;
+    --color-text-secondary: #475569;
+    --color-text-tertiary: #64748B;
+    --color-text-disabled: #94A3B8;
+
+    --color-scrim: rgba(0,0,0,0.25);
+    --color-ember: #EA580C;
+    --color-ember-press: #C2410C;
+    --color-ember-dim: rgba(234,88,12,0.10);
+    --color-ember-glow: rgba(234,88,12,0.30);
+    --color-ember-lift: #F97316;
+  }
+}
+
+/* ── Force dark class (override light mode) ──────────────────────────────── */
+:root.dark {
+  --color-ink: #000000;
+  --color-surface: #0E0E11;
+  --color-surface-raised: #17171A;
+  --color-surface-overlay: #212127;
+  --color-hairline: rgba(255,255,255,0.10);
+
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #A8A8B2;
+  --color-text-tertiary: #8A8A93;
+  --color-text-disabled: #5A5A62;
+
+  --color-scrim: rgba(0,0,0,0.45);
+  --color-ember: #FF7A1A;
+  --color-ember-press: #DB6410;
+  --color-ember-dim: rgba(255,122,26,0.16);
+  --color-ember-glow: rgba(255,122,26,0.45);
+  --color-ember-lift: #FFB020;
 }
 
 @layer base {
@@ -48,10 +106,28 @@
     color: var(--color-text-primary);
     font-family: var(--font-ui);
     font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Smooth transition when switching themes */
+  *, *::before, *::after {
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.15s ease;
+  }
+
+  /* Focus-visible ring for keyboard nav */
+  *:focus-visible {
+    outline: 2px solid var(--color-ember);
+    outline-offset: 2px;
+  }
+
+  /* Remove focus ring for mouse users */
+  *:focus:not(:focus-visible) {
+    outline: none;
   }
 }
 
-/* Custom Typography Utilities */
+/* ── Custom Typography Utilities ─────────────────────────────────────────── */
 @utility text-wordmark {
   font-family: var(--font-display);
   font-size: 64px;
@@ -59,7 +135,7 @@
   line-height: 60px;
   letter-spacing: -0.03em;
   text-transform: uppercase;
-  font-stretch: 125%; /* To mimic expanded */
+  font-stretch: 125%;
 }
 
 @utility text-metric-xl {
@@ -126,6 +202,7 @@
   letter-spacing: 0.02em;
 }
 
+/* ── Border Utilities ────────────────────────────────────────────────────── */
 @utility hairline-border {
   border-width: 1px;
   border-color: var(--color-hairline);
@@ -145,4 +222,101 @@
   border-top-width: 1px;
   border-bottom-width: 1px;
   border-color: var(--color-hairline);
+}
+
+/* ── Motion & Animation Utilities ────────────────────────────────────────── */
+
+/* Entrance animations */
+@utility animate-fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@utility animate-slide-up {
+  animation: slideUp 0.4s ease-out;
+}
+
+@utility animate-slide-down {
+  animation: slideDown 0.3s ease-out;
+}
+
+@utility animate-scale-in {
+  animation: scaleIn 0.35s ease-out;
+}
+
+/* Stagger children — parent gets this, children use animation-delay-[calc(var(--i)*0.06s)] */
+@utility animate-stagger {
+  > * {
+    animation: fadeIn 0.4s ease-out both;
+    animation-delay: calc(var(--i, 0) * 0.06s);
+  }
+}
+
+/* Pulse glow for ember elements */
+@utility animate-ember-pulse {
+  animation: emberPulse 2s ease-in-out infinite;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Keyframes ───────────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(8px); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes emberPulse {
+  0%, 100% { box-shadow: 0 0 20px var(--color-ember-glow); }
+  50%      { box-shadow: 0 0 40px var(--color-ember-glow), 0 0 60px var(--color-ember-dim); }
+}
+
+@keyframes recordPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(34,197,94,0.4); }
+  50%      { box-shadow: 0 0 20px rgba(34,197,94,0.7), 0 0 40px rgba(34,197,94,0.3); }
+}
+
+/* ── Glass Surface Utilities ──────────────────────────────────────────────── */
+
+/* Default glass (dark camera overlay) */
+@utility glass {
+  background-color: rgba(0,0,0,0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+@utility glass-strong {
+  background-color: rgba(0,0,0,0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.10);
+}
+
+/* Lighter glass for modals/bottom sheets */
+@utility glass-surface {
+  background-color: rgba(14,14,17,0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255,255,255,0.08);
 }

@@ -1,50 +1,16 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
-  X,
-  Camera,
-  RefreshCw,
-  Zap,
-  ZapOff,
-  Image as ImageIcon,
-  ChevronRight,
-  ChevronDown,
-  ChevronUp,
-  Timer as TimerIcon,
-  Music,
-  Heart,
-  Sliders,
-  Search,
-  Bell,
-  UserPlus,
-  Settings,
-  Moon,
-  Grid,
-  Maximize2,
-  Video,
-  Wand2,
-  Aperture,
-  Home,
-  Play,
-  Pause,
-  Users,
-  Compass,
-  Check,
-  Share2,
-  Flame,
-  Volume2,
-  VolumeX,
-  SlidersHorizontal,
-  Circle,
-  Layers,
-  Sparkle
+  X, Camera, RefreshCw, Image as ImageIcon, Music, Heart,
+  Settings, Wand2, Home, Play, Compass, Layers, Users,
+  ChevronRight, Sliders, Grid, Timer as TimerIcon,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LENS_TEMPLATES_EXPANDED, STOCK_PHOTOS, MUSIC_TRACKS, MusicTrack, TEMPLATE_FAMILIES } from "../data/mockData";
+import { STOCK_PHOTOS, MUSIC_TRACKS, MusicTrack, TEMPLATE_FAMILIES } from "../data/mockData";
 import {
   CustomLayouts,
-  LensTemplate,
   PhotoSource,
+  StatSlotId,
   TemplateFamily,
   TemplateLayout,
 } from "../types";
@@ -57,25 +23,11 @@ import {
   clearCustomLayout,
   hasCustomLayout,
   loadCustomLayouts,
+  resetLayout,
   resolveLayout,
   saveCustomLayouts,
   storeCustomLayout,
 } from "../utils/statLayouts";
-
-export const LENS_CATEGORIES = [
-  "All",
-  "AI",
-  "Trending",
-  "Portrait",
-  "HDR",
-  "Vintage",
-  "Food",
-  "Travel",
-  "Beauty",
-  "Neon",
-  "B&W",
-  "Custom"
-];
 
 type CaptureMode = "photo" | "video" | "burst" | "portrait";
 type AspectRatio = "9:16" | "1:1" | "4:3" | "full";
@@ -123,13 +75,10 @@ export default function SnapCamera() {
   const [cameraActive, setCameraActive] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
-  // Optical Zoom & Camera Lenses
-  const [isPortraitDepthMode, setIsPortraitDepthMode] = useState<boolean>(false);
+  // Capture modes
   const [captureMode, setCaptureMode] = useState<CaptureMode>("photo");
 
   // Toolbar & Feature Toggles
-  const [isToolbarExpanded, setIsToolbarExpanded] = useState<boolean>(true);
-  const [hdQuality, setHdQuality] = useState<"SD" | "HD" | "4K">("HD");
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("9:16");
   const [isNightMode, setIsNightMode] = useState<boolean>(false);
   const [isGridEnabled, setIsGridEnabled] = useState<boolean>(false);
@@ -150,23 +99,22 @@ export default function SnapCamera() {
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [burstCount, setBurstCount] = useState<number>(0);
 
-  // Modals & Drawers
-  const [showProfileDrawer, setShowProfileDrawer] = useState<boolean>(false);
-  const [showSearchModal, setShowSearchModal] = useState<boolean>(false);
-  const [showNotificationsModal, setShowNotificationsModal] = useState<boolean>(false);
-  const [showFriendsModal, setShowFriendsModal] = useState<boolean>(false);
-  const [showCameraSettings, setShowCameraSettings] = useState<boolean>(false);
+  // Template carousel modal & camera settings
   const [showTemplateCarousel, setShowTemplateCarousel] = useState<boolean>(false);
+  const [showCameraSettings, setShowCameraSettings] = useState<boolean>(false);
 
-  // Lenses & Carousel state
-  const [lenses, setLenses] = useState<LensTemplate[]>(LENS_TEMPLATES_EXPANDED);
-  const [selectedLensIndex, setSelectedLensIndex] = useState<number>(0);
-  const [activeCategory, setActiveCategory] = useState<string>("All");
+  // Template family — the camera's "lenses" are template families (stat layouts)
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateFamily>(TEMPLATE_FAMILIES[0]);
+
+  // Capture state
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
 
-  // Template family selection
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateFamily>(TEMPLATE_FAMILIES[0]);
-  const [templateLabelVisible, setTemplateLabelVisible] = useState<boolean>(false);
+  // Group mode — when on, dragging one stat moves all visible stats together
+  const [isGrouped, setIsGrouped] = useState<boolean>(false);
+
+  // Stat visibility selector
+  const [showStatSelector, setShowStatSelector] = useState<boolean>(false);
+  const [hiddenSlots, setHiddenSlots] = useState<Set<StatSlotId>>(new Set());
 
   const statData = {
     distance: distanceNumeric,
@@ -176,6 +124,11 @@ export default function SnapCamera() {
     title: activityTitle,
   };
   const statLayout = resolveLayout(selectedTemplate.id, customLayouts);
+
+  // Derive visible layout — remove hidden slots from the full layout
+  const visibleStatLayout: TemplateLayout = Object.fromEntries(
+    Object.entries(statLayout).filter(([slot]) => !hiddenSlots.has(slot as StatSlotId))
+  ) as TemplateLayout;
   const templateIsCustomized = hasCustomLayout(customLayouts, selectedTemplate.id);
 
   // Alignment guides shown only while a stat drag is snapped.
@@ -188,6 +141,37 @@ export default function SnapCamera() {
   };
 
   const handleStatLayoutChange = (next: TemplateLayout) => {
+    // When grouped, propagate the drag offset to all visible stats
+    if (isGrouped) {
+      const changedSlot = (Object.keys(next) as StatSlotId[]).find(
+        (slot) =>
+          next[slot]?.x !== statLayout[slot]?.x ||
+          next[slot]?.y !== statLayout[slot]?.y
+      );
+      if (changedSlot) {
+        const oldPos = statLayout[changedSlot];
+        const newPos = next[changedSlot];
+        if (oldPos && newPos) {
+          const dx = newPos.x - oldPos.x;
+          const dy = newPos.y - oldPos.y;
+          const adjusted: TemplateLayout = { ...next };
+          for (const slot of Object.keys(statLayout) as StatSlotId[]) {
+            if (slot !== changedSlot && statLayout[slot]) {
+              adjusted[slot] = {
+                x: Math.max(0, Math.min(100, (statLayout[slot]?.x ?? 0) + dx)),
+                y: Math.max(0, Math.min(100, (statLayout[slot]?.y ?? 0) + dy)),
+              };
+            }
+          }
+          setCustomLayouts((prev) => {
+            const updated = storeCustomLayout(prev, selectedTemplate.id, adjusted);
+            saveCustomLayouts(updated);
+            return updated;
+          });
+          return;
+        }
+      }
+    }
     setCustomLayouts((prev) => {
       const updated = storeCustomLayout(prev, selectedTemplate.id, next);
       saveCustomLayouts(updated);
@@ -203,14 +187,8 @@ export default function SnapCamera() {
     });
     triggerHaptic("light");
   };
-  const templateLabelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const filteredLenses = lenses.filter((l) => {
-    if (activeCategory === "All") return true;
-    return l.category === activeCategory;
-  });
-
-  const activeLens = filteredLenses[selectedLensIndex] || lenses[0];
+  const lensFilter = ""; // No photo filter in camera — filters are editor-only
 
   // Initialize browser camera stream
   const startCamera = async (facing: "user" | "environment" = facingMode) => {
@@ -259,13 +237,6 @@ export default function SnapCamera() {
     }
   };
 
-  const toggleFavoriteLens = (lensId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setLenses((prev) =>
-      prev.map((l) => (l.id === lensId ? { ...l, isFavorite: !l.isFavorite } : l))
-    );
-  };
-
   // Upload local device image
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -281,7 +252,8 @@ export default function SnapCamera() {
         navigate("/editor", {
           state: {
             capturedImage: imageUrl,
-            selectedLensId: activeLens?.id || "minimal",
+            selectedLensId: "minimal",
+            lensFilter,
             selectedTemplateFamily: selectedTemplate,
             statLayout,
             appliedMusic: selectedMusic ? selectedMusic.title : null,
@@ -306,7 +278,8 @@ export default function SnapCamera() {
     navigate("/editor", {
       state: {
         capturedImage: photo.url,
-        selectedLensId: activeLens?.id || "minimal",
+        selectedLensId: "minimal",
+        lensFilter,
         selectedTemplateFamily: selectedTemplate,
         statLayout,
         appliedMusic: selectedMusic ? selectedMusic.title : null,
@@ -394,7 +367,8 @@ export default function SnapCamera() {
             ctx.scale(-1, 1);
           }
           ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-          imageUrl = canvas.toDataURL("image/jpeg", 0.95);
+          // 0.7 quality keeps data URLs ~300KB so they survive router state + sessionStorage
+          imageUrl = canvas.toDataURL("image/jpeg", 0.7);
         }
       }
 
@@ -408,12 +382,12 @@ export default function SnapCamera() {
       navigate("/editor", {
         state: {
           capturedImage: imageUrl,
-          selectedLensId: activeLens?.id || "minimal",
+          selectedLensId: "minimal",
+          lensFilter,
           selectedTemplateFamily: selectedTemplate,
           statLayout,
           appliedMusic: selectedMusic ? selectedMusic.title : null,
           aspectRatio: aspectRatio,
-          hdQuality: hdQuality,
           activityTitle,
           activityDistance,
           activityPace,
@@ -497,12 +471,6 @@ export default function SnapCamera() {
               </div>
             </div>
 
-            <button
-              onClick={() => setViewMode("camera")}
-              className="w-full bg-ember text-ink font-bold py-3 rounded-xl mt-6"
-            >
-              Back to Camera
-            </button>
           </motion.div>
         )}
 
@@ -544,12 +512,6 @@ export default function SnapCamera() {
               </div>
             </div>
 
-            <button
-              onClick={() => setViewMode("camera")}
-              className="w-full bg-surface-raised text-white font-bold py-3 rounded-xl mt-6 hairline-border"
-            >
-              Back to Camera
-            </button>
           </motion.div>
         )}
 
@@ -572,19 +534,19 @@ export default function SnapCamera() {
               autoPlay
               playsInline
               muted
-              className={`absolute inset-0 w-full h-full object-cover transition-transform duration-300 ${
+              className={`absolute inset-0 w-full h-full object-cover transition-all duration-300 ${
                 facingMode === "user" ? "scale-x-[-1]" : ""
               } ${
                 isNightMode ? "brightness-125 contrast-125 saturate-150" : ""
               } ${isBeautyMode ? "blur-[0.3px]" : ""}`}
-              style={{}}
+              style={{ filter: lensFilter || undefined }}
             />
           ) : (
             <div
-              className={`absolute inset-0 bg-cover bg-center transition-transform duration-500 ${
+              className={`absolute inset-0 bg-cover bg-center transition-all duration-500 ${
                 isNightMode ? "brightness-125 contrast-125" : ""
               }`}
-              style={{ backgroundImage: `url("${STOCK_PHOTOS[1].url}")` }}
+              style={{ backgroundImage: `url("${STOCK_PHOTOS[1].url}")`, filter: lensFilter || undefined }}
             ></div>
           )}
 
@@ -603,26 +565,63 @@ export default function SnapCamera() {
             </div>
           )}
 
-          {/* Dark Glass Scrim Gradient */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-transparent to-black/90 pointer-events-none z-10"></div>
+          {/* Subtle Glass Scrim — ensures readability without overwhelming */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/70 pointer-events-none z-10"></div>
 
           {/* Template Badge + Music — chrome, not a draggable slot */}
           <div className="absolute inset-x-0 top-0 z-20 p-screen-gutter pt-24 pointer-events-none">
-            <div className="flex items-center gap-2">
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.1 }}
+              className="flex items-center gap-2"
+            >
               <span
-                className="px-3 py-1.5 rounded-full text-xs font-extrabold shadow-xl flex items-center gap-1.5 backdrop-blur-md border border-white/10"
-                style={{ backgroundColor: selectedTemplate.accentColor + "20", color: selectedTemplate.accentColor }}
+                className="px-3 py-1.5 rounded-full text-xs font-extrabold shadow-xl flex items-center gap-1.5 glass"
+                style={{ color: selectedTemplate.accentColor }}
               >
                 <span>{selectedTemplate.icon}</span>
                 <span>{selectedTemplate.name}</span>
               </span>
 
               {selectedMusic && (
-                <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-pink-500/80 text-white backdrop-blur-md flex items-center gap-1.5 shadow-lg">
-                  <Music className="w-3.5 h-3.5" />
+                <span className="px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-lg glass text-white">
+                  <Music className="w-3.5 h-3.5 text-success" />
                   <span>{selectedMusic.title}</span>
                 </span>
               )}
+
+              {/* Stat toggle */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowStatSelector(true);
+                }}
+                className="pointer-events-auto px-2.5 py-1.5 rounded-full text-xs font-bold glass text-white/60 hover:text-white flex items-center gap-1.5 active:scale-90 transition-all"
+                aria-label="Toggle stats visibility"
+              >
+                <Sliders className="w-3 h-3" />
+                <span>Stats</span>
+              </button>
+
+              {/* Group/UnGroup toggle */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsGrouped((g) => !g);
+                  triggerHaptic("light");
+                }}
+                className={`pointer-events-auto px-2.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 active:scale-90 transition-all ${
+                  isGrouped
+                    ? "bg-ember/30 text-ember border border-ember/40 shadow-[0_0_12px_rgba(255,122,26,0.2)]"
+                    : "glass text-white/60 hover:text-white"
+                }`}
+                aria-label={isGrouped ? "Ungroup stats" : "Group stats"}
+                title={isGrouped ? "Stats move together" : "Drag stats individually"}
+              >
+                <Layers className="w-3 h-3" />
+                <span>{isGrouped ? "Grouped" : "Group"}</span>
+              </button>
 
               {templateIsCustomized && (
                 <button
@@ -630,14 +629,14 @@ export default function SnapCamera() {
                     e.stopPropagation();
                     handleResetStatLayout();
                   }}
-                  className="pointer-events-auto px-3 py-1.5 rounded-full text-xs font-bold bg-black/60 text-white/80 backdrop-blur-md border border-white/10 flex items-center gap-1.5 active:scale-95 transition-transform"
+                  className="pointer-events-auto px-3 py-1.5 rounded-full text-xs font-bold glass text-white/80 hover:text-white flex items-center gap-1.5 active:scale-90 transition-all"
                   aria-label="Reset stat layout"
                 >
                   <RefreshCw className="w-3 h-3" />
                   <span>Reset layout</span>
                 </button>
               )}
-            </div>
+            </motion.div>
           </div>
 
           {/* Draggable template stats. The wrapper must not swallow pointer
@@ -646,7 +645,7 @@ export default function SnapCamera() {
             <StatLayer
               templateId={selectedTemplate.id}
               data={statData}
-              layout={statLayout}
+              layout={visibleStatLayout}
               onLayoutChange={handleStatLayoutChange}
               constraintsRef={viewfinderRef}
               onDragStart={() => {
@@ -665,174 +664,263 @@ export default function SnapCamera() {
             <div className="flex items-center gap-2" />
 
             {/* Top Right Controls */}
-            <div className="flex items-center gap-2">
+            <motion.div
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, delay: 0.15 }}
+              className="flex items-center gap-2"
+            >
               {/* Camera Switch */}
               <button
                 onClick={toggleCameraFacing}
-                className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hairline-border text-white flex items-center justify-center active:scale-95 transition-transform"
+                className="w-10 h-10 rounded-full glass text-white/80 hover:text-white flex items-center justify-center active:scale-90 transition-all"
                 aria-label="Switch camera"
               >
-                <RefreshCw className="w-5 h-5 stroke-[1.75]" />
+                <RefreshCw className="w-5 h-5" />
               </button>
 
               {/* Settings */}
               <button
                 onClick={() => setShowCameraSettings(true)}
-                className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md hairline-border text-white flex items-center justify-center active:scale-95 transition-transform"
+                className="w-10 h-10 rounded-full glass text-white/80 hover:text-white flex items-center justify-center active:scale-90 transition-all"
                 aria-label="Camera settings"
               >
-                <Settings className="w-5 h-5 stroke-[1.75]" />
+                <Settings className="w-5 h-5" />
               </button>
-            </div>
+            </motion.div>
           </div>
 
-          {/* CAPTURE MODES & SNAPCHAT LENS CAROUSEL AREA */}
-          <div className="relative z-30 pb-safe pb-4 flex flex-col items-center gap-2">
-            {/* Inline Template Carousel (toggled by the Templates button below) */}
-            <AnimatePresence>
-              {showTemplateCarousel && (
+          {/* CAPTURE MODES & TEMPLATE CAROUSEL AREA — templates = lenses = stickers */}
+          <div className="relative z-30 pb-safe pb-4 flex flex-col items-center gap-1.5">
+            {/* TEMPLATE FAMILY CAROUSEL — Snapchat-style circles, shows stat layout options */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: "easeOut", delay: 0.1 }}
+              className="w-full space-y-2"
+            >
+              {/* Template families — Snapchat-style 64px circles, always-visible labels */}
+              <div className="w-full overflow-hidden">
                 <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="w-full overflow-hidden"
+                  initial="hidden"
+                  animate="visible"
+                  variants={{ visible: { transition: { staggerChildren: 0.04 } } }}
+                  className="flex items-start gap-3 px-3 overflow-x-auto pb-1"
+                  style={{ scrollbarWidth: "none" }}
                 >
-                  <TemplateCarousel
-                    templates={TEMPLATE_FAMILIES}
-                    selectedId={selectedTemplate.id}
-                    onSelect={(template) => {
-                      setSelectedTemplate(template);
-                      setTemplateLabelVisible(true);
-                      if (templateLabelTimerRef.current) clearTimeout(templateLabelTimerRef.current);
-                      templateLabelTimerRef.current = setTimeout(() => {
-                        setTemplateLabelVisible(false);
-                      }, 1000);
-                    }}
-                  />
+                  {TEMPLATE_FAMILIES.map((tmpl, idx) => {
+                    const isActive = tmpl.id === selectedTemplate.id;
+                    return (
+                      <motion.button
+                        key={tmpl.id}
+                        variants={{
+                          hidden: { opacity: 0, y: 10, scale: 0.9 },
+                          visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.25 } },
+                        }}
+                        whileTap={{ scale: 0.92 }}
+                        onClick={() => {
+                          // Reset layout for the newly selected template
+                          setCustomLayouts((prev) => {
+                            const updated = resetLayout(prev, tmpl.id);
+                            saveCustomLayouts(updated);
+                            return updated;
+                          });
+                          setHiddenSlots(new Set());
+                          setSelectedTemplate(tmpl);
+                          triggerHaptic("selection");
+                        }}
+                        className="flex flex-col items-center gap-1 shrink-0 relative w-[64px]"
+                      >
+                        {/* Template circle with animated active ring */}
+                        <div className="relative">
+                          {isActive && (
+                            <motion.div
+                              layoutId="tmplActiveRing"
+                              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                              className="absolute -inset-[3px] rounded-full"
+                              style={{
+                                background: `conic-gradient(from 0deg, ${tmpl.accentColor}, rgba(255,255,255,0.4), ${tmpl.accentColor}88, ${tmpl.accentColor})`,
+                                boxShadow: `0 0 20px ${tmpl.accentColor}66`,
+                              }}
+                            />
+                          )}
+                          <div
+                            className={`relative w-[60px] h-[60px] rounded-full flex items-center justify-center transition-all duration-200 overflow-hidden ${
+                              isActive
+                                ? "scale-100 shadow-lg"
+                                : "opacity-55 hover:opacity-85"
+                            }`}
+                            style={{
+                              background: isActive
+                                ? `radial-gradient(circle at 35% 30%, ${tmpl.accentColor}55, rgba(0,0,0,0.7))`
+                                : "rgba(255,255,255,0.08)",
+                              boxShadow: isActive
+                                ? `inset 0 0 12px ${tmpl.accentColor}33, 0 0 8px rgba(0,0,0,0.4)`
+                                : "inset 0 0 4px rgba(255,255,255,0.06)",
+                              backdropFilter: "blur(12px)",
+                              WebkitBackdropFilter: "blur(12px)",
+                            }}
+                          >
+                            {/* Template thumbnail — accent color + abstract stat dots */}
+                            <div
+                              className="absolute inset-0"
+                              style={{
+                                background: `radial-gradient(circle at 30% 30%, ${tmpl.accentColor}44, ${tmpl.accentColor}22 60%, transparent 80%)`,
+                              }}
+                            />
+                            <svg viewBox="0 0 40 40" width="36" height="36" className="relative">
+                              <circle cx="12" cy="14" r="3.5" fill={tmpl.accentColor} opacity="0.8" />
+                              <circle cx="28" cy="20" r="3" fill={tmpl.accentColor} opacity="0.6" />
+                              <rect x="8" y="26" width="14" height="3" rx="1.5" fill={tmpl.accentColor} opacity="0.4" />
+                              <rect x="24" y="28" width="10" height="2.5" rx="1.25" fill={tmpl.accentColor} opacity="0.3" />
+                            </svg>
+                            <span
+                              style={{
+                                position: "absolute",
+                                fontSize: "12px",
+                                fontWeight: 800,
+                                color: `${tmpl.accentColor}33`,
+                                fontFamily: "var(--font-display)",
+                                letterSpacing: "-0.05em",
+                                bottom: "2px",
+                                right: "3px",
+                                lineHeight: 1,
+                              }}
+                            >
+                              {tmpl.name.charAt(0)}
+                            </span>
+                          </div>
+                        </div>
+                        {/* Always-visible label */}
+                        <span
+                          className={`text-[9px] font-semibold text-center leading-tight transition-all duration-200 ${
+                            isActive
+                              ? "text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]"
+                              : "text-white/60"
+                          }`}
+                          style={{ maxWidth: "64px" }}
+                        >
+                          {tmpl.name}
+                        </span>
+                      </motion.button>
+                    );
+                  })}
                 </motion.div>
-              )}
-            </AnimatePresence>
+              </div>
+            </motion.div>
 
-            {/* Template Selection Label */}
-            <div className="h-6 flex items-center justify-center">
-              <AnimatePresence>
-                {templateLabelVisible && (
-                  <motion.span
-                    initial={{ opacity: 0, y: 6, scale: 0.9 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.9 }}
-                    transition={{ duration: 0.2 }}
-                    className="px-3 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-[11px] font-bold text-white"
-                  >
-                    {selectedTemplate.name}{" "}
-                    <span className="text-ember">Selected</span>
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* MAIN SHUTTER BUTTON & GALLERY IMPORT BAR */}
-            <div className="w-full px-screen-gutter flex items-center justify-between max-w-xs pt-1">
-              {/* Local Device Gallery Input */}
+            {/* SNAPCHAT-STYLE SHUTTER BAR — gallery thumbnail, shutter, effects */}
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: 0.2, ease: "easeOut" }}
+              className="w-full px-screen-gutter flex items-center justify-center gap-8 pt-1"
+            >
+              {/* Gallery Import — circular thumb preview (Snapchat style) */}
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="w-12 h-12 rounded-full bg-black/60 backdrop-blur-md hairline-border flex items-center justify-center text-white active:scale-95 transition-transform"
+                className="relative w-[44px] h-[44px] rounded-full overflow-hidden glass border border-white/15 flex items-center justify-center text-white/60 hover:text-white active:scale-90 transition-all shrink-0"
                 title="Import from Gallery"
               >
-                <ImageIcon className="w-5 h-5" />
+                <ImageIcon className="w-4 h-4" />
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleFileUpload}
-              />
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
 
-              {/* Snapchat Large Shutter Button */}
-              <button
+              {/* Shutter — Snapchat-style dual ring */}
+              <motion.button
                 onClick={triggerCapture}
                 disabled={isCapturing}
-                className={`relative w-20 h-20 rounded-full border-4 border-white flex items-center justify-center active:scale-90 transition-transform shadow-2xl ${
-                  isRecordingVideo ? "border-rose-500 animate-pulse" : ""
+                whileTap={{ scale: 0.88 }}
+                className={`relative w-[78px] h-[78px] rounded-full flex items-center justify-center transition-all duration-300 shadow-2xl ${
+                  isRecordingVideo
+                    ? "animate-[recordPulse_1.5s_ease-in-out_infinite]"
+                    : ""
                 }`}
+                style={{
+                  background: isRecordingVideo
+                    ? "transparent"
+                    : `conic-gradient(from 0deg, rgba(255,255,255,0.3), rgba(255,255,255,0.05), rgba(255,255,255,0.3))`,
+                }}
               >
                 <div
-                  className={`w-16 h-16 rounded-full transition-colors flex items-center justify-center ${
-                    isRecordingVideo ? "bg-rose-500 rounded-lg scale-75" : "bg-white hover:bg-ember"
+                  className={`w-[62px] h-[62px] rounded-full transition-all duration-300 flex items-center justify-center ${
+                    isRecordingVideo
+                      ? "bg-success rounded-lg scale-[0.55] shadow-[0_0_20px_rgba(34,197,94,0.5)]"
+                      : "bg-white shadow-[0_0_12px_rgba(0,0,0,0.5)]"
                   }`}
                 >
-                  {isCapturing && (
-                    <div className="w-full h-full rounded-full bg-ember animate-ping"></div>
-                  )}
+                  {isCapturing && <div className="w-full h-full rounded-full bg-ember/30 animate-ping" />}
                 </div>
-              </button>
+              </motion.button>
 
-              {/* Template Selector Trigger */}
+              {/* Effects/Templates — lens icon (Snapchat style) */}
               <button
-                onClick={() => setShowTemplateCarousel((prev) => !prev)}
-                className={`w-12 h-12 rounded-full backdrop-blur-md hairline-border flex items-center justify-center active:scale-95 transition-transform ${
-                  showTemplateCarousel ? "bg-ember text-ink" : "bg-black/60 text-ember"
-                }`}
-                title="Templates"
+                onClick={() => setShowTemplateCarousel(true)}
+                className="w-[44px] h-[44px] rounded-full glass border border-white/15 flex items-center justify-center text-white/60 hover:text-white active:scale-90 transition-all shrink-0"
+                title="Effects & Templates"
               >
-                <Wand2 className="w-5 h-5" />
+                <Wand2 className="w-4 h-4" />
               </button>
-            </div>
+            </motion.div>
           </div>
         </div>
       </div>
 
       {/* BOTTOM NAVIGATION BAR */}
-      <nav className="bg-black/90 backdrop-blur-xl border-t border-white/10 px-screen-gutter py-3 flex justify-around items-center z-40" aria-label="Main navigation">
+      <motion.nav
+        initial={{ y: 40, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.4, ease: "easeOut", delay: 0.3 }}
+        className="bg-black/80 backdrop-blur-xl border-t border-white/10 px-screen-gutter py-2 flex justify-around items-center z-40"
+        aria-label="Main navigation"
+      >
         <button
           onClick={() => navigate("/home")}
-          className="flex flex-col items-center text-text-secondary hover:text-white transition-colors"
+          className="flex flex-col items-center gap-0.5 text-text-secondary hover:text-white transition-colors min-w-[48px] py-1"
           aria-label="Home"
         >
-          <Home className="w-6 h-6" />
-          <span className="text-[10px] mt-0.5">Home</span>
+          <Home className="w-5 h-5" />
+          <span className="text-[9px] font-medium">Home</span>
         </button>
 
         <button
           onClick={() => setViewMode("stories")}
-          className="flex flex-col items-center text-text-secondary hover:text-white transition-colors"
+          className="flex flex-col items-center gap-0.5 text-text-secondary hover:text-white transition-colors min-w-[48px] py-1"
           aria-label="Discover"
         >
-          <Compass className="w-6 h-6" />
-          <span className="text-[10px] mt-0.5">Discover</span>
+          <Compass className="w-5 h-5" />
+          <span className="text-[9px] font-medium">Discover</span>
         </button>
 
         <button
           onClick={() => setViewMode("camera")}
-          className="flex flex-col items-center text-ember transition-colors"
+          className="flex flex-col items-center text-ember transition-colors min-w-[48px] py-1"
           aria-label="Camera"
           aria-current="page"
         >
-          <div className="w-10 h-10 rounded-full bg-ember text-ink flex items-center justify-center font-black">
+          <div className="w-10 h-10 rounded-full bg-ember text-ink flex items-center justify-center shadow-[0_0_12px_rgba(255,122,26,0.35)]">
             <Camera className="w-5 h-5" />
           </div>
         </button>
 
         <button
           onClick={() => setViewMode("memories")}
-          className="flex flex-col items-center text-text-secondary hover:text-white transition-colors"
+          className="flex flex-col items-center gap-0.5 text-text-secondary hover:text-white transition-colors min-w-[48px] py-1"
           aria-label="Community"
         >
-          <Layers className="w-6 h-6" />
-          <span className="text-[10px] mt-0.5">Community</span>
+          <Layers className="w-5 h-5" />
+          <span className="text-[9px] font-medium">Community</span>
         </button>
 
         <button
           onClick={() => navigate("/profile")}
-          className="flex flex-col items-center text-text-secondary hover:text-white transition-colors"
+          className="flex flex-col items-center gap-0.5 text-text-secondary hover:text-white transition-colors min-w-[48px] py-1"
           aria-label="Profile"
         >
-          <Users className="w-6 h-6" />
-          <span className="text-[10px] mt-0.5">Profile</span>
+          <Users className="w-5 h-5" />
+          <span className="text-[9px] font-medium">Profile</span>
         </button>
-      </nav>
+      </motion.nav>
 
       {/* MUSIC PICKER MODAL SHEET */}
       <AnimatePresence>
@@ -850,18 +938,19 @@ export default function SnapCamera() {
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              className="bg-surface rounded-t-3xl hairline-border-t p-screen-gutter max-h-[70vh] overflow-y-auto space-y-4"
+              transition={{ type: "spring", stiffness: 350, damping: 30 }}
+              className="glass-surface rounded-t-3xl p-screen-gutter max-h-[70vh] overflow-y-auto space-y-4"
             >
-              <div className="flex justify-between items-center pb-2 border-b border-hairline">
+              <div className="flex justify-between items-center pb-2 border-b border-white/5">
                 <div>
                   <h3 className="text-section-header mb-0.5">Select Workout Music</h3>
                   <p className="text-xs text-text-secondary">Sync music tracks with your story video</p>
                 </div>
                 <button
                   onClick={() => setShowMusicSheet(false)}
-                  className="w-8 h-8 rounded-full bg-surface-raised flex items-center justify-center text-white"
+                  className="w-8 h-8 rounded-full glass flex items-center justify-center text-white/70 hover:text-white"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
@@ -876,8 +965,8 @@ export default function SnapCamera() {
                     }}
                     className={`p-3 rounded-2xl flex items-center justify-between cursor-pointer transition-all ${
                       selectedMusic?.id === track.id
-                        ? "bg-pink-500/20 border border-pink-500 text-white"
-                        : "bg-surface-raised hover:bg-surface-raised/80 text-text-primary"
+                        ? "bg-success-dim border border-success/40 text-white"
+                        : "bg-white/5 hover:bg-white/10 text-text-primary"
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -887,7 +976,7 @@ export default function SnapCamera() {
                         <p className="text-xs text-text-secondary">{track.artist} • {track.genre}</p>
                       </div>
                     </div>
-                    <button className="w-8 h-8 rounded-full bg-pink-500 text-white flex items-center justify-center">
+                    <button className="w-8 h-8 rounded-full bg-success text-white flex items-center justify-center">
                       <Play className="w-4 h-4 fill-white" />
                     </button>
                   </div>
@@ -914,15 +1003,16 @@ export default function SnapCamera() {
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              className="bg-surface rounded-t-3xl hairline-border-t p-screen-gutter space-y-4"
+              transition={{ type: "spring", stiffness: 350, damping: 30 }}
+              className="glass-surface rounded-t-3xl p-screen-gutter space-y-4"
             >
-              <div className="flex justify-between items-center pb-2 border-b border-hairline">
+              <div className="flex justify-between items-center pb-2 border-b border-white/5">
                 <h3 className="text-section-header">Lens Adjustments</h3>
                 <button
                   onClick={() => setShowLensSettings(false)}
-                  className="w-8 h-8 rounded-full bg-surface-raised flex items-center justify-center text-white"
+                  className="w-8 h-8 rounded-full glass flex items-center justify-center text-white/70 hover:text-white"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
@@ -947,101 +1037,46 @@ export default function SnapCamera() {
         )}
       </AnimatePresence>
 
-      {/* PROFILE DRAWER OVERLAY */}
+      {/* TEMPLATE PICKER SHEET */}
       <AnimatePresence>
-        {showProfileDrawer && (
+        {showTemplateCarousel && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex justify-start"
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex flex-col justify-end"
             role="dialog"
             aria-modal="true"
-            aria-label="Profile drawer"
+            aria-label="Choose Template Style"
           >
             <motion.div
-              initial={{ x: "-100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
-              className="bg-surface w-4/5 max-w-xs h-full p-screen-gutter flex flex-col justify-between"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 350, damping: 30 }}
+              className="glass-surface rounded-t-3xl p-screen-gutter pt-6 space-y-4"
             >
-              <div>
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-lg font-black text-white">Profile</h3>
-                  <button
-                    onClick={() => setShowProfileDrawer(false)}
-                    className="w-8 h-8 rounded-full bg-surface-raised flex items-center justify-center text-white"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
+              <div className="flex justify-between items-center pb-2 border-b border-white/5">
+                <div>
+                  <h3 className="text-section-header">Template Style</h3>
+                  <p className="text-xs text-text-secondary mt-0.5">Choose how your stats are displayed</p>
                 </div>
-
-                <div className="flex flex-col items-center mb-6 text-center">
-                  <img
-                    src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200&auto=format&fit=crop"
-                    alt="User Avatar"
-                    className="w-20 h-20 rounded-full object-cover border-2 border-ember mb-2"
-                  />
-                  <h4 className="text-base font-black text-white">Alex Morgan</h4>
-                  <p className="text-xs text-text-secondary">@alex_runner • Pro Athlete</p>
-                </div>
-
-                <div className="space-y-2">
-                  <button
-                    onClick={() => {
-                      setShowProfileDrawer(false);
-                      navigate("/profile");
-                    }}
-                    className="w-full text-left py-2.5 px-3 rounded-xl bg-surface-raised text-xs font-bold text-white flex items-center justify-between"
-                  >
-                    <span>View Full Profile</span>
-                    <ChevronRight className="w-4 h-4 text-text-secondary" />
-                  </button>
-                </div>
+                <button
+                  onClick={() => setShowTemplateCarousel(false)}
+                  className="w-8 h-8 rounded-full glass flex items-center justify-center text-white/70 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-
-              <button
-                onClick={() => {
-                  setShowProfileDrawer(false);
-                  navigate("/");
+              <TemplateCarousel
+                templates={TEMPLATE_FAMILIES}
+                selectedId={selectedTemplate.id}
+                onSelect={(template) => {
+                  setSelectedTemplate(template);
+                  setShowTemplateCarousel(false);
                 }}
-                className="w-full bg-rose-500/20 text-rose-400 font-bold py-2.5 rounded-xl text-xs"
-              >
-                Log Out
-              </button>
+              />
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* SEARCH MODAL */}
-      <AnimatePresence>
-        {showSearchModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col p-screen-gutter pt-12"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Search lenses and music"
-          >
-            <div className="flex items-center gap-2 mb-4">
-              <div className="flex-1 bg-surface-raised rounded-xl px-3 py-2 flex items-center gap-2 border border-hairline">
-                <Search className="w-4 h-4 text-text-secondary" />
-                <input
-                  type="text"
-                  placeholder="Search lenses, music, creators..."
-                  className="bg-transparent text-xs text-white outline-none w-full"
-                />
-              </div>
-              <button
-                onClick={() => setShowSearchModal(false)}
-                className="text-xs text-ember font-bold"
-              >
-                Cancel
-              </button>
-            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1062,15 +1097,16 @@ export default function SnapCamera() {
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
-              className="bg-surface rounded-t-3xl hairline-border-t p-screen-gutter space-y-4"
+              transition={{ type: "spring", stiffness: 350, damping: 30 }}
+              className="glass-surface rounded-t-3xl p-screen-gutter space-y-4"
             >
-              <div className="flex justify-between items-center pb-2 border-b border-hairline">
+              <div className="flex justify-between items-center pb-2 border-b border-white/5">
                 <h3 className="text-section-header">Camera Options</h3>
                 <button
                   onClick={() => setShowCameraSettings(false)}
-                  className="w-8 h-8 rounded-full bg-surface-raised flex items-center justify-center text-white"
+                  className="w-8 h-8 rounded-full glass flex items-center justify-center text-white/70 hover:text-white"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
@@ -1089,6 +1125,125 @@ export default function SnapCamera() {
         )}
       </AnimatePresence>
 
+      {/* STAT SELECTOR BOTTOM SHEET — add/remove visible stats */}
+      <AnimatePresence>
+        {showStatSelector && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col justify-end"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Toggle Stats"
+          >
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 350, damping: 30 }}
+              className="glass-surface rounded-t-3xl p-screen-gutter space-y-4"
+            >
+              <div className="flex justify-between items-center pb-2 border-b border-white/5">
+                <div>
+                  <h3 className="text-section-header">Toggle Stats</h3>
+                  <p className="text-xs text-text-secondary mt-0.5">Show or hide individual stats on your template</p>
+                </div>
+                <button
+                  onClick={() => setShowStatSelector(false)}
+                  className="w-8 h-8 rounded-full glass flex items-center justify-center text-white/70 hover:text-white"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-2 pb-2">
+                {(["distance", "pace", "time", "title", "accent"] as StatSlotId[]).map(
+                  (slot) => {
+                    const isVisible = !hiddenSlots.has(slot);
+                    const slotLabels: Record<StatSlotId, string> = {
+                      distance: "Distance",
+                      pace: "Pace",
+                      time: "Time",
+                      title: "Activity Title",
+                      accent: "Accent Decoration",
+                    };
+                    return (
+                      <button
+                        key={slot}
+                        onClick={() => {
+                          setHiddenSlots((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(slot)) next.delete(slot);
+                            else next.add(slot);
+                            return next;
+                          });
+                          triggerHaptic("light");
+                        }}
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all ${
+                          isVisible
+                            ? "bg-ember-dim border border-ember/30"
+                            : "bg-white/5 border border-white/10"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-extrabold ${
+                              isVisible
+                                ? "bg-ember text-ink"
+                                : "bg-white/10 text-white/40"
+                            }`}
+                          >
+                            {slot === "distance"
+                              ? "D"
+                              : slot === "pace"
+                              ? "P"
+                              : slot === "time"
+                              ? "T"
+                              : slot === "title"
+                              ? "A"
+                              : "✦"}
+                          </div>
+                          <span
+                            className={`text-sm font-bold ${
+                              isVisible ? "text-white" : "text-white/40"
+                            }`}
+                          >
+                            {slotLabels[slot]}
+                          </span>
+                        </div>
+                        <div
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                            isVisible
+                              ? "bg-ember border-ember"
+                              : "border-white/20 bg-transparent"
+                          }`}
+                        >
+                          {isVisible && (
+                            <motion.div
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              className="w-2 h-2 rounded-full bg-ink"
+                            />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  }
+                )}
+              </div>
+
+              <button
+                onClick={() => setShowStatSelector(false)}
+                className="w-full py-2.5 rounded-full bg-ember text-ink font-extrabold text-sm shadow-md active:scale-95 transition-transform"
+              >
+                Done
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

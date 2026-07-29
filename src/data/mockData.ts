@@ -90,6 +90,18 @@ export const ALL_METRICS: MetricOption[] = [
   { id: "streak_days", label: "Active Streak", value: "14", unit: "days", category: "Achievements", icon: "🔥" },
 ];
 
+/** CSS filter mapping per overlayType — applied live to the viewfinder and editor preview. */
+export const LENS_FILTER_MAP: Record<string, string> = {
+  minimal: "",
+  strava: "contrast(1.15) saturate(1.3)",
+  cyberpunk: "contrast(1.3) brightness(1.1) hue-rotate(-15deg)",
+  vintage: "sepia(0.4) contrast(0.9) brightness(0.9)",
+  route: "saturate(1.4) contrast(1.1)",
+  trophy: "contrast(1.2) brightness(1.15)",
+  music: "saturate(1.2) brightness(1.05)",
+  custom: "",
+};
+
 export const STOCK_PHOTOS: PhotoSource[] = [
   {
     id: "stock_1",

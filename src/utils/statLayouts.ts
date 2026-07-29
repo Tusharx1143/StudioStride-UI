@@ -11,6 +11,16 @@ export function resolveLayout(
   return customs[templateId] ?? getStatDesign(templateId).defaultLayout;
 }
 
+/** Clear the stored custom layout for a template — resets to design default. */
+export function resetLayout(
+  customs: CustomLayouts,
+  templateId: string
+): CustomLayouts {
+  const next = { ...customs };
+  delete next[templateId];
+  return next;
+}
+
 export interface DragCommit {
   pos: SlotPosition;
   offset: { x: number; y: number };

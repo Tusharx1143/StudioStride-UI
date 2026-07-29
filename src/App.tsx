@@ -6,6 +6,7 @@
 import { useCallback, useEffect, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
+import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider, RequireAuth, useAuth } from "./contexts/AuthContext";
 import { HealthConnectProvider, useHealthConnect } from "./contexts/HealthConnectContext";
 import { ActivitySourcesProvider } from "./contexts/ActivitySourcesContext";
@@ -148,13 +149,15 @@ function AnimatedRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <HealthConnectProvider>
-          <ActivitySourcesProvider>
-            <AnimatedRoutes />
-          </ActivitySourcesProvider>
-        </HealthConnectProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <HealthConnectProvider>
+            <ActivitySourcesProvider>
+              <AnimatedRoutes />
+            </ActivitySourcesProvider>
+          </HealthConnectProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }
