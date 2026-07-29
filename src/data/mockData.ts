@@ -76,6 +76,14 @@ export const ALL_METRICS: MetricOption[] = [
   { id: "speed", label: "Average Speed", value: "28.4", unit: "km/h", category: "Ride", icon: "🚴" },
   { id: "max_speed", label: "Max Speed", value: "42.1", unit: "km/h", category: "Ride", icon: "🚀" },
 
+  // Health Connect Metrics
+  { id: "hc_steps", label: "Steps", value: "8,432", unit: "steps", category: "Performance", icon: "👣" },
+  { id: "hc_calories", label: "Calories", value: "342", unit: "kcal", category: "Performance", icon: "🔥" },
+  { id: "hc_avg_hr", label: "Avg Heart Rate", value: "112", unit: "BPM", category: "Performance", icon: "❤️" },
+  { id: "hc_resting_hr", label: "Resting HR", value: "62", unit: "BPM", category: "Performance", icon: "💓" },
+  { id: "hc_sleep", label: "Sleep", value: "7.5", unit: "hours", category: "Performance", icon: "😴" },
+  { id: "hc_weight", label: "Weight", value: "72.5", unit: "kg", category: "Performance", icon: "⚖️" },
+
   // Achievements
   { id: "pr_record", label: "Personal Record", value: "Fastest 5K", unit: "🏆", category: "Achievements", icon: "🏆" },
   { id: "kudos_count", label: "Kudos Count", value: "128", unit: "👍", category: "Achievements", icon: "👏" },

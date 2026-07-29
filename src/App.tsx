@@ -3,9 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useCallback, useEffect, type ReactNode } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { AuthProvider, RequireAuth } from "./contexts/AuthContext";
+import { AuthProvider, RequireAuth, useAuth } from "./contexts/AuthContext";
+import { HealthConnectProvider, useHealthConnect } from "./contexts/HealthConnectContext";
+import { ActivitySourcesProvider } from "./contexts/ActivitySourcesContext";
 import AuthScreen from "./components/AuthScreen";
 import HomeScreen from "./components/HomeScreen";
 import ProfileScreen from "./components/ProfileScreen";
@@ -13,6 +16,39 @@ import EditorScreen from "./components/EditorScreen";
 import ProjectsScreen from "./components/ProjectsScreen";
 import SnapCamera from "./components/SnapCamera";
 import ErrorBoundary from "./components/ErrorBoundary";
+
+// ---------------------------------------------------------------------------
+// Combined auth guard — accepts Strava OR Health Connect
+// ---------------------------------------------------------------------------
+
+function RequireAnyAuth({ children }: { children: ReactNode }) {
+  const { status } = useAuth();
+  const { state: hcState } = useHealthConnect();
+  const navigate = useNavigate();
+
+  const hcAuthorized = hcState.available && hcState.authorized;
+  const stravaAuthed = status === "authenticated";
+  const isAllowed = stravaAuthed || hcAuthorized;
+  const isLoading = status === "loading" || hcState.loading;
+
+  useEffect(() => {
+    if (!isLoading && !isAllowed) {
+      navigate("/", { replace: true });
+    }
+  }, [isAllowed, isLoading, navigate]);
+
+  if (isLoading && !hcAuthorized && !stravaAuthed) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-ink">
+        <div className="w-8 h-8 border-2 border-ember border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAllowed) return null;
+
+  return <>{children}</>;
+}
 
 const pageVariants = {
   initial: { opacity: 0, scale: 0.98, y: 8 },
@@ -47,11 +83,11 @@ function AnimatedRoutes() {
           path="/home"
           element={
             <ErrorBoundary>
-              <RequireAuth>
+              <RequireAnyAuth>
                 <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
                   <HomeScreen />
                 </motion.div>
-              </RequireAuth>
+              </RequireAnyAuth>
             </ErrorBoundary>
           }
         />
@@ -59,11 +95,11 @@ function AnimatedRoutes() {
           path="/profile"
           element={
             <ErrorBoundary>
-              <RequireAuth>
+              <RequireAnyAuth>
                 <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
                   <ProfileScreen />
                 </motion.div>
-              </RequireAuth>
+              </RequireAnyAuth>
             </ErrorBoundary>
           }
         />
@@ -71,11 +107,11 @@ function AnimatedRoutes() {
           path="/editor"
           element={
             <ErrorBoundary>
-              <RequireAuth>
+              <RequireAnyAuth>
                 <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
                   <EditorScreen />
                 </motion.div>
-              </RequireAuth>
+              </RequireAnyAuth>
             </ErrorBoundary>
           }
         />
@@ -83,11 +119,11 @@ function AnimatedRoutes() {
           path="/projects"
           element={
             <ErrorBoundary>
-              <RequireAuth>
+              <RequireAnyAuth>
                 <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
                   <ProjectsScreen />
                 </motion.div>
-              </RequireAuth>
+              </RequireAnyAuth>
             </ErrorBoundary>
           }
         />
@@ -95,11 +131,11 @@ function AnimatedRoutes() {
           path="/camera"
           element={
             <ErrorBoundary>
-              <RequireAuth>
+              <RequireAnyAuth>
                 <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
                   <SnapCamera />
                 </motion.div>
-              </RequireAuth>
+              </RequireAnyAuth>
             </ErrorBoundary>
           }
         />
@@ -113,7 +149,11 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AnimatedRoutes />
+        <HealthConnectProvider>
+          <ActivitySourcesProvider>
+            <AnimatedRoutes />
+          </ActivitySourcesProvider>
+        </HealthConnectProvider>
       </AuthProvider>
     </BrowserRouter>
   );

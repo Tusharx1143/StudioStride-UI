@@ -1,136 +1,106 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Activity, Target, ChevronRight, User, Home, Plus, Camera, FolderKanban, Flame, Mountain } from "lucide-react";
+import {
+  Activity, Target, ChevronRight, User, Home, Plus, Camera, FolderKanban,
+  Flame, Mountain, Heart, Footprints, Moon,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { fetchActivities } from "../services/stravaApi";
-import { activityToActivityData } from "../services/stravaTransformers";
+import { useHealthConnect } from "../contexts/HealthConnectContext";
+import { useActivitySources } from "../contexts/ActivitySourcesContext";
+import SourceBadge from "./SourceBadge";
+import ActivityFilterBar from "./ActivityFilterBar";
+import type { UnifiedActivity } from "../sources/types";
 
-interface ActivityData {
-  id: string;
-  title: string;
-  subtitle: string;
-  distance: string;
-  time: string;
-  pace: string;
-  timeAgo: string;
-  type: string;
-  iconType: "activity" | "target" | "flame" | "mountain";
-}
-
-const INITIAL_ACTIVITIES: ActivityData[] = [
-  {
-    id: "act_1",
-    title: "Morning Run",
-    subtitle: "Golden Gate Park",
-    distance: "8.4",
-    time: "52:18",
-    pace: "6:12",
-    timeAgo: "2h ago",
-    type: "Run",
-    iconType: "activity",
-  },
-  {
-    id: "act_2",
-    title: "Cycling Sprint",
-    subtitle: "Marin Headlands Loop",
-    distance: "35.2",
-    time: "1:45:32",
-    pace: "2:59",
-    timeAgo: "Yesterday",
-    type: "Cycling",
-    iconType: "target",
-  },
-  {
-    id: "act_3",
-    title: "Evening Walk",
-    subtitle: "Sunset Boulevard",
-    distance: "6.1",
-    time: "48:12",
-    pace: "7:54",
-    timeAgo: "2 days ago",
-    type: "Walk",
-    iconType: "activity",
-  },
-  {
-    id: "act_4",
-    title: "Mountain Trail Run",
-    subtitle: "Mount Tamalpais",
-    distance: "12.8",
-    time: "1:18:45",
-    pace: "6:08",
-    timeAgo: "4 days ago",
-    type: "Trail Run",
-    iconType: "mountain",
-  },
-];
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export default function HomeScreen() {
   const navigate = useNavigate();
   const { athlete } = useAuth();
-  const [activities, setActivities] = useState<ActivityData[]>(INITIAL_ACTIVITIES);
-  const [hasLoaded, setHasLoaded] = useState(false);
+  const { state: hcState, daily: healthDaily, connect: hcConnect } = useHealthConnect();
+  const {
+    filteredActivities,
+    loading,
+    activeSourceFilter,
+    setSourceFilter,
+    activeTypeFilter,
+    setTypeFilter,
+    availableTypes,
+  } = useActivitySources();
 
-  // Fetch real activities from Strava on mount
-  useEffect(() => {
-    fetchActivities({ per_page: 10 })
-      .then((stravaActs) => {
-        if (stravaActs && stravaActs.length > 0) {
-          setActivities(stravaActs.map(activityToActivityData));
-        }
-      })
-      .catch((err) => {
-        // Graceful degradation: keep the mock data as fallback
-        console.warn("Could not load Strava activities, using mock data:", err);
-      })
-      .finally(() => setHasLoaded(true));
-  }, []);
+  // ── Derive display data ───────────────────────────────────────────────
 
-  // Swap clicked activity with the top (Ready to share) activity
-  const handleSwapActivity = (indexToPromote: number) => {
-    setActivities((prev) => {
-      const updated = [...prev];
-      const temp = updated[0];
-      updated[0] = updated[indexToPromote];
-      updated[indexToPromote] = temp;
-      return updated;
+  const activeActivity = filteredActivities[0] ?? null;
+  const previousActivities = filteredActivities.slice(1);
+
+  const greeting = athlete?.firstname
+    ? `${athlete.firstname}'s Stride`
+    : "STRIDE";
+
+  // ── Navigate to camera ────────────────────────────────────────────────
+
+  const openCamera = (activity: UnifiedActivity) => {
+    const statData = activity.toStatData();
+    navigate("/camera", {
+      state: {
+        title: statData.title,
+        distance: `${statData.distance} ${statData.distanceUnit}`,
+        pace: `${statData.pace} /km`,
+        time: statData.time,
+      },
     });
   };
 
-  const activeActivity = activities[0];
-  const previousActivities = activities.slice(1);
+  // ── Icon helper ───────────────────────────────────────────────────────
 
-  const getIcon = (type: string) => {
-    switch (type) {
+  const getIcon = (iconType: string) => {
+    switch (iconType) {
       case "target":
         return <Target className="text-ember w-6 h-6" />;
       case "mountain":
         return <Mountain className="text-ember w-6 h-6" />;
+      case "flame":
+        return <Flame className="text-ember w-6 h-6" />;
       default:
         return <Activity className="text-ember w-6 h-6" />;
     }
   };
 
-  // Greeting derived from athlete name if available
-  const greeting = athlete?.firstname
-    ? `${athlete.firstname}'s Stride`
-    : "STRIDE";
+  const getBigIcon = (iconType: string) => {
+    switch (iconType) {
+      case "target":
+        return <Target className="text-ink w-6 h-6" />;
+      case "mountain":
+        return <Mountain className="text-ink w-6 h-6" />;
+      case "flame":
+        return <Flame className="text-ink w-6 h-6" />;
+      default:
+        return <Activity className="text-ink w-6 h-6" />;
+    }
+  };
 
   return (
     <div className="bg-ink text-text-primary min-h-screen pb-24 md:pb-0 font-ui relative">
+      {/* ── Header ──────────────────────────────────────────────────── */}
       <header className="px-screen-gutter pt-12 pb-6 flex justify-between items-center">
         <h1 className="text-wordmark text-[32px] leading-none tracking-tighter">{greeting}</h1>
         <button
-          onClick={() =>
-            navigate("/camera", {
-              state: {
-                title: activeActivity.title,
-                distance: `${activeActivity.distance} km`,
-                pace: `${activeActivity.pace} /km`,
-                time: activeActivity.time,
-              },
-            })
-          }
+          onClick={() => {
+            if (activeActivity) {
+              openCamera(activeActivity);
+            } else {
+              navigate("/camera", {
+                state: {
+                  title: "Ready to Move",
+                  distance: "0 km",
+                  pace: "--:-- /km",
+                  time: "0:00",
+                },
+              });
+            }
+          }}
           className="w-10 h-10 flex items-center justify-center rounded-full bg-surface hover:bg-surface-raised transition-colors"
           title="Create New Story"
         >
@@ -139,101 +109,159 @@ export default function HomeScreen() {
       </header>
 
       <main className="px-screen-gutter max-w-2xl mx-auto">
-        {/* Featured Activity (Ready to Share) */}
-        <section className="mb-section-v-rhythm relative">
-          <div className="flex justify-between items-end mb-4">
-            <h2 className="text-section-header">Ready to share</h2>
-          </div>
+        {/* ── Featured Activity ─────────────────────────────────────── */}
+        {activeActivity ? (
+          <section className="mb-section-v-rhythm relative">
+            <div className="flex justify-between items-end mb-4">
+              <h2 className="text-section-header">Ready to share</h2>
+              <SourceBadge sourceId={activeActivity.sourceId} />
+            </div>
 
-          <motion.div
-            layout
-            key={activeActivity.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ type: "spring", stiffness: 300, damping: 25 }}
-            className="relative group cursor-pointer"
-            onClick={() =>
-              navigate("/camera", {
-                state: {
-                  title: activeActivity.title,
-                  distance: `${activeActivity.distance} km`,
-                  pace: `${activeActivity.pace} /km`,
-                  time: activeActivity.time,
-                },
-              })
-            }
-          >
-            {/* Volt bloom effect */}
-            <div className="absolute inset-0 bg-ember opacity-20 blur-2xl rounded-2xl group-hover:opacity-30 transition-opacity"></div>
+            <motion.div
+              layout
+              key={activeActivity.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="relative group cursor-pointer"
+              onClick={() => openCamera(activeActivity)}
+            >
+              <div className="absolute inset-0 bg-ember opacity-20 blur-2xl rounded-2xl group-hover:opacity-30 transition-opacity"></div>
 
-            <div className="bg-surface relative z-10 rounded-xl p-5 hairline-border shadow-[0_0_40px_rgba(255,122,26,0.12)]">
-              <div className="flex justify-between items-start mb-6">
-                <div className="w-12 h-12 rounded-sm bg-ember flex items-center justify-center shrink-0">
-                  {activeActivity.iconType === "target" ? (
-                    <Target className="text-ink w-6 h-6" />
-                  ) : activeActivity.iconType === "mountain" ? (
-                    <Mountain className="text-ink w-6 h-6" />
-                  ) : (
-                    <Activity className="text-ink w-6 h-6" />
-                  )}
-                </div>
-                <span className="text-tool-caption text-text-secondary bg-surface-raised px-3 py-1 rounded-full hairline-border">
-                  {activeActivity.timeAgo}
-                </span>
-              </div>
-
-              <div className="mb-4">
-                <h3 className="text-screen-title mb-1">{activeActivity.title}</h3>
-                <p className="text-body text-text-secondary">{activeActivity.subtitle}</p>
-              </div>
-
-              <div className="flex gap-4">
-                <div className="flex flex-col">
-                  <span className="text-metric-md">
-                    {activeActivity.distance}
-                    <span className="text-stat-value text-text-secondary ml-1">km</span>
+              <div className="bg-surface relative z-10 rounded-xl p-5 hairline-border shadow-[0_0_40px_rgba(255,122,26,0.12)]">
+                <div className="flex justify-between items-start mb-6">
+                  <div className="w-12 h-12 rounded-sm bg-ember flex items-center justify-center shrink-0">
+                    {getBigIcon(activeActivity.iconType)}
+                  </div>
+                  <span className="text-tool-caption text-text-secondary bg-surface-raised px-3 py-1 rounded-full hairline-border">
+                    {activeActivity.displayTimeAgo}
                   </span>
                 </div>
-                <div className="w-[1px] bg-hairline"></div>
-                <div className="flex flex-col justify-center">
-                  <span className="text-stat-value">{activeActivity.time}</span>
-                  <span className="text-label text-text-secondary mt-0.5">Time</span>
+
+                <div className="mb-4">
+                  <h3 className="text-screen-title mb-1">{activeActivity.title}</h3>
+                  <p className="text-body text-text-secondary">{activeActivity.subtitle}</p>
                 </div>
-                <div className="w-[1px] bg-hairline"></div>
-                <div className="flex flex-col justify-center">
-                  <span className="text-stat-value">{activeActivity.pace}</span>
-                  <span className="text-label text-text-secondary mt-0.5">Pace</span>
+
+                <div className="flex gap-4">
+                  <div className="flex flex-col">
+                    <span className="text-metric-md">
+                      {activeActivity.displayDistance}
+                      <span className="text-stat-value text-text-secondary ml-1">
+                        {activeActivity.displayDistanceUnit}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="w-[1px] bg-hairline"></div>
+                  <div className="flex flex-col justify-center">
+                    <span className="text-stat-value">{activeActivity.displayTime}</span>
+                    <span className="text-label text-text-secondary mt-0.5">Time</span>
+                  </div>
+                  <div className="w-[1px] bg-hairline"></div>
+                  <div className="flex flex-col justify-center">
+                    <span className="text-stat-value">{activeActivity.displayPace}</span>
+                    <span className="text-label text-text-secondary mt-0.5">Pace</span>
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-4 hairline-border-t flex items-center justify-between text-ember">
+                  <span className="text-stat-value flex items-center gap-1.5">
+                    <Plus className="w-4 h-4" /> Create Story
+                  </span>
+                  <ChevronRight className="w-5 h-5" />
                 </div>
               </div>
+            </motion.div>
+          </section>
+        ) : (
+          /* Empty state when no activities */
+          <section className="mb-section-v-rhythm text-center py-12">
+            <div className="w-16 h-16 mx-auto rounded-full bg-surface-raised flex items-center justify-center mb-4">
+              <Activity className="text-text-secondary w-8 h-8" />
+            </div>
+            <h2 className="text-section-header mb-2">No activities yet</h2>
+            <p className="text-body text-text-secondary">
+              Connect a data source to see your activities here.
+            </p>
+          </section>
+        )}
 
-              <div className="mt-6 pt-4 hairline-border-t flex items-center justify-between text-ember">
-                <span className="text-stat-value flex items-center gap-1.5">
-                  <Plus className="w-4 h-4" /> Create Story for {activeActivity.type}
+        {/* ── Health Today ──────────────────────────────────────────── */}
+        {healthDaily && (
+          <section className="mb-section-v-rhythm">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-section-header">Health Today</h2>
+              {hcState.available && !hcState.authorized && (
+                <button
+                  onClick={hcConnect}
+                  className="text-xs text-ember hover:opacity-80 transition-opacity font-semibold"
+                >
+                  Connect
+                </button>
+              )}
+            </div>
+
+            <div className="bg-surface rounded-lg p-4 hairline-border grid grid-cols-4 gap-3">
+              <div className="flex flex-col items-center text-center gap-1">
+                <Footprints className="text-ember w-5 h-5" />
+                <span className="text-stat-value text-text-primary">
+                  {healthDaily.steps.toLocaleString()}
                 </span>
-                <ChevronRight className="w-5 h-5" />
+                <span className="text-tool-caption text-text-secondary">Steps</span>
+              </div>
+              <div className="flex flex-col items-center text-center gap-1">
+                <Activity className="text-ember w-5 h-5" />
+                <span className="text-stat-value text-text-primary">
+                  {healthDaily.distanceKm.toFixed(1)}
+                </span>
+                <span className="text-tool-caption text-text-secondary">Km</span>
+              </div>
+              <div className="flex flex-col items-center text-center gap-1">
+                <Heart className="text-ember w-5 h-5" />
+                <span className="text-stat-value text-text-primary">
+                  {healthDaily.heartRate.avg > 0 ? healthDaily.heartRate.avg : "--"}
+                </span>
+                <span className="text-tool-caption text-text-secondary">Avg HR</span>
+              </div>
+              <div className="flex flex-col items-center text-center gap-1">
+                <Moon className="text-ember w-5 h-5" />
+                <span className="text-stat-value text-text-primary">
+                  {healthDaily.sleepHours > 0 ? `${healthDaily.sleepHours}h` : "--"}
+                </span>
+                <span className="text-tool-caption text-text-secondary">Sleep</span>
               </div>
             </div>
-          </motion.div>
-        </section>
+          </section>
+        )}
 
-        {/* Previous Activities */}
-        <section className="mb-section-v-rhythm">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-section-header">Previous Activities</h2>
-            <button
-              onClick={() => navigate("/projects")}
-              className="text-xs text-text-secondary hover:text-ember transition-colors flex items-center gap-1"
-            >
-              Saved Projects <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+        {/* ── Filter Bar ────────────────────────────────────────────── */}
+        {previousActivities.length > 0 && (
+          <ActivityFilterBar
+            activeSource={activeSourceFilter}
+            onSourceChange={setSourceFilter}
+            activeType={activeTypeFilter}
+            onTypeChange={setTypeFilter}
+            availableTypes={availableTypes}
+          />
+        )}
 
-          <div className="flex flex-col gap-card-stack-gap">
-            <AnimatePresence>
-              {previousActivities.map((item, index) => {
-                const actualIndexInArray = index + 1;
-                return (
+        {/* ── Previous Activities ───────────────────────────────────── */}
+        {previousActivities.length > 0 && (
+          <section className="mb-section-v-rhythm">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-section-header">Previous Activities</h2>
+              <button
+                onClick={() => navigate("/projects")}
+                className="text-xs text-text-secondary hover:text-ember transition-colors flex items-center gap-1"
+              >
+                Saved Projects <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-card-stack-gap">
+              <AnimatePresence>
+                {previousActivities.map((item) => (
                   <motion.button
                     layout
                     key={item.id}
@@ -241,33 +269,38 @@ export default function HomeScreen() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.98 }}
                     transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                    onClick={() => handleSwapActivity(actualIndexInArray)}
+                    onClick={() => openCamera(item)}
                     className="bg-surface rounded-lg p-4 flex items-center hairline-border hover:bg-surface-raised active:scale-[0.99] transition-all text-left group"
                   >
                     <div className="w-12 h-12 rounded-sm bg-ember-dim flex items-center justify-center shrink-0 mr-4 group-hover:bg-ember/20 transition-colors">
                       {getIcon(item.iconType)}
                     </div>
-                    <div className="flex-grow">
-                      <h4 className="text-stat-value mb-1">
-                        {item.title}
-                      </h4>
-                      <p className="text-label text-text-secondary">
-                        {item.distance} km • {item.pace} /km • {item.time}
+                    <div className="flex-grow min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <h4 className="text-stat-value truncate">
+                          {item.title}
+                        </h4>
+                        <SourceBadge sourceId={item.sourceId} />
+                      </div>
+                      <p className="text-label text-text-secondary truncate">
+                        {item.displayDistance} {item.displayDistanceUnit} • {item.displayPace} • {item.displayTime}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-tool-caption text-text-secondary">{item.timeAgo}</span>
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      <span className="text-tool-caption text-text-secondary">
+                        {item.displayTimeAgo}
+                      </span>
                       <ChevronRight className="text-text-secondary w-5 h-5 group-hover:text-ember transition-colors" />
                     </div>
                   </motion.button>
-                );
-              })}
-            </AnimatePresence>
-          </div>
-        </section>
+                ))}
+              </AnimatePresence>
+            </div>
+          </section>
+        )}
       </main>
 
-      {/* Bottom Nav */}
+      {/* ── Bottom Nav ─────────────────────────────────────────────── */}
       <nav className="fixed bottom-0 w-full z-50 rounded-t-xl hairline-border-t bg-surface flex justify-around items-center px-4 py-3 pb-safe" aria-label="Main navigation">
         <button
           className="flex flex-col items-center justify-center bg-surface-raised text-ember rounded-full p-3 transition-colors"

@@ -255,6 +255,50 @@ export interface AuthState {
 }
 
 // ====================================================================
+// Google Health Connect Types
+// ====================================================================
+
+/** Current state of Health Connect on the device. */
+export interface HealthConnectState {
+  available: boolean;
+  authorized: boolean;
+  loading: boolean;
+  error: string | null;
+}
+
+/** Daily health snapshot aggregated from Health Connect. */
+export interface DailyHealthData {
+  steps: number;
+  distanceKm: number;
+  caloriesBurned: number;
+  heartRate: { avg: number; max: number; resting: number };
+  sleepHours: number;
+  weightKg: number;
+}
+
+/** Weekly aggregated health stats. */
+export interface WeeklyHealthData {
+  totalSteps: number;
+  avgDailySteps: number;
+  totalDistanceKm: number;
+  totalCalories: number;
+  avgRestingHeartRate: number;
+  avgSleepHours: number;
+}
+
+/** Health Connect permission group — which data types we need to read. */
+export const HEALTH_PERMISSION_TYPES = [
+  "steps",
+  "distance",
+  "calories",
+  "heartRate",
+  "sleep",
+  "weight",
+] as const;
+
+export type HealthPermissionType = (typeof HEALTH_PERMISSION_TYPES)[number];
+
+// ====================================================================
 // API Error Classes
 // ====================================================================
 

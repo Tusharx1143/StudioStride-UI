@@ -6,6 +6,9 @@
  * - the current athlete profile
  * - login / logout actions
  * - RequireAuth guard for protected routes
+ *
+ * For dual-auth (Strava + Health Connect), use `RequireAnyAuth` from App.tsx
+ * or pass `allowHealthConnect` to `RequireAuth`.
  */
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
