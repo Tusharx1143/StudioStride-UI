@@ -13,7 +13,6 @@ import { ActivitySourcesProvider } from "./contexts/ActivitySourcesContext";
 import AuthScreen from "./components/AuthScreen";
 import HomeScreen from "./components/HomeScreen";
 import ProfileScreen from "./components/ProfileScreen";
-import EditorScreen from "./components/EditorScreen";
 import ProjectsScreen from "./components/ProjectsScreen";
 import SnapCamera from "./components/SnapCamera";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -99,18 +98,6 @@ function AnimatedRoutes() {
               <RequireAnyAuth>
                 <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
                   <ProfileScreen />
-                </motion.div>
-              </RequireAnyAuth>
-            </ErrorBoundary>
-          }
-        />
-        <Route
-          path="/editor"
-          element={
-            <ErrorBoundary>
-              <RequireAnyAuth>
-                <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
-                  <EditorScreen />
                 </motion.div>
               </RequireAnyAuth>
             </ErrorBoundary>

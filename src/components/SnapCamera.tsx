@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   X, Camera, RefreshCw, Image as ImageIcon, Music, Heart,
@@ -11,6 +11,7 @@ import {
   CustomLayouts,
   PhotoSource,
   StatSlotId,
+  StatData,
   TemplateFamily,
   TemplateLayout,
 } from "../types";
@@ -18,6 +19,8 @@ import { triggerHaptic } from "../utils/haptics";
 import TemplateCarousel from "./TemplateCarousel";
 import StatLayer from "./StatLayer";
 import SnapGuides from "./SnapGuides";
+import EditorScreen from "./EditorScreen";
+import type { EditorEmbeddedProps } from "./EditorScreen";
 import type { SnapLine } from "../utils/snapping";
 import {
   clearCustomLayout,
@@ -135,6 +138,11 @@ export default function SnapCamera() {
   const [snapGuides, setSnapGuides] = useState<SnapLine[]>([]);
   const [viewfinderSize, setViewfinderSize] = useState({ width: 0, height: 0 });
 
+  // Editor mode — when set, the camera viewfinder is replaced by the editor
+  // panel inline instead of navigating to a separate /editor route.
+  const [editorData, setEditorData] = useState<EditorEmbeddedProps | null>(null);
+  const exitEditor = useCallback(() => setEditorData(null), []);
+
   const captureViewfinderSize = () => {
     const rect = viewfinderRef.current?.getBoundingClientRect();
     if (rect) setViewfinderSize({ width: rect.width, height: rect.height });
@@ -226,6 +234,33 @@ export default function SnapCamera() {
     };
   }, [facingMode]);
 
+  // Handle quickEditor flag from HomeScreen or ProjectsScreen — skip the
+  // camera viewfinder and go straight to the editor panel.
+  useEffect(() => {
+    const qe = (location.state as Record<string, unknown>)?.quickEditor;
+    if (qe && !editorData) {
+      const fallbackImage = sessionStorage.getItem("temp_captured_image") ?? "";
+      const ls = location.state as Record<string, unknown> | null;
+      setEditorData({
+        capturedImage: (ls?.capturedImage as string) || fallbackImage || STOCK_PHOTOS[0].url,
+        selectedTemplateFamily: null,
+        selectedLensId: (ls?.selectedLensId as string) || undefined,
+        lensFilter: "",
+        statData: {
+          distance: parseFloat((ls?.distance as string) ?? "") || parseFloat((ls?.activityDistance as string) ?? "") || 8.4,
+          distanceUnit: "km",
+          pace: ((ls?.pace as string) ?? (ls?.activityPace as string) ?? "6:12 /km").replace(" /km", ""),
+          time: (ls?.time as string) ?? (ls?.activityTime as string) ?? "52:18",
+          title: (ls?.title as string) ?? (ls?.activityTitle as string) ?? "Morning Run",
+        },
+        statLayout: resolveLayout("default", loadCustomLayouts()),
+        appliedMusic: null,
+        aspectRatio: "9:16",
+        onExit: exitEditor,
+      });
+    }
+  }, []);
+
   const toggleCameraFacing = () => {
     setFacingMode((prev) => (prev === "user" ? "environment" : "user"));
   };
@@ -249,19 +284,22 @@ export default function SnapCamera() {
         } catch {
           // ignore quota exceeded
         }
-        navigate("/editor", {
-          state: {
-            capturedImage: imageUrl,
-            selectedLensId: "minimal",
-            lensFilter,
-            selectedTemplateFamily: selectedTemplate,
-            statLayout,
-            appliedMusic: selectedMusic ? selectedMusic.title : null,
-            activityTitle,
-            activityDistance,
-            activityPace,
-            activityTime,
+        setEditorData({
+          capturedImage: imageUrl,
+          selectedTemplateFamily: selectedTemplate,
+          selectedLensId: "minimal",
+          lensFilter,
+          statData: {
+            distance: distanceNumeric,
+            distanceUnit: "km",
+            pace: paceRaw,
+            time: activityTime,
+            title: activityTitle,
           },
+          statLayout,
+          appliedMusic: selectedMusic ? selectedMusic.title : null,
+          aspectRatio,
+          onExit: exitEditor,
         });
       };
       reader.readAsDataURL(file);
@@ -275,19 +313,22 @@ export default function SnapCamera() {
     } catch {
       // ignore
     }
-    navigate("/editor", {
-      state: {
-        capturedImage: photo.url,
-        selectedLensId: "minimal",
-        lensFilter,
-        selectedTemplateFamily: selectedTemplate,
-        statLayout,
-        appliedMusic: selectedMusic ? selectedMusic.title : null,
-        activityTitle,
-        activityDistance,
-        activityPace,
-        activityTime,
+    setEditorData({
+      capturedImage: photo.url,
+      selectedTemplateFamily: selectedTemplate,
+      selectedLensId: "minimal",
+      lensFilter,
+      statData: {
+        distance: distanceNumeric,
+        distanceUnit: "km",
+        pace: paceRaw,
+        time: activityTime,
+        title: activityTitle,
       },
+      statLayout,
+      appliedMusic: selectedMusic ? selectedMusic.title : null,
+      aspectRatio,
+      onExit: exitEditor,
     });
   };
 
@@ -379,23 +420,32 @@ export default function SnapCamera() {
       }
 
       setIsCapturing(false);
-      navigate("/editor", {
-        state: {
-          capturedImage: imageUrl,
-          selectedLensId: "minimal",
-          lensFilter,
-          selectedTemplateFamily: selectedTemplate,
-          statLayout,
-          appliedMusic: selectedMusic ? selectedMusic.title : null,
-          aspectRatio: aspectRatio,
-          activityTitle,
-          activityDistance,
-          activityPace,
-          activityTime,
+      setEditorData({
+        capturedImage: imageUrl,
+        selectedTemplateFamily: selectedTemplate,
+        selectedLensId: "minimal",
+        lensFilter,
+        statData: {
+          distance: distanceNumeric,
+          distanceUnit: "km",
+          pace: paceRaw,
+          time: activityTime,
+          title: activityTitle,
         },
+        statLayout,
+        appliedMusic: selectedMusic ? selectedMusic.title : null,
+        aspectRatio: aspectRatio,
+        onExit: exitEditor,
       });
     }, 250);
   };
+
+  // ── Editor mode ──────────────────────────────────────────────────────
+  // When a photo is captured/imported, show the editor panel inline instead
+  // of navigating to a separate route. The editor's onExit goes back here.
+  if (editorData) {
+    return <EditorScreen embeddedProps={editorData} />;
+  }
 
   return (
     <div className="bg-ink text-text-primary h-[100dvh] w-full overflow-hidden flex flex-col relative font-ui select-none">

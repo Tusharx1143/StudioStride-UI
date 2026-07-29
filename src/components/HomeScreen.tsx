@@ -63,14 +63,15 @@ export default function HomeScreen() {
     try {
       sessionStorage.setItem("temp_captured_image", fallbackImage);
     } catch { /* quota */ }
-    navigate("/editor", {
+    navigate("/camera", {
       state: {
+        quickEditor: true,
         capturedImage: fallbackImage,
         selectedLensId: "minimal",
-        activityTitle: statData.title,
-        activityDistance: `${statData.distance} ${statData.distanceUnit}`,
-        activityPace: `${statData.pace} /km`,
-        activityTime: statData.time,
+        title: statData.title,
+        distance: `${statData.distance} ${statData.distanceUnit}`,
+        pace: `${statData.pace} /km`,
+        time: statData.time,
       },
     });
   };

@@ -155,30 +155,56 @@ const BG_STYLES: { id: TextOverlay["bgStyle"]; label: string }[] = [
   { id: "outline", label: "Outline" },
 ];
 
-export default function EditorScreen() {
+// ---------------------------------------------------------------------------
+// Embedded props — when EditorScreen is rendered inline inside SnapCamera
+// instead of as a standalone route, all data comes through this interface.
+// ---------------------------------------------------------------------------
+export interface EditorEmbeddedProps {
+  capturedImage: string;
+  selectedTemplateFamily: TemplateFamily | null;
+  selectedLensId: string | undefined;
+  lensFilter: string;
+  statData: StatData;
+  statLayout: TemplateLayout;
+  appliedMusic: string | null;
+  aspectRatio: string;
+  onExit: () => void;
+}
+
+interface EditorScreenProps {
+  embeddedProps?: EditorEmbeddedProps;
+}
+
+export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // Image source captured from camera or gallery.
-  // sessionStorage is the primary source (survives React Router state limits).
-  // Router state is a faster fallback, stock photo is the last resort.
+  // When embedded, use embeddedProps; otherwise fall back to sessionStorage
+  // + router state + stock default.
   const capturedImage =
-    sessionStorage.getItem("temp_captured_image") ||
-    location.state?.capturedImage ||
+    embeddedProps?.capturedImage ??
+    sessionStorage.getItem("temp_captured_image") ??
+    (location.state?.capturedImage as string | undefined) ??
     STOCK_PHOTOS[0].url;
 
   // Selected template family, carried over from the camera
   const selectedTemplateFamily: TemplateFamily | null =
-    location.state?.selectedTemplateFamily || null;
+    embeddedProps?.selectedTemplateFamily ??
+    (location.state?.selectedTemplateFamily as TemplateFamily | null) ??
+    null;
   // Selected lens, carried over from the camera viewfinder
   const selectedLensId: string | undefined =
-    (location.state?.selectedLensId as string) || undefined;
+    embeddedProps?.selectedLensId ??
+    (location.state?.selectedLensId as string | undefined);
 
   // Lens filter (CSS filter string) carried over from the camera — the base
   // image shows this filter so lens effects are editable in the editor.
   const cameraLensFilter: string =
-    (location.state?.lensFilter as string) || "";
+    embeddedProps?.lensFilter ??
+    (location.state?.lensFilter as string) ??
+    "";
   const [lensFilter, setLensFilter] = useState<string>(cameraLensFilter);
 
   // Filter picker
@@ -191,21 +217,25 @@ export default function EditorScreen() {
 
   // Stat data and slot positions handed over from the camera. The layout the
   // user arranged there is the starting point here.
-  const statData: StatData = {
-    distance: parseFloat(location.state?.activityDistance ?? "") || 8.4,
+  const routeStatData = {
+    distance: parseFloat((location.state?.activityDistance as string) ?? "") || 8.4,
     distanceUnit: "km",
-    pace: (location.state?.activityPace ?? "6:12 /km").replace(" /km", ""),
-    time: location.state?.activityTime ?? "52:18",
-    title: location.state?.activityTitle ?? "Morning Run",
+    pace: ((location.state?.activityPace as string) ?? "6:12 /km").replace(" /km", ""),
+    time: (location.state?.activityTime as string) ?? "52:18",
+    title: (location.state?.activityTitle as string) ?? "Morning Run",
   };
+  const statData: StatData = embeddedProps?.statData ?? routeStatData;
 
   const [statLayout, setStatLayout] = useState<TemplateLayout>(
-    () => location.state?.statLayout ?? resolveLayout(templateId, loadCustomLayouts())
+    () =>
+      embeddedProps?.statLayout ??
+      (location.state?.statLayout as TemplateLayout | undefined) ??
+      resolveLayout(templateId, loadCustomLayouts())
   );
   // Auto-opens once so the strip teaches that stats are tappable, then never
   // again. Any later tap on a stat brings it back.
   const [selectedStatSlot, setSelectedStatSlot] = useState<StatSlotId | null>(() =>
-    shouldAutoOpenStrip(Boolean(selectedTemplateFamily)) ? "distance" : null
+    shouldAutoOpenStrip(Boolean(selectedTemplateFamily ?? null)) ? "distance" : null
   );
 
   // Alignment guides shown only while a drag is snapped.
@@ -1511,7 +1541,7 @@ export default function EditorScreen() {
       <div className="relative z-20 flex items-center justify-between px-4 pt-12 pb-3 w-full">
         {/* Close / Back to Camera */}
         <button
-          onClick={() => navigate("/home")}
+          onClick={() => embeddedProps?.onExit ? embeddedProps.onExit() : navigate("/home")}
           className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-95 transition-transform"
           aria-label="Close Editor"
         >

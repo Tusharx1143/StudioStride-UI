@@ -203,7 +203,18 @@ export default function ProfileScreen() {
                   }}
                   whileHover={{ scale: 1.005 }}
                   whileTap={{ scale: 0.99 }}
-                  onClick={() => navigate("/editor")}
+                  onClick={() => {
+                    const statData = item.toStatData();
+                    navigate("/camera", {
+                      state: {
+                        quickEditor: true,
+                        title: statData.title,
+                        distance: `${statData.distance} ${statData.distanceUnit}`,
+                        pace: `${statData.pace} /km`,
+                        time: statData.time,
+                      },
+                    });
+                  }}
                   className="bg-surface rounded-lg p-4 flex items-center hairline-border hover:bg-surface-raised transition-colors text-left"
                 >
                   <div className="w-12 h-12 rounded-sm bg-ember-dim flex items-center justify-center shrink-0 mr-4">

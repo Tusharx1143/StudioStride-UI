@@ -108,8 +108,9 @@ export default function ProjectsScreen() {
   };
 
   const handleOpenProject = (project: SavedProject) => {
-    navigate("/editor", {
+    navigate("/camera", {
       state: {
+        quickEditor: true,
         projectId: project.id,
         capturedImage: project.bgImage,
         selectedLensId: project.lensId,
