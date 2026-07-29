@@ -28,6 +28,10 @@ interface TextOverlay {
   bgStyle: "none" | "solid" | "semi" | "outline";
   align: "left" | "center" | "right";
   fontSize: number;
+  // Set by the pinch/rotate gesture; must stay in step with EditorScreen's
+  // copy of this interface until the two are deduplicated.
+  rotation?: number;
+  scale?: number;
   hidden?: boolean;
   locked?: boolean;
   zIndex?: number;
@@ -266,7 +270,9 @@ export default function ExportModal({
         const t: TextOverlay = layer.data;
         ctx.save();
 
-        const fontSizePx = Math.max(16, t.fontSize * scaleX);
+        // Text can be pinch-scaled and rotated on canvas, so both have to be
+        // reproduced here or the export silently drops the user's gesture.
+        const fontSizePx = Math.max(16, t.fontSize * (t.scale ?? 1) * scaleX);
         // Map editor font styles to actual font families matching the in-app rendering
         let fontFamily = '"Inter", sans-serif'; // Classic / Modern default
         if (t.fontStyle === "Bold") fontFamily = '"Archivo", sans-serif';
@@ -279,9 +285,15 @@ export default function ExportModal({
         ctx.textAlign = t.align;
         ctx.textBaseline = "middle";
 
-        // Position mapping
+        // Position mapping. Everything below is drawn about the origin so the
+        // rotation applies to the pill and the text together.
         const posX = (containerWidth / 2 + t.x) * scaleX;
         const posY = (containerHeight / 2 + t.y) * scaleY;
+
+        ctx.translate(posX, posY);
+        if (t.rotation) {
+          ctx.rotate((t.rotation * Math.PI) / 180);
+        }
 
         // Background Pill
         if (t.bgStyle !== "none") {
@@ -301,8 +313,8 @@ export default function ExportModal({
           ctx.fillStyle = bgFill;
           const padX = fontSizePx * 0.4;
           const padY = fontSizePx * 0.2;
-          const rectX = posX - (t.align === "center" ? textWidth / 2 : t.align === "right" ? textWidth : 0) - padX;
-          const rectY = posY - textHeight / 2 - padY;
+          const rectX = -(t.align === "center" ? textWidth / 2 : t.align === "right" ? textWidth : 0) - padX;
+          const rectY = -textHeight / 2 - padY;
           const rectW = textWidth + padX * 2;
           const rectH = textHeight + padY * 2;
 
@@ -324,7 +336,7 @@ export default function ExportModal({
         }
 
         ctx.fillStyle = textFill;
-        ctx.fillText(t.text, posX, posY);
+        ctx.fillText(t.text, 0, 0);
 
         ctx.restore();
       } else if (layer.type === "sticker" && layer.data) {

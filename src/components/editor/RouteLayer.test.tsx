@@ -72,6 +72,26 @@ describe("RouteLayer", () => {
     expect(markup).toContain('stroke-linejoin="round"');
   });
 
+  test("exposes a hit path so only the route itself is tappable", () => {
+    // The layer's box is a large square that is mostly empty. Without a
+    // stroke-shaped hit target it swallows taps on the photo around the route.
+    const markup = renderToStaticMarkup(<RouteLayer overlay={overlay()} />);
+
+    expect(markup).toContain("pointer-events:stroke");
+  });
+
+  test("gives the hit path a wider stroke than the visible one", () => {
+    // A 3px line is far too thin to hit with a fingertip.
+    const markup = renderToStaticMarkup(<RouteLayer overlay={overlay({ strokeWidth: 3 })} />);
+
+    const widths = Array.from(markup.matchAll(/stroke-width="(\d+(?:\.\d+)?)"/g)).map((m) =>
+      Number(m[1])
+    );
+
+    expect(widths.length).toBe(2);
+    expect(Math.max(...widths)).toBeGreaterThanOrEqual(20);
+  });
+
   test("renders nothing when the layer is hidden", () => {
     const markup = renderToStaticMarkup(<RouteLayer overlay={overlay({ hidden: true })} />);
 

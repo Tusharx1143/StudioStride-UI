@@ -8,6 +8,9 @@
 import type { RouteOverlay } from "../../types";
 import { fitRoute } from "../../utils/routeGeometry";
 
+/** Touch target width for the route, independent of how thin it's drawn. */
+const HIT_STROKE_WIDTH = 24;
+
 interface RouteLayerProps {
   overlay: RouteOverlay;
 }
@@ -31,6 +34,19 @@ export function RouteLayer({ overlay }: RouteLayerProps) {
       overflow="visible"
       style={{ pointerEvents: "none", display: "block" }}
     >
+      {/* Invisible hit path. The layer's box is a large mostly-empty square;
+          without this, taps anywhere inside it count as taps on the route and
+          the photo underneath becomes unreachable. Widened well past the
+          visible stroke so a fingertip can actually land on it. */}
+      <polyline
+        points={points}
+        fill="none"
+        stroke="rgba(0,0,0,0)"
+        strokeWidth={HIT_STROKE_WIDTH}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{ pointerEvents: "stroke" }}
+      />
       <polyline
         points={points}
         fill="none"
@@ -39,6 +55,7 @@ export function RouteLayer({ overlay }: RouteLayerProps) {
         strokeLinecap="round"
         strokeLinejoin="round"
         opacity={overlay.opacity}
+        style={{ pointerEvents: "none" }}
       />
     </svg>
   );

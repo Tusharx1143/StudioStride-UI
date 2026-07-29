@@ -988,6 +988,7 @@ export default function EditorScreen() {
     setStickerOverlays((prev) => [...prev, newSticker]);
     setSelectedStickerId(newSticker.id);
     setSelectedTextId(null);
+    setSelectedRouteId(null);
     setIsStickerModalOpen(false);
     showToast(`Added ${item.label}`);
   };
@@ -1091,10 +1092,12 @@ export default function EditorScreen() {
   };
 
   /**
-   * Add the activity's route to the canvas, or select it if it's already
-   * there — a second copy of the same run isn't something anyone wants.
+   * Add the activity's route to the canvas, or reopen its controls if it's
+   * already there — a second copy of the same run isn't something anyone
+   * wants. Deliberately does not select the layer: the selection box belongs
+   * to tapping the route itself, not to adding or restyling it.
    */
-  const addOrSelectRoute = () => {
+  const addOrEditRoute = () => {
     if (!routeGeometry) return;
 
     setSelectedTextId(null);
@@ -1103,10 +1106,7 @@ export default function EditorScreen() {
     setSelectedStatSlot(null);
     setActiveTool("route");
 
-    if (routeOverlay) {
-      setSelectedRouteId(routeOverlay.id);
-      return;
-    }
+    if (routeOverlay) return;
 
     pushHistorySnapshot();
     const created: RouteOverlay = {
@@ -1127,7 +1127,6 @@ export default function EditorScreen() {
       zIndex: 40,
     };
     setRouteOverlay(created);
-    setSelectedRouteId(created.id);
     showToast("Route added");
   };
 
@@ -1135,8 +1134,6 @@ export default function EditorScreen() {
   const tools: RailTool[] = [
     { id: "layers", label: "Layers", icon: Layers },
     { id: "text", label: "Text", icon: Type },
-    // Only offered when the activity actually carries GPS geometry.
-    ...(routeGeometry ? [{ id: "route", label: "Route", icon: RouteIcon }] : []),
     { id: "draw", label: "Draw", icon: PenTool },
     { id: "stickers", label: "Stickers", icon: StickyNote },
     { id: "crop", label: "Crop", icon: Crop },
@@ -1176,7 +1173,7 @@ export default function EditorScreen() {
     } else if (toolId === "text") {
       openTextEditor();
     } else if (toolId === "route") {
-      addOrSelectRoute();
+      addOrEditRoute();
     } else if (toolId === "stickers") {
       setIsStickerModalOpen(true);
       setActiveTool("stickers");
@@ -1265,6 +1262,7 @@ export default function EditorScreen() {
         onClick={() => {
           setSelectedTextId(null);
           setSelectedStickerId(null);
+          setSelectedRouteId(null);
           setIsImageSelected(false);
           setSelectedStatSlot(null);
         }}
@@ -1281,6 +1279,7 @@ export default function EditorScreen() {
             setIsImageSelected(true);
             setSelectedTextId(null);
             setSelectedStickerId(null);
+            setSelectedRouteId(null);
             setSelectedStatSlot(null);
           }}
           className={`relative transition-all duration-300 flex items-center justify-center ${
@@ -1355,6 +1354,7 @@ export default function EditorScreen() {
             setSelectedStatSlot(slot);
             setSelectedTextId(null);
             setSelectedStickerId(null);
+            setSelectedRouteId(null);
             setIsImageSelected(false);
           }}
           onDragStart={() => {
@@ -1397,6 +1397,7 @@ export default function EditorScreen() {
                 }
                 setSelectedTextId(overlay.id);
                 setSelectedStickerId(null);
+                setSelectedRouteId(null);
                 setIsImageSelected(false);
                 setSelectedStatSlot(null);
               }}
@@ -1572,6 +1573,9 @@ export default function EditorScreen() {
             rotate={routeOverlay.rotation}
             scale={routeOverlay.scale}
             zIndex={routeOverlay.zIndex ?? 40}
+            // Only the drawn path is tappable; the rest of the square box
+            // must stay transparent to taps meant for the photo.
+            hitArea="children"
             className={`absolute touch-none flex items-center justify-center rounded-2xl transition-all ${
               routeOverlay.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
             } ${
@@ -1619,6 +1623,7 @@ export default function EditorScreen() {
                 }
                 setSelectedStickerId(sticker.id);
                 setSelectedTextId(null);
+                setSelectedRouteId(null);
                 setIsImageSelected(false);
                 setSelectedStatSlot(null);
               }}
@@ -2825,6 +2830,23 @@ export default function EditorScreen() {
               <Camera className="w-6 h-6 text-black/70" />
             </div>
           </motion.button>
+
+          {/* Route — mirrors the background button, and like the rail's Route
+              tool only exists when the activity carries GPS geometry. */}
+          {routeGeometry && (
+            <button
+              onClick={addOrEditRoute}
+              className={`w-[44px] h-[44px] rounded-full backdrop-blur-md border flex items-center justify-center active:scale-90 transition-all shrink-0 ${
+                routeOverlay
+                  ? "bg-ember text-ink border-ember"
+                  : "bg-black/60 text-white/60 hover:text-white border-white/15"
+              }`}
+              title="Add route"
+              aria-label="Add route"
+            >
+              <RouteIcon className="w-4 h-4" />
+            </button>
+          )}
         </motion.div>
       </div>
 
