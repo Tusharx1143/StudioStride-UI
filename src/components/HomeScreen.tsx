@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Activity, Target, ChevronRight, User, Home, Plus, Camera, FolderKanban,
@@ -11,6 +11,8 @@ import { useActivitySources } from "../contexts/ActivitySourcesContext";
 import SourceBadge from "./SourceBadge";
 import ActivityFilterBar from "./ActivityFilterBar";
 import type { UnifiedActivity } from "../sources/types";
+import { RouteThumbnail } from "./RouteThumbnail";
+import { partitionActivities } from "../utils/featuredActivity";
 
 // ---------------------------------------------------------------------------
 // Component
@@ -33,8 +35,24 @@ export default function HomeScreen() {
 
   // ── Derive display data ───────────────────────────────────────────────
 
-  const activeActivity = filteredActivities[0] ?? null;
-  const previousActivities = filteredActivities.slice(1);
+  // Which activity the user has promoted into "Ready to share". Null means
+  // the default (newest); an id that a filter removes falls back to it.
+  const [featuredId, setFeaturedId] = useState<string | null>(null);
+
+  const { featured: activeActivity, previous: previousActivities } = partitionActivities(
+    filteredActivities,
+    featuredId
+  );
+
+  /**
+   * Promote a previous activity. The featured card lives above the list, so
+   * scroll it into view — otherwise tapping a row further down changes
+   * something the user cannot see and reads as nothing having happened.
+   */
+  const featureActivity = (activity: UnifiedActivity) => {
+    setFeaturedId(activity.id);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const greeting = athlete?.firstname
     ? `${athlete.firstname}'s Stride`
@@ -136,7 +154,17 @@ export default function HomeScreen() {
               <div className="bg-surface relative z-10 rounded-xl p-5 hairline-border shadow-[0_0_40px_rgba(255,122,26,0.12)]">
                 <div className="flex justify-between items-start mb-6">
                   <div className="w-12 h-12 rounded-sm bg-ember flex items-center justify-center shrink-0">
-                    {getBigIcon(activeActivity.iconType)}
+                    {activeActivity.route ? (
+                      // Ink on ember: the badge is solid orange.
+                      <RouteThumbnail
+                        geometry={activeActivity.route}
+                        size={40}
+                        strokeWidth={2}
+                        color="var(--color-ink, #101014)"
+                      />
+                    ) : (
+                      getBigIcon(activeActivity.iconType)
+                    )}
                   </div>
                   <span className="text-tool-caption text-text-secondary bg-surface-raised px-3 py-1 rounded-full hairline-border">
                     {activeActivity.displayTimeAgo}
@@ -337,11 +365,17 @@ export default function HomeScreen() {
                     exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.2 } }}
                     whileHover={{ scale: 1.005 }}
                     whileTap={{ scale: 0.99 }}
-                    onClick={() => openEditor(item)}
+                    onClick={() => featureActivity(item)}
+                    aria-label={`Feature ${item.title}`}
                     className="bg-surface rounded-lg p-4 flex items-center hairline-border hover:bg-surface-raised transition-all text-left group"
                   >
-                    <div className="w-12 h-12 rounded-sm bg-ember-dim flex items-center justify-center shrink-0 mr-4 group-hover:bg-ember/20 transition-colors">
-                      {getIcon(item.iconType)}
+                    <div className="w-12 h-12 rounded-sm bg-ember-dim flex items-center justify-center shrink-0 mr-4 group-hover:bg-ember/20 transition-colors text-ember">
+                      {item.route ? (
+                        // currentColor picks up text-ember against the dim badge.
+                        <RouteThumbnail geometry={item.route} size={40} strokeWidth={2} />
+                      ) : (
+                        getIcon(item.iconType)
+                      )}
                     </div>
                     <div className="flex-grow min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
