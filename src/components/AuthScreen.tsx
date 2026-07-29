@@ -60,7 +60,7 @@ export default function AuthScreen() {
     <main className="flex-grow flex flex-col items-center justify-center px-screen-gutter relative z-10 w-full max-w-md mx-auto min-h-screen pt-12 pb-safe bg-ink">
       {/* Auth loading overlay */}
       <AnimatePresence>
-        {(isConnecting || hcState.loading) && (
+        {isConnecting && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

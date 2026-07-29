@@ -89,7 +89,18 @@ export function HealthConnectProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     async function init() {
-      const avail = await isAvailable();
+      // Timeout the availability check — native modules can hang in the browser
+      const avail = await Promise.race([
+        isAvailable(),
+        new Promise<HealthConnectState>((_, reject) =>
+          setTimeout(() => reject(new Error("Health Connect check timed out")), 3000),
+        ),
+      ]).catch(() => ({
+        available: false,
+        authorized: false,
+        loading: false,
+        error: null,
+      }));
       if (cancelled) return;
 
       if (!avail.available) {
