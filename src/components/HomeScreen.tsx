@@ -14,6 +14,13 @@ import ActivityFilterBar from "./ActivityFilterBar";
 import type { UnifiedActivity } from "../sources/types";
 import { RouteThumbnail } from "./RouteThumbnail";
 import { partitionActivities } from "../utils/featuredActivity";
+import {
+  buildRecap,
+  recapSummary,
+  recapTitle,
+  recapToStatData,
+  type Recap,
+} from "../utils/recap";
 import { paceSuffix } from "../utils/units";
 import { useDistanceUnit } from "../utils/unitPreference";
 
@@ -59,6 +66,26 @@ export default function HomeScreen() {
   const featureActivity = (activity: UnifiedActivity) => {
     setFeaturedId(activity.id);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Aggregated from the same combined feed the list already uses.
+  const weekRecap = buildRecap(filteredActivities, "week");
+  const monthRecap = buildRecap(filteredActivities, "month");
+
+  /** Opens a recap in the editor as ordinary stats — no parallel pipeline. */
+  const openRecap = (recap: Recap) => {
+    const statData = recapToStatData(recap, distanceUnit);
+    navigate("/editor", {
+      state: {
+        title: statData.title,
+        distance: `${statData.distance} ${statData.distanceUnit}`,
+        pace: `${statData.pace} ${paceSuffix(distanceUnit)}`,
+        time: statData.time,
+        metrics: statData.metrics,
+        // The longest run's shape stands in for the period.
+        route: recap.longest?.route ?? recap.withRoutes[0]?.route,
+      },
+    });
   };
 
   const greeting = athlete?.firstname
@@ -340,6 +367,51 @@ export default function HomeScreen() {
             onTypeChange={setTypeFilter}
             availableTypes={availableTypes}
           />
+        )}
+
+        {/* ── In Review ─────────────────────────────────────────────────
+            Every stat in the app is single-activity. Recaps get shared on a
+            predictable cadence, which is the retention loop a story editor
+            wants — and they compose through the ordinary editor pipeline. */}
+        {(weekRecap.activityCount > 0 || monthRecap.activityCount > 0) && (
+          <section className="mb-section-v-rhythm">
+            <h2 className="text-section-header mb-4">In review</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[weekRecap, monthRecap]
+                .filter((r) => r.activityCount > 0)
+                .map((recap) => (
+                  <button
+                    key={recap.period}
+                    onClick={() => openRecap(recap)}
+                    className="bg-surface hairline-border rounded-xl p-4 text-left hover:bg-surface-raised hover:border-ember/40 transition-colors group"
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="min-w-0">
+                        <h3 className="text-stat-value truncate">{recapTitle(recap)}</h3>
+                        <p className="text-label text-text-secondary mt-0.5 truncate">
+                          {recapSummary(recap, distanceUnit)}
+                        </p>
+                      </div>
+                      <ChevronRight className="w-5 h-5 shrink-0 text-text-secondary group-hover:text-ember transition-colors" />
+                    </div>
+
+                    {/* RouteThumbnail makes the route grid almost free. */}
+                    {recap.withRoutes.length > 0 && (
+                      <div className="flex items-center gap-2 text-ember">
+                        {recap.withRoutes.slice(0, 5).map((a) => (
+                          <RouteThumbnail key={a.id} geometry={a.route!} size={28} strokeWidth={2} />
+                        ))}
+                        {recap.withRoutes.length > 5 && (
+                          <span className="text-tool-caption text-text-secondary">
+                            +{recap.withRoutes.length - 5}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </button>
+                ))}
+            </div>
+          </section>
         )}
 
         {/* ── Previous Activities ───────────────────────────────────── */}
