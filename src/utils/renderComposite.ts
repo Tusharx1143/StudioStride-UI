@@ -28,6 +28,12 @@ export interface CompositeParams {
   /** Fill colour, or null to leave the canvas transparent. */
   background: string | null;
   capturedImage: string;
+  /**
+   * CSS filter for the background photo, already composed with intensity.
+   * Applied to the image pass only — the stats, text, stickers, and route sit
+   * on top of the photo and are not meant to be tinted by the lens.
+   */
+  imageFilter?: string;
   textOverlays: TextOverlay[];
   stickerOverlays: StickerOverlay[];
   routeOverlay: RouteOverlay | null;
@@ -138,6 +144,10 @@ export async function renderComposite(p: CompositeParams): Promise<string> {
       img.src = p.capturedImage;
       img.onload = () => {
         ctx.save();
+
+        // The lens is a property of the photo, so it is set inside this
+        // save/restore and never leaks onto the layers drawn afterwards.
+        if (p.imageFilter) ctx.filter = p.imageFilter;
 
         // Translate to canvas center for rotation/flipping
         ctx.translate(width / 2, height / 2);

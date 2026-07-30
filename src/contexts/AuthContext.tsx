@@ -15,6 +15,7 @@ import { createContext, useContext, useEffect, useState, useCallback, type React
 import { useNavigate } from "react-router-dom";
 import { fetchAthlete, logout as apiLogout } from "../services/stravaApi";
 import type { AuthStatus, StravaAthlete } from "../types";
+import { seedDistanceUnitFromAthlete } from "../utils/unitPreference";
 
 // ---------------------------------------------------------------------------
 // Context
@@ -47,6 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((a) => {
         if (cancelled) return;
         setAthlete(a);
+        // The athlete's own km/mi choice, which was typed on StravaAthlete and
+        // read nowhere. Skipped if the user has set a preference in Profile.
+        seedDistanceUnitFromAthlete(a?.measurement_preference);
         setStatus("authenticated");
         setError(null);
       })

@@ -2,8 +2,10 @@ import { describe, expect, test } from "vitest";
 import {
   DEFAULT_FILTER_INTENSITY,
   buildDoc,
+  exportFileStem,
   formatDistance,
   formatRelativeTime,
+  shareCaption,
   isDocDirty,
   newProjectId,
   normalizeDoc,
@@ -258,6 +260,46 @@ describe("formatDistance", () => {
 
   test("shows an em dash rather than the old literal '-' for no distance", () => {
     expect(formatDistance({ ...parts().statData, distance: 0 })).toBe("—");
+  });
+});
+
+describe("shareCaption", () => {
+  test("uses the activity instead of a generic message", () => {
+    expect(shareCaption(parts().statData)).toBe("8.4 km · 6:12/km · 52:18 — Morning Run");
+  });
+
+  test("drops parts it does not have rather than sharing dashes", () => {
+    expect(shareCaption({ ...parts().statData, pace: "—", time: "—" })).toBe(
+      "8.4 km — Morning Run"
+    );
+  });
+
+  test("falls back to the title alone when there are no numbers", () => {
+    expect(
+      shareCaption({ distance: 0, distanceUnit: "km", pace: "—", time: "—", title: "Rest Day" })
+    ).toBe("Rest Day");
+  });
+
+  test("follows the unit through to pace", () => {
+    const imperial = { ...parts().statData, distanceUnit: "mi", pace: "9:58" };
+    expect(shareCaption(imperial)).toContain("9:58/mi");
+  });
+});
+
+describe("exportFileStem", () => {
+  test("slugifies the activity name", () => {
+    expect(exportFileStem({ ...parts().statData, title: "Morning Run" })).toBe("morning-run");
+  });
+
+  test("strips emoji and punctuation that filesystems dislike", () => {
+    expect(exportFileStem({ ...parts().statData, title: "Golden Gate 🌉 Trail!" })).toBe(
+      "golden-gate-trail"
+    );
+  });
+
+  test("never returns an empty stem", () => {
+    expect(exportFileStem({ ...parts().statData, title: "🌉" })).toBe("stride-export");
+    expect(exportFileStem({ ...parts().statData, title: "" })).toBe("untitled");
   });
 });
 

@@ -273,6 +273,38 @@ export function formatDistance(statData: StatData): string {
 }
 
 /**
+ * Share text built from the activity itself.
+ *
+ * The share sheet used to send a hardcoded "Check out my snap!", which is
+ * off-brand and throws away every fact we hold. Empty parts are dropped rather
+ * than shared as placeholder dashes.
+ */
+export function shareCaption(statData: StatData): string {
+  const parts: string[] = [];
+
+  if (statData.distance) parts.push(`${statData.distance} ${statData.distanceUnit}`);
+  if (statData.pace && statData.pace !== "—") {
+    parts.push(`${statData.pace}/${statData.distanceUnit}`);
+  }
+  if (statData.time && statData.time !== "—") parts.push(statData.time);
+
+  const title = projectTitle(statData);
+  if (parts.length === 0) return title;
+
+  return `${parts.join(" · ")} — ${title}`;
+}
+
+/** A filesystem-safe filename stem for an export, from the activity name. */
+export function exportFileStem(statData: StatData): string {
+  const slug = projectTitle(statData)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return slug || "stride-export";
+}
+
+/**
  * Thumbnail dimensions for a crop ratio, capped at 320px on the *long* edge —
  * so every ratio costs about the same, rather than 4:5 quietly being 25%
  * taller than the cap. Small enough that a project costs ~40 KB rather than

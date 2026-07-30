@@ -22,11 +22,14 @@ import type {
   TextOverlay,
 } from "../types";
 import { renderComposite as composite } from "../utils/renderComposite";
+import { exportFileStem, projectTitle, shareCaption } from "../utils/projectDoc";
 
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
   capturedImage: string;
+  /** Lens filter for the photo, already composed with its intensity. */
+  imageFilter?: string;
   textOverlays: TextOverlay[];
   stickerOverlays: StickerOverlay[];
   /** The activity's GPS path, when one was placed on the canvas. */
@@ -51,6 +54,7 @@ export default function ExportModal({
   isOpen,
   onClose,
   capturedImage,
+  imageFilter,
   textOverlays,
   stickerOverlays,
   routeOverlay,
@@ -116,6 +120,7 @@ export default function ExportModal({
       // JPEG has no alpha channel, so it needs an explicit matte.
       background: format === "jpeg" ? "#000000" : null,
       capturedImage,
+      imageFilter,
       textOverlays,
       stickerOverlays,
       routeOverlay: routeOverlay ?? null,
@@ -163,8 +168,9 @@ export default function ExportModal({
   const handleDownload = async () => {
     const url = previewDataUrl || (await renderComposite());
     const ext = format === "jpeg" ? "jpg" : format;
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const filename = `snap_export_${timestamp}.${ext}`;
+    const date = new Date().toISOString().slice(0, 10);
+    // Named after the activity, so a folder of exports is readable.
+    const filename = `${exportFileStem(statData)}-${date}.${ext}`;
 
     const link = document.createElement("a");
     link.href = url;
@@ -204,13 +210,15 @@ export default function ExportModal({
       const res = await fetch(url);
       const blob = await res.blob();
       const ext = format === "jpeg" ? "jpg" : format;
-      const file = new File([blob], `snap.${ext}`, { type: blob.type });
+      const file = new File([blob], `${exportFileStem(statData)}.${ext}`, { type: blob.type });
 
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        // The activity, not "Check out my snap!" — every fact we already hold
+        // was being thrown away here.
         await navigator.share({
           files: [file],
-          title: "Snap Creation",
-          text: "Check out my snap!",
+          title: projectTitle(statData),
+          text: shareCaption(statData),
         });
         showToast("Shared successfully!");
       } else {

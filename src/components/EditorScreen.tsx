@@ -77,6 +77,8 @@ import {
   saveProject,
 } from "../utils/projectStore";
 import { renderComposite } from "../utils/renderComposite";
+import { scaleFilter } from "../utils/filterScale";
+import { getDistanceUnit } from "../utils/unitPreference";
 import GestureSwipeCarousel from "./GestureSwipeCarousel";
 import ExportModal from "./ExportModal";
 import StatLayer from "./StatLayer";
@@ -202,6 +204,11 @@ export default function EditorScreen() {
   // Filter picker
   const [isFilterPickerOpen, setIsFilterPickerOpen] = useState<boolean>(false);
   const [filterIntensity, setFilterIntensity] = useState<number>(85);
+
+  // `lensFilter` holds the lens as designed; intensity is applied here rather
+  // than baked into it, so the slider works for every named lens and "None"
+  // keeps meaning none.
+  const composedFilter = scaleFilter(lensFilter, filterIntensity / 100);
   // Editor state, not a derived constant: undo has to be able to restore it.
   const [templateId, setTemplateId] = useState<string>(
     (routeState.templateId as string | undefined) ?? TEMPLATE_FAMILIES[0].id
@@ -218,12 +225,13 @@ export default function EditorScreen() {
       parseFloat((routeState.distance as string) ?? "") ||
       parseFloat((routeState.activityDistance as string) ?? "") ||
       8.4,
-    distanceUnit: "km",
+    distanceUnit: getDistanceUnit(),
+    // Strip whatever unit suffix the caller attached, rather than assuming km.
     pace: (
       (routeState.pace as string) ??
       (routeState.activityPace as string) ??
-      "6:12 /km"
-    ).replace(" /km", ""),
+      "6:12"
+    ).replace(/\s*\/\s*\w+$/, ""),
     time: (routeState.time as string) ?? (routeState.activityTime as string) ?? "52:18",
     title: (routeState.title as string) ?? (routeState.activityTitle as string) ?? "Morning Run",
   }));
@@ -654,6 +662,7 @@ export default function EditorScreen() {
       containerHeight: canvasRef.current?.clientHeight || 640,
       background: "#000000",
       capturedImage: doc.capturedImage,
+      imageFilter: scaleFilter(doc.lensFilter, doc.filterIntensity / 100),
       textOverlays: doc.textOverlays,
       stickerOverlays: doc.stickerOverlays,
       routeOverlay: doc.routeOverlay,
@@ -1488,7 +1497,7 @@ export default function EditorScreen() {
           className={`relative transition-all duration-300 flex items-center justify-center ${
             currentRatio !== "free" ? "rounded-2xl shadow-2xl border border-white/20 overflow-hidden" : "w-full h-full"
           } ${isBaseImageHidden ? "opacity-0 pointer-events-none" : "opacity-100"} ${
-            isImageSelected ? "ring-2 ring-blue-500 ring-offset-4 ring-offset-black/90 shadow-[0_0_20px_rgba(59,130,246,0.6)]" : ""
+            isImageSelected ? "ring-2 ring-selection ring-offset-4 ring-offset-black/90 shadow-[0_0_20px_rgba(59,130,246,0.6)]" : ""
           }`}
           style={{
             ...getAspectRatioContainerStyle(currentRatio),
@@ -1514,7 +1523,7 @@ export default function EditorScreen() {
               transform: `rotate(${currentRotation}deg) scaleX(${currentFlipH ? -1 : 1}) scaleY(${
                 currentFlipV ? -1 : 1
               })`,
-              filter: lensFilter || undefined,
+              filter: composedFilter || undefined,
               transition: "transform 0.3s ease, filter 0.4s ease",
             }}
             className="w-full h-full object-cover select-none pointer-events-none"
@@ -3191,6 +3200,7 @@ export default function EditorScreen() {
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
         capturedImage={capturedImage}
+        imageFilter={composedFilter}
         textOverlays={textOverlays}
         stickerOverlays={stickerOverlays}
         routeOverlay={routeOverlay}
@@ -3323,20 +3333,16 @@ export default function EditorScreen() {
                   min={0}
                   max={100}
                   value={filterIntensity}
-                  onChange={(e) => {
-                    const val = Number(e.target.value);
-                    setFilterIntensity(val);
-                    // Dynamically adjust the filter strength if a custom filter is active
-                    if (/custom/i.test(lensFilter) || lensFilter === "") {
-                      setLensFilter(
-                        `contrast(${1 + val / 200}) saturate(${1 + val / 200})`
-                      );
-                    }
-                  }}
-                  className="w-full accent-ember cursor-pointer"
+                  disabled={!lensFilter}
+                  aria-label="Filter intensity"
+                  aria-valuetext={`${filterIntensity} percent`}
+                  onChange={(e) => setFilterIntensity(Number(e.target.value))}
+                  className="w-full accent-ember cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 />
                 <p className="text-[10px] text-text-secondary text-center">
-                  Adjust the overall intensity of the applied lens effect
+                  {lensFilter
+                    ? "Adjust the overall intensity of the applied lens effect"
+                    : "Pick a lens above to adjust its intensity"}
                 </p>
               </div>
             </motion.div>

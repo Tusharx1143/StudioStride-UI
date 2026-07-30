@@ -21,6 +21,10 @@ import { useHealthConnect } from "./HealthConnectContext";
 import { createStravaSourceAdapter } from "../sources/adapters/StravaSourceAdapter";
 import { createHealthConnectSourceAdapter } from "../sources/adapters/HealthConnectSourceAdapter";
 import { MOCK_SOURCE } from "../sources/adapters/MockSourceAdapter";
+import { subscribeToDistanceUnit } from "../utils/unitPreference";
+
+/** Activities requested per page. */
+const PAGE_SIZE = 20;
 import type {
   ActivitySource,
   ActivitySourceId,
@@ -52,6 +56,12 @@ interface ActivitySourcesContextValue {
   connectSource: (id: ActivitySourceId) => Promise<void>;
   disconnectSource: (id: ActivitySourceId) => void;
   refreshAll: () => Promise<void>;
+  /** Fetch the next page of older activities. */
+  loadMore: () => Promise<void>;
+  /** False once a fetch comes back short, meaning there is nothing older. */
+  hasMore: boolean;
+  /** True while a "load more" is in flight; the list stays on screen. */
+  isLoadingMore: boolean;
 
   // ── Filters ───────────────────────────────────────────────────────────
   activeSourceFilter: ActivitySourceId | "all";
@@ -107,6 +117,16 @@ export function ActivitySourcesProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ── Pagination ────────────────────────────────────────────────────────
+  //
+  // The feed used to be a hardcoded `{ limit: 20 }` with no way to reach
+  // anything older, so a runner with three years of history could only see the
+  // last two weeks. `SourceFetchParams` already declared `before`/`after`; the
+  // plumbing existed and was unused.
+  const [pageCount, setPageCount] = useState(1);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+
   // ── Filters ───────────────────────────────────────────────────────────
 
   const [activeSourceFilter, setSourceFilter] = useState<ActivitySourceId | "all">("all");
@@ -128,15 +148,19 @@ export function ActivitySourcesProvider({ children }: { children: ReactNode }) {
 
   // ── Fetch all active sources ──────────────────────────────────────────
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
+  const fetchAll = useCallback(async (pages: number = 1) => {
+    // Only the first page blanks the screen; later pages keep what is on it.
+    if (pages === 1) setLoading(true);
     setError(null);
 
     const newStates: Record<string, SourceState> = {};
+    const requested = PAGE_SIZE * pages;
+    let sawAFullPage = false;
 
     const fetchSource = async (source: ActivitySource) => {
       try {
-        const activities = await source.fetchActivities({ limit: 20 });
+        const activities = await source.fetchActivities({ limit: requested });
+        if (activities.length >= requested) sawAFullPage = true;
         let stats: SourceStats | null = null;
         try {
           if (source.fetchStats) {
@@ -177,13 +201,33 @@ export function ActivitySourcesProvider({ children }: { children: ReactNode }) {
     await Promise.allSettled(promises);
 
     setSourceStates(newStates);
+    // If no source filled the page, there is nothing older to ask for.
+    setHasMore(sawAFullPage);
     setLoading(false);
+    setIsLoadingMore(false);
   }, [isStravaConnected, isHcConnected, useMock, stravaSource, hcSource]);
 
   // Fetch on mount and when active sources change
   useEffect(() => {
-    fetchAll();
+    setPageCount(1);
+    fetchAll(1);
   }, [fetchAll]);
+
+  const loadMore = useCallback(async () => {
+    if (isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
+    const next = pageCount + 1;
+    setPageCount(next);
+    await fetchAll(next);
+  }, [fetchAll, hasMore, isLoadingMore, pageCount]);
+
+  // Re-fetch when the measurement system changes: display strings are baked
+  // into UnifiedActivity by the adapters, so they have to be rebuilt.
+  useEffect(() => {
+    return subscribeToDistanceUnit(() => {
+      fetchAll(pageCount);
+    });
+  }, [fetchAll, pageCount]);
 
   // ── Combined activities (merged + sorted) ─────────────────────────────
 
@@ -262,7 +306,10 @@ export function ActivitySourcesProvider({ children }: { children: ReactNode }) {
     error,
     connectSource,
     disconnectSource,
-    refreshAll: fetchAll,
+    refreshAll: () => fetchAll(pageCount),
+    loadMore,
+    hasMore,
+    isLoadingMore,
     activeSourceFilter,
     setSourceFilter,
     activeTypeFilter,

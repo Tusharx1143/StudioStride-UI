@@ -6,20 +6,27 @@
  */
 
 import type { StatData, StravaActivity, StravaTotals } from "../types";
+import type { DistanceUnit } from "../utils/units";
+import {
+  distanceValue,
+  formatDistance as formatDistanceInUnit,
+  formatPace as formatPaceInUnit,
+  metersPerUnit,
+} from "../utils/units";
 
 // ---------------------------------------------------------------------------
 // Unit converters
 // ---------------------------------------------------------------------------
 
 /**
- * Convert meters/second to a pace string in MM:SS per kilometre.
+ * Convert meters/second to a pace string in MM:SS per unit of distance.
  * Returns "--:--" for stationary activities (speed ≈ 0).
  */
-export function formatPace(metersPerSecond: number): string {
+export function formatPace(metersPerSecond: number, unit: DistanceUnit = "km"): string {
   if (metersPerSecond <= 0) return "--:--";
-  const secondsPerKm = Math.round(1000 / metersPerSecond);
-  const min = Math.floor(secondsPerKm / 60);
-  const sec = secondsPerKm % 60;
+  const secondsPerUnit = Math.round(metersPerUnit(unit) / metersPerSecond);
+  const min = Math.floor(secondsPerUnit / 60);
+  const sec = secondsPerUnit % 60;
   return `${min}:${sec.toString().padStart(2, "0")}`;
 }
 
@@ -39,10 +46,10 @@ export function formatDuration(totalSeconds: number): string {
 }
 
 /**
- * Format a Strava distance (meters) to km with one decimal place.
+ * Format a Strava distance (meters) in the given unit, one decimal place.
  */
-export function formatDistance(meters: number): string {
-  return (meters / 1000).toFixed(1);
+export function formatDistance(meters: number, unit: DistanceUnit = "km"): string {
+  return formatDistanceInUnit(meters, unit);
 }
 
 /**
@@ -109,11 +116,20 @@ export function getActivitySubtitle(activity: StravaActivity): string {
  * Convert a StravaActivity into the app's core StatData shape (used by
  * templates, the camera overlay, and the export system).
  */
-export function activityToStatData(activity: StravaActivity): StatData {
+export function activityToStatData(
+  activity: StravaActivity,
+  unit: DistanceUnit = "km"
+): StatData {
   return {
-    distance: activity.distance / 1000, // meters → km
-    distanceUnit: "km",
-    pace: formatPace(activity.average_speed),
+    distance: distanceValue(activity.distance, unit),
+    distanceUnit: unit,
+    // Derived from distance and time rather than average_speed, so a pace of
+    // "--:--" and a distance of 0 can never disagree.
+    pace: formatPaceInUnit(
+      activity.distance,
+      activity.moving_time || activity.elapsed_time,
+      unit
+    ),
     time: formatDuration(activity.moving_time || activity.elapsed_time),
     title: activity.name,
   };
@@ -123,7 +139,8 @@ export function activityToStatData(activity: StravaActivity): StatData {
  * Convert a StravaActivity into the HomeScreen's ActivityData shape.
  */
 export function activityToActivityData(
-  activity: StravaActivity
+  activity: StravaActivity,
+  unit: DistanceUnit = "km"
 ): {
   id: string;
   title: string;
@@ -139,9 +156,13 @@ export function activityToActivityData(
     id: `strava_${activity.id}`,
     title: activity.name,
     subtitle: getActivitySubtitle(activity),
-    distance: formatDistance(activity.distance),
+    distance: formatDistance(activity.distance, unit),
     time: formatDuration(activity.moving_time || activity.elapsed_time),
-    pace: formatPace(activity.average_speed),
+    pace: formatPaceInUnit(
+      activity.distance,
+      activity.moving_time || activity.elapsed_time,
+      unit
+    ),
     timeAgo: getTimeAgo(activity.start_date_local),
     type: activity.type,
     iconType: getIconType(activity.type, activity.sport_type),

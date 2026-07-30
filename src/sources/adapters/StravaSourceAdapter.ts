@@ -9,6 +9,8 @@ import type { ActivitySource, SourceFetchParams, SourceStats, UnifiedActivity } 
 import type { StravaActivity } from "../../types";
 import { fetchActivities, fetchAthleteStats, logout as apiLogout } from "../../services/stravaApi";
 import { activityToStatData, activityToActivityData, aggregateTotals } from "../../services/stravaTransformers";
+import { getDistanceUnit } from "../../utils/unitPreference";
+import { distanceValue, paceSuffix } from "../../utils/units";
 import { decodePolyline } from "../../utils/decodePolyline";
 import { toRouteGeometry } from "../../utils/routeGeometry";
 
@@ -82,9 +84,11 @@ export function createStravaSourceAdapter(
 
 /** Exported for testing — the pure mapping half of `fetchActivities`. */
 export function toUnifiedActivity(a: StravaActivity): UnifiedActivity {
-  const ad = activityToActivityData(a);
-  const statData = activityToStatData(a);
-  const distKm = a.distance / 1000;
+  // Read once per activity rather than captured at module load, so switching
+  // the preference in Profile takes effect on the next fetch.
+  const unit = getDistanceUnit();
+  const ad = activityToActivityData(a, unit);
+  const statData = activityToStatData(a, unit);
   const route = toRoute(a);
 
   return {
@@ -94,10 +98,10 @@ export function toUnifiedActivity(a: StravaActivity): UnifiedActivity {
     subtitle: ad.subtitle,
     type: ad.type,
     iconType: ad.iconType,
-    displayDistance: distKm.toFixed(1),
-    displayDistanceUnit: "km",
+    displayDistance: String(distanceValue(a.distance, unit)),
+    displayDistanceUnit: unit,
     displayTime: ad.time,
-    displayPace: `${ad.pace} /km`,
+    displayPace: `${ad.pace} ${paceSuffix(unit)}`,
     displayTimeAgo: ad.timeAgo,
     date: a.start_date_local,
     distanceMeters: a.distance,

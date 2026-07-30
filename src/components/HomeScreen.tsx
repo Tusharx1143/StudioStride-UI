@@ -5,6 +5,7 @@ import {
   Flame, Mountain, Heart, Footprints, Moon, RefreshCw, Loader2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import BottomNav from "./BottomNav";
 import { useAuth } from "../contexts/AuthContext";
 import { useHealthConnect } from "../contexts/HealthConnectContext";
 import { useActivitySources } from "../contexts/ActivitySourcesContext";
@@ -13,6 +14,8 @@ import ActivityFilterBar from "./ActivityFilterBar";
 import type { UnifiedActivity } from "../sources/types";
 import { RouteThumbnail } from "./RouteThumbnail";
 import { partitionActivities } from "../utils/featuredActivity";
+import { paceSuffix } from "../utils/units";
+import { useDistanceUnit } from "../utils/unitPreference";
 
 // ---------------------------------------------------------------------------
 // Component
@@ -20,10 +23,14 @@ import { partitionActivities } from "../utils/featuredActivity";
 
 export default function HomeScreen() {
   const navigate = useNavigate();
+  const distanceUnit = useDistanceUnit();
   const { athlete } = useAuth();
   const { state: hcState, daily: healthDaily, connect: hcConnect } = useHealthConnect();
   const {
     filteredActivities,
+    loadMore,
+    hasMore,
+    isLoadingMore,
     loading,
     refreshAll,
     activeSourceFilter,
@@ -66,7 +73,7 @@ export default function HomeScreen() {
       state: {
         title: statData.title,
         distance: `${statData.distance} ${statData.distanceUnit}`,
-        pace: `${statData.pace} /km`,
+        pace: `${statData.pace} ${paceSuffix(distanceUnit)}`,
         time: statData.time,
         // Absent for treadmill runs, gym sessions, and Health Connect
         // activities — the editor hides the Route tool when it's missing.
@@ -116,8 +123,8 @@ export default function HomeScreen() {
               navigate("/editor", {
                 state: {
                   title: "Ready to Move",
-                  distance: "0 km",
-                  pace: "--:-- /km",
+                  distance: `0 ${distanceUnit}`,
+                  pace: `--:-- ${paceSuffix(distanceUnit)}`,
                   time: "0:00",
                 },
               });
@@ -398,47 +405,31 @@ export default function HomeScreen() {
                 ))}
               </AnimatePresence>
             </motion.div>
+
+            {/* The feed used to stop dead at 20 with no way to reach anything
+                older, however much history the athlete had. */}
+            {hasMore && (
+              <button
+                onClick={loadMore}
+                disabled={isLoadingMore}
+                className="mt-4 w-full py-3 rounded-xl bg-surface hairline-border text-text-secondary hover:text-text-primary hover:bg-surface-raised transition-colors text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isLoadingMore ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Loading…</span>
+                  </>
+                ) : (
+                  <span>Load older activities</span>
+                )}
+              </button>
+            )}
           </section>
         )}
       </main>
 
       {/* ── Bottom Nav ─────────────────────────────────────────────── */}
-      <motion.nav
-        initial={{ y: 60, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.2, duration: 0.4, ease: "easeOut" }}
-        className="fixed bottom-0 w-full z-50 rounded-t-xl hairline-border-t bg-surface flex justify-around items-center px-4 py-3 pb-safe"
-        aria-label="Main navigation"
-      >
-        <button
-          className="flex flex-col items-center justify-center bg-surface-raised text-ember rounded-full p-3 transition-colors"
-          aria-label="Home"
-          aria-current="page"
-        >
-          <Home className="w-6 h-6" />
-        </button>
-        <button
-          onClick={() => navigate("/editor")}
-          className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-ember transition-colors"
-          aria-label="Create"
-        >
-          <Camera className="w-6 h-6" />
-        </button>
-        <button
-          onClick={() => navigate("/projects")}
-          className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-ember transition-colors"
-          aria-label="Projects"
-        >
-          <FolderKanban className="w-6 h-6" />
-        </button>
-        <button
-          onClick={() => navigate("/profile")}
-          className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-text-primary transition-colors"
-          aria-label="Profile"
-        >
-          <User className="w-6 h-6" />
-        </button>
-      </motion.nav>
+      <BottomNav active="home" />
     </div>
   );
 }

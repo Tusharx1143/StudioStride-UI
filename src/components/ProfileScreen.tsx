@@ -5,6 +5,10 @@ import {
   Heart, Footprints, Moon, Sparkles, Sun,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import type { DistanceUnit } from "../utils/units";
+import { formatDistance as formatDistanceInUnit, paceSuffix } from "../utils/units";
+import { setDistanceUnit, useDistanceUnit } from "../utils/unitPreference";
+import BottomNav from "./BottomNav";
 import { useAuth } from "../contexts/AuthContext";
 import { useHealthConnect } from "../contexts/HealthConnectContext";
 import { useActivitySources } from "../contexts/ActivitySourcesContext";
@@ -28,8 +32,10 @@ const MOCK_FOLLOWING = 12;
 // Helpers
 // ---------------------------------------------------------------------------
 
-function showDistance(km: number): string {
-  return km >= 100 ? `${Math.round(km)} km` : `${km.toFixed(1)} km`;
+/** Totals arrive in km from the sources; render them in the user's system. */
+function showDistance(km: number, unit: DistanceUnit): string {
+  const value = Number(formatDistanceInUnit(km * 1000, unit));
+  return value >= 100 ? `${Math.round(value)} ${unit}` : `${value.toFixed(1)} ${unit}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -37,6 +43,7 @@ function showDistance(km: number): string {
 // ---------------------------------------------------------------------------
 
 export default function ProfileScreen() {
+  const distanceUnit = useDistanceUnit();
   const navigate = useNavigate();
   const { athlete, logout } = useAuth();
   const { resolved: theme, toggle: toggleTheme } = useTheme();
@@ -93,12 +100,12 @@ export default function ProfileScreen() {
               onClick={hcState.authorized ? hcDisconnect : hcConnect}
               className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors ${
                 hcState.authorized
-                  ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                  ? "bg-success-dim text-success hover:bg-success/30"
                   : "bg-surface-raised text-text-secondary hover:bg-surface"
               }`}
               title={hcState.authorized ? "Health Connect connected" : "Connect Health Data"}
             >
-              <Heart className={`w-5 h-5 ${hcState.authorized ? "fill-emerald-400" : ""}`} />
+              <Heart className={`w-5 h-5 ${hcState.authorized ? "fill-success" : ""}`} />
             </button>
           )}
           <button onClick={() => navigate("/editor")} className="w-10 h-10 flex items-center justify-center rounded-full bg-ember text-ink transition-colors">
@@ -149,7 +156,7 @@ export default function ProfileScreen() {
           </div>
           <div className="w-[1px] h-10 bg-hairline"></div>
           <div className="flex flex-col items-center flex-1">
-            <span className="text-stat-value text-text-primary mb-1">{showDistance(allStats.distanceKm)}</span>
+            <span className="text-stat-value text-text-primary mb-1">{showDistance(allStats.distanceKm, distanceUnit)}</span>
             <span className="text-label text-text-secondary">Total Distance</span>
           </div>
           <div className="w-[1px] h-10 bg-hairline"></div>
@@ -173,7 +180,7 @@ export default function ProfileScreen() {
                 <div>
                   <h3 className="text-label text-text-secondary mb-1">This Week</h3>
                   <div className="text-metric-md text-text-primary">
-                    {showDistance(weekDistance)}
+                    {showDistance(weekDistance, distanceUnit)}
                   </div>
                 </div>
                 <div className="text-right">
@@ -209,7 +216,7 @@ export default function ProfileScreen() {
                       state: {
                         title: statData.title,
                         distance: `${statData.distance} ${statData.distanceUnit}`,
-                        pace: `${statData.pace} /km`,
+                        pace: `${statData.pace} ${paceSuffix(distanceUnit)}`,
                         time: statData.time,
                       },
                     });
@@ -254,6 +261,42 @@ export default function ProfileScreen() {
           </motion.div>
         </section>
 
+        {/* ── Units ─────────────────────────────────────────────────── */}
+        <section className="mb-section-v-rhythm">
+          <h2 className="text-section-header mb-6">Units</h2>
+          <div className="bg-surface hairline-border rounded-2xl p-4 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-text-primary">Distance</p>
+              <p className="text-xs text-text-secondary mt-0.5">
+                Defaults to your Strava preference. Applies to activities, stats, and exports.
+              </p>
+            </div>
+            <div
+              className="shrink-0 flex items-center rounded-full bg-surface-raised p-1"
+              role="group"
+              aria-label="Distance unit"
+            >
+              {(["km", "mi"] as const).map((unit) => {
+                const isActive = distanceUnit === unit;
+                return (
+                  <button
+                    key={unit}
+                    onClick={() => setDistanceUnit(unit)}
+                    aria-pressed={isActive}
+                    className={`px-4 py-2 rounded-full text-xs font-bold transition-colors min-w-[52px] ${
+                      isActive
+                        ? "bg-ember text-ink"
+                        : "text-text-secondary hover:text-text-primary"
+                    }`}
+                  >
+                    {unit}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
         {/* ── Per-Source Highlights ─────────────────────────────────── */}
         <section className="mb-section-v-rhythm">
           <h2 className="text-section-header mb-6">Connected Sources</h2>
@@ -294,7 +337,7 @@ export default function ProfileScreen() {
                   {stats && (
                     <div className="text-right">
                       <p className="text-stat-value text-ember">
-                        {showDistance(stats.totalDistanceKm)}
+                        {showDistance(stats.totalDistanceKm, distanceUnit)}
                       </p>
                       <p className="text-tool-caption text-text-secondary">Total</p>
                     </div>
@@ -376,26 +419,7 @@ export default function ProfileScreen() {
       </main>
 
       {/* ── Bottom Nav ─────────────────────────────────────────────── */}
-      <motion.nav
-        initial={{ y: 60, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.2, duration: 0.4, ease: "easeOut" }}
-        className="fixed bottom-0 w-full z-50 rounded-t-xl hairline-border-t bg-surface flex justify-around items-center px-4 py-3 pb-safe"
-        aria-label="Main navigation"
-      >
-        <button onClick={() => navigate("/home")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-text-primary transition-colors" aria-label="Home">
-          <Home className="w-6 h-6" />
-        </button>
-        <button onClick={() => navigate("/editor")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-ember transition-colors" aria-label="Create">
-          <Camera className="w-6 h-6" />
-        </button>
-        <button onClick={() => navigate("/projects")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-ember transition-colors" aria-label="Projects">
-          <FolderKanban className="w-6 h-6" />
-        </button>
-        <button className="flex flex-col items-center justify-center bg-surface-raised text-ember rounded-full p-3 transition-colors" aria-label="Profile" aria-current="page">
-          <User className="w-6 h-6" />
-        </button>
-      </motion.nav>
+      <BottomNav active="profile" />
     </motion.div>
   );
 }

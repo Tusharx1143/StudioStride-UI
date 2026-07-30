@@ -5,10 +5,36 @@
  */
 
 import type { ActivitySource, UnifiedActivity } from "../types";
+import { getDistanceUnit } from "../../utils/unitPreference";
+import {
+  distanceValue,
+  formatDistance as formatDistanceInUnit,
+  formatPace as formatPaceInUnit,
+  paceSuffix,
+} from "../../utils/units";
 
 // ---------------------------------------------------------------------------
 // Mock activities (preserved from HomeScreen's INITIAL_ACTIVITIES)
 // ---------------------------------------------------------------------------
+
+/** Re-derives the unit-dependent fields of a fixture. */
+function withCurrentUnit(activity: UnifiedActivity): UnifiedActivity {
+  const unit = getDistanceUnit();
+  const { distanceMeters, movingTime } = activity;
+
+  return {
+    ...activity,
+    displayDistance: formatDistanceInUnit(distanceMeters, unit),
+    displayDistanceUnit: unit,
+    displayPace: `${formatPaceInUnit(distanceMeters, movingTime, unit)} ${paceSuffix(unit)}`,
+    toStatData: () => ({
+      ...activity.toStatData(),
+      distance: distanceValue(distanceMeters, unit),
+      distanceUnit: unit,
+      pace: formatPaceInUnit(distanceMeters, movingTime, unit),
+    }),
+  };
+}
 
 const MOCK_ACTIVITIES: UnifiedActivity[] = [
   {
@@ -120,5 +146,8 @@ export const MOCK_SOURCE: ActivitySource = {
   connect: () => {},
   disconnect: () => {},
 
-  fetchActivities: async () => [...MOCK_ACTIVITIES],
+  // Display strings are derived from the raw metres/seconds each fixture
+  // already carries, so the demo feed honours the user's unit rather than
+  // showing km to someone who has chosen miles.
+  fetchActivities: async () => MOCK_ACTIVITIES.map(withCurrentUnit),
 };

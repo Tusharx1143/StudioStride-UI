@@ -31,7 +31,12 @@
   /* ── Accents ────────────────────────────────────────────────────────────── */
   --color-ice: #22D3EE;
   --color-danger: #FF2D55;
-  --color-strava: #FC4C02;
+  /**
+   * Selection outline for a layer being edited. Deliberately not ember —
+   * ember means "active tool", and a selection ring in the same hue reads as
+   * the same state. Was a raw `ring-blue-500` with no token behind it.
+   */
+  --color-selection: #3B82F6;
 
   /* ── Typography ─────────────────────────────────────────────────────────── */
   --font-display: "Archivo", "Barlow Condensed", sans-serif;

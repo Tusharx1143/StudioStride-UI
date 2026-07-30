@@ -15,6 +15,7 @@ import {
   Play
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import BottomNav from "./BottomNav";
 import { TEMPLATE_FAMILIES } from "../data/mockData";
 import { SavedProject } from "../types";
 import { formatDistance, formatRelativeTime } from "../utils/projectDoc";
@@ -136,7 +137,7 @@ export default function ProjectsScreen() {
               <FolderKanban className="w-8 h-8" />
             </div>
             <div>
-              <h3 className="text-stat-value font-bold text-white">No saved projects yet</h3>
+              <h3 className="text-stat-value font-bold text-text-primary">No saved projects yet</h3>
               <p className="text-xs text-text-secondary max-w-xs mx-auto mt-1">
                 Snap or pick a workout photo to customize with lenses, stickers, and stats overlays.
               </p>
@@ -207,7 +208,7 @@ export default function ProjectsScreen() {
                   {/* Info Footer */}
                   <div className="p-4 flex items-center justify-between">
                     <div>
-                      <h4 className="text-stat-value text-white font-bold group-hover:text-ember transition-colors">
+                      <h4 className="text-stat-value text-text-primary font-bold group-hover:text-ember transition-colors">
                         {project.title}
                       </h4>
                       <p className="text-[11px] text-text-secondary flex items-center gap-1 mt-0.5">
@@ -223,27 +224,7 @@ export default function ProjectsScreen() {
         )}
       </main>
 
-      {/* Navigation */}
-      <motion.nav
-        initial={{ y: 60, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.2, duration: 0.4, ease: "easeOut" }}
-        className="fixed bottom-0 w-full z-50 rounded-t-xl hairline-border-t bg-surface flex justify-around items-center px-4 py-3 pb-safe"
-        aria-label="Main navigation"
-      >
-        <button onClick={() => navigate("/home")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-text-primary transition-colors" aria-label="Home">
-          <Home className="w-6 h-6" />
-        </button>
-        <button onClick={() => navigate("/editor")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-ember transition-colors" aria-label="Create">
-          <Camera className="w-6 h-6" />
-        </button>
-        <button onClick={() => navigate("/projects")} className="flex flex-col items-center justify-center bg-surface-raised text-ember rounded-full p-3 transition-colors" aria-label="Projects" aria-current="page">
-          <FolderKanban className="w-6 h-6" />
-        </button>
-        <button onClick={() => navigate("/profile")} className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-text-primary transition-colors" aria-label="Profile">
-          <User className="w-6 h-6" />
-        </button>
-      </motion.nav>
+      <BottomNav active="projects" />
     </div>
   );
 }
