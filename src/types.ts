@@ -168,21 +168,130 @@ export interface RouteOverlay {
   locked?: boolean;
 }
 
+/**
+ * A line of user text placed on the canvas.
+ *
+ * Lives here rather than in EditorScreen because the editor, the exporter, and
+ * the saved-project document all have to agree on it. Two hand-maintained
+ * copies is exactly the drift this file exists to prevent.
+ */
+export interface TextOverlay {
+  id: string;
+  text: string;
+  /** Centre offset in preview px, matching every other overlay. */
+  x: number;
+  y: number;
+  color: string;
+  fontStyle: "Classic" | "Modern" | "Bold" | "Neon" | "Serif" | "Typewriter";
+  bgStyle: "none" | "solid" | "semi" | "outline";
+  align: "left" | "center" | "right";
+  fontSize: number;
+  /** Set by the pinch/rotate gesture. */
+  rotation?: number;
+  scale?: number;
+  hidden?: boolean;
+  locked?: boolean;
+  zIndex?: number;
+}
+
+/** An emoji, badge, metric chip, or location tag placed on the canvas. */
+export interface StickerOverlay {
+  id: string;
+  /** Emoji, SVG badge text, or image URL. */
+  content: string;
+  type: "emoji" | "badge" | "metric" | "location";
+  scale: number;
+  rotation: number;
+  x: number;
+  y: number;
+  bgGradient?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  zIndex?: number;
+}
+
+/** Crop/orientation the user committed from the image tool. */
+export interface CommittedCrop {
+  ratio: string;
+  rotation: number;
+  flipH: boolean;
+  flipV: boolean;
+}
+
+/**
+ * A complete capture of the editor's canvas state.
+ *
+ * Drives undo/redo, and — extended by EditorDoc — is what a saved project
+ * stores. One shape for both, so a project can never drift from what undo
+ * already knows how to restore.
+ */
+export interface EditorSnapshot {
+  textOverlays: TextOverlay[];
+  stickerOverlays: StickerOverlay[];
+  templateId: string;
+  statLayout: TemplateLayout;
+  capturedImage: string;
+  /** Serialised as an array so the snapshot stays a plain JSON value. */
+  hiddenSlots: StatSlotId[];
+  committedCrop: CommittedCrop;
+  isBaseImageHidden: boolean;
+  isBaseImageLocked: boolean;
+  baseImageZIndex: number;
+  imagePerspectiveX: number;
+  imagePerspectiveY: number;
+  imageShadowBlur: number;
+  imageShadowOffsetY: number;
+  imageShadowColor: string;
+  isDrawingHidden: boolean;
+  isDrawingLocked: boolean;
+  drawingZIndex: number;
+  drawingCanvasDataUrl?: string | null;
+  hasDrawnStrokes: boolean;
+  /**
+   * The placed route layer. Part of the snapshot so undo restores it — before
+   * this field existed, undoing past a route edit silently dropped the layer.
+   */
+  routeOverlay: RouteOverlay | null;
+}
+
+/**
+ * Everything needed to rebuild a canvas from scratch: the snapshot undo uses,
+ * plus the four things that live outside it.
+ */
+export interface EditorDoc extends EditorSnapshot {
+  /** Kept even when the route is unplaced, so the Route tool survives reopen. */
+  routeGeometry: RouteGeometry | null;
+  lensFilter: string;
+  filterIntensity: number;
+  /** Frozen at save — the upstream activity may later change or vanish. */
+  statData: StatData;
+}
+
+/**
+ * A saved project: the document, and a small thumbnail to show for it.
+ *
+ * The two are deliberately separate. Storing only a flattened export — as this
+ * type used to — meant reopening a project handed you a baked bitmap as your
+ * background photo, with every layer fused into it.
+ */
 export interface SavedProject {
   id: string;
   title: string;
-  activityType: string;
-  date: string;
-  bgImage: string;
-  lensId: string;
-  elements: EditableLensElement[];
-  distance: string;
-  pace: string;
-  time: string;
+  /** ISO 8601. Relative phrasing is a render concern, and cannot be sorted. */
   updatedAt: string;
-  placedTextsCount: number;
-  /** Present only when the activity had GPS geometry and the user placed it. */
-  route?: RouteOverlay;
+  doc: EditorDoc;
+  /** JPEG data URL, ≤320px on the long edge, ~40 KB. */
+  thumbnail: string;
+}
+
+/** The in-progress canvas, autosaved so an accidental exit costs nothing. */
+export interface EditorDraft {
+  key: "draft";
+  /** Set when the draft belongs to a project already saved. */
+  projectId: string | null;
+  title: string;
+  savedAt: string;
+  doc: EditorDoc;
 }
 
 export interface TemplateFamily {

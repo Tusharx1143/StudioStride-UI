@@ -13,6 +13,8 @@ import {
   Crop,
   Info,
   Check,
+  Save,
+  Loader2,
   Trash2,
   AlignLeft,
   AlignCenter,
@@ -45,12 +47,36 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import { LENS_TEMPLATES_EXPANDED, LENS_FILTER_MAP, STOCK_PHOTOS } from "../data/mockData";
 import type {
+  CommittedCrop,
   CustomLayouts,
+  EditorDoc,
+  EditorDraft,
+  EditorSnapshot,
   StatData,
   StatSlotId,
+  StickerOverlay,
   TemplateFamily,
   TemplateLayout,
+  TextOverlay,
 } from "../types";
+import {
+  buildDoc,
+  docFingerprint,
+  formatRelativeTime,
+  isDocDirty,
+  newProjectId,
+  normalizeDoc,
+  projectTitle,
+  thumbnailSize,
+} from "../utils/projectDoc";
+import {
+  clearDraft,
+  getProject,
+  loadDraft,
+  saveDraft,
+  saveProject,
+} from "../utils/projectStore";
+import { renderComposite } from "../utils/renderComposite";
 import GestureSwipeCarousel from "./GestureSwipeCarousel";
 import ExportModal from "./ExportModal";
 import StatLayer from "./StatLayer";
@@ -76,38 +102,10 @@ import { RouteLayer } from "./editor/RouteLayer";
 import RouteLayerControls from "./editor/RouteLayerControls";
 import type { RouteGeometry, RouteOverlay } from "../types";
 
-// Text Overlay item model
-interface TextOverlay {
-  id: string;
-  text: string;
-  x: number; // relative position in px or offset
-  y: number;
-  color: string;
-  fontStyle: "Classic" | "Modern" | "Bold" | "Neon" | "Serif" | "Typewriter";
-  bgStyle: "none" | "solid" | "semi" | "outline";
-  align: "left" | "center" | "right";
-  fontSize: number; // in px
-  rotation?: number; // in degrees
-  scale?: number; // scale multiplier
-  hidden?: boolean;
-  locked?: boolean;
-  zIndex?: number;
-}
-
-// Sticker Overlay item model
-interface StickerOverlay {
-  id: string;
-  content: string; // Emoji, SVG badge text, or image URL
-  type: "emoji" | "badge" | "metric" | "location";
-  scale: number;
-  rotation: number;
-  x: number;
-  y: number;
-  bgGradient?: string;
-  hidden?: boolean;
-  locked?: boolean;
-  zIndex?: number;
-}
+// TextOverlay, StickerOverlay, CommittedCrop and EditorSnapshot now live in
+// src/types.ts — the exporter and the saved-project document need the same
+// definitions, and three hand-maintained copies is exactly the drift that let
+// saved projects fall out of step with the canvas in the first place.
 
 // Pre-defined Sticker Item interface
 interface StickerItem {
@@ -211,7 +209,11 @@ export default function EditorScreen() {
 
   // Activity stats carried in on the route. Both the short keys used by the
   // activity screens and the `activity*` keys used by saved projects resolve.
-  const statData: StatData = {
+  //
+  // State rather than a derived constant: opening a saved project restores the
+  // numbers frozen into its document, which may no longer match any activity
+  // the app can still fetch.
+  const [statData, setStatData] = useState<StatData>(() => ({
     distance:
       parseFloat((routeState.distance as string) ?? "") ||
       parseFloat((routeState.activityDistance as string) ?? "") ||
@@ -224,7 +226,7 @@ export default function EditorScreen() {
     ).replace(" /km", ""),
     time: (routeState.time as string) ?? (routeState.activityTime as string) ?? "52:18",
     title: (routeState.title as string) ?? (routeState.activityTitle as string) ?? "Morning Run",
-  };
+  }));
 
   // Slot positions the user has dragged, remembered per template.
   const [customLayouts, setCustomLayouts] = useState<CustomLayouts>(() =>
@@ -353,7 +355,11 @@ export default function EditorScreen() {
   // Route layer state. The geometry arrives with the activity — absent for
   // treadmill runs, gym sessions, and every Health Connect activity, which is
   // what gates the Route tool out of the rail entirely.
-  const routeGeometry = (routeState.route as RouteGeometry | undefined) ?? undefined;
+  // State, not a derived constant: a reopened project restores its geometry
+  // from the document so the Route tool stays available.
+  const [routeGeometry, setRouteGeometry] = useState<RouteGeometry | undefined>(
+    (routeState.route as RouteGeometry | undefined) ?? undefined
+  );
   const [routeOverlay, setRouteOverlay] = useState<RouteOverlay | null>(
     (routeState.routeOverlay as RouteOverlay | undefined) ?? null
   );
@@ -386,35 +392,9 @@ export default function EditorScreen() {
   const [selectedAlign, setSelectedAlign] = useState<TextOverlay["align"]>("center");
   const [selectedFontSize, setSelectedFontSize] = useState<number>(32);
 
-  // Unified Editor Snapshot interface for full Undo/Redo history
-  interface EditorSnapshot {
-    textOverlays: TextOverlay[];
-    stickerOverlays: StickerOverlay[];
-    templateId: string;
-    statLayout: TemplateLayout;
-    capturedImage: string;
-    /** Serialised as an array so the snapshot stays a plain JSON value. */
-    hiddenSlots: StatSlotId[];
-    committedCrop: {
-      ratio: string;
-      rotation: number;
-      flipH: boolean;
-      flipV: boolean;
-    };
-    isBaseImageHidden: boolean;
-    isBaseImageLocked: boolean;
-    baseImageZIndex: number;
-    imagePerspectiveX: number;
-    imagePerspectiveY: number;
-    imageShadowBlur: number;
-    imageShadowOffsetY: number;
-    imageShadowColor: string;
-    isDrawingHidden: boolean;
-    isDrawingLocked: boolean;
-    drawingZIndex: number;
-    drawingCanvasDataUrl?: string | null;
-    hasDrawnStrokes: boolean;
-  }
+  // EditorSnapshot is imported from src/types.ts — a saved project extends it
+  // rather than redefining it, so undo and "reopen a project" restore exactly
+  // the same set of fields.
 
   // Drawing Tool State
   const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -429,10 +409,15 @@ export default function EditorScreen() {
 
   // Helper to snapshot current canvas & editor state
   // Uses compressed data URL instead of raw ImageData (~8MB → ~200KB per snapshot)
-  const getCurrentSnapshot = (): EditorSnapshot => {
+  //
+  // `includeDrawing` exists because encoding the drawing canvas is by far the
+  // most expensive part of a snapshot, and the dirty check runs on every
+  // render. Undo, redo, and saving need the pixels; asking "has anything
+  // changed?" does not — that is what `hasDrawnStrokes` is for.
+  const getCurrentSnapshot = (includeDrawing: boolean = true): EditorSnapshot => {
     let drawingDataUrl: string | null = null;
     const canvas = drawingCanvasRef.current;
-    if (canvas && canvas.width > 0 && canvas.height > 0 && hasDrawnStrokes) {
+    if (includeDrawing && canvas && canvas.width > 0 && canvas.height > 0 && hasDrawnStrokes) {
       try {
         drawingDataUrl = canvas.toDataURL("image/png");
       } catch {
@@ -461,6 +446,9 @@ export default function EditorScreen() {
       drawingZIndex,
       drawingCanvasDataUrl: drawingDataUrl,
       hasDrawnStrokes,
+      // Part of the snapshot so undo restores the route. Before this field
+      // existed, undoing past a route edit silently dropped the whole layer.
+      routeOverlay: routeOverlay ? JSON.parse(JSON.stringify(routeOverlay)) : null,
     };
   };
 
@@ -493,6 +481,7 @@ export default function EditorScreen() {
     setIsDrawingLocked(snapshot.isDrawingLocked);
     setDrawingZIndex(snapshot.drawingZIndex);
     setHasDrawnStrokes(snapshot.hasDrawnStrokes);
+    setRouteOverlay(snapshot.routeOverlay ?? null);
 
     // Restore drawing canvas from compressed data URL
     const canvas = drawingCanvasRef.current;
@@ -544,12 +533,7 @@ export default function EditorScreen() {
   const [cropFlipH, setCropFlipH] = useState<boolean>(false);
   const [cropFlipV, setCropFlipV] = useState<boolean>(false);
 
-  const [committedCrop, setCommittedCrop] = useState<{
-    ratio: string;
-    rotation: number;
-    flipH: boolean;
-    flipV: boolean;
-  }>({
+  const [committedCrop, setCommittedCrop] = useState<CommittedCrop>({
     ratio: "free",
     rotation: 0,
     flipH: false,
@@ -564,6 +548,225 @@ export default function EditorScreen() {
   const [isDrawingHidden, setIsDrawingHidden] = useState<boolean>(false);
   const [isDrawingLocked, setIsDrawingLocked] = useState<boolean>(false);
   const [drawingZIndex, setDrawingZIndex] = useState<number>(15);
+
+  // ── Saved projects, drafts, and the exit guard ────────────────────────────
+  //
+  // A project is a document, not a flattened PNG. The document is the same
+  // EditorSnapshot undo uses, plus the four things that live outside it.
+
+  /** Set once this canvas belongs to a saved project, so Save updates in place. */
+  const [projectId, setProjectId] = useState<string | null>(
+    (routeState.projectId as string | undefined) ?? null
+  );
+  /** The document as last written to disk — the reference the dirty bit uses. */
+  const [savedDoc, setSavedDoc] = useState<EditorDoc | null>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isLoadingProject, setIsLoadingProject] = useState<boolean>(
+    Boolean(routeState.projectId)
+  );
+  const [pendingExit, setPendingExit] = useState<boolean>(false);
+  const [restorableDraft, setRestorableDraft] = useState<EditorDraft | null>(null);
+
+  const buildCurrentDoc = (includeDrawing: boolean = true): EditorDoc => {
+    const snapshot = getCurrentSnapshot(includeDrawing);
+    return buildDoc({
+      ...snapshot,
+      routeGeometry: routeGeometry ?? null,
+      lensFilter,
+      filterIntensity,
+      statData,
+    });
+  };
+
+  /** Restores a whole canvas from a document. */
+  const applyDoc = (doc: EditorDoc) => {
+    applySnapshot(doc);
+    setRouteGeometry(doc.routeGeometry ?? undefined);
+    setLensFilter(doc.lensFilter);
+    setFilterIntensity(doc.filterIntensity);
+    setStatData(doc.statData);
+  };
+
+  // Open a saved project. Only its id travels through router state; the
+  // document is loaded here so a page reload still resolves it.
+  useEffect(() => {
+    const id = routeState.projectId as string | undefined;
+    if (!id) return;
+
+    let cancelled = false;
+
+    getProject(id).then((project) => {
+      if (cancelled) return;
+
+      const doc = normalizeDoc(project?.doc);
+      if (!doc) {
+        setIsLoadingProject(false);
+        showToast("That project could not be opened");
+        return;
+      }
+
+      applyDoc(doc);
+      setSavedDoc(doc);
+      setIsLoadingProject(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // Router state is read once; re-running this would clobber edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Offer the last session back, but only on a genuinely blank entry. Arriving
+  // with an activity or a project is an explicit intent that shouldn't be
+  // second-guessed.
+  useEffect(() => {
+    const isBlankEntry =
+      !routeState.projectId && !routeState.title && !routeState.activityTitle;
+    if (!isBlankEntry) return;
+
+    let cancelled = false;
+
+    loadDraft().then((draft) => {
+      if (cancelled || !draft) return;
+      if (!normalizeDoc(draft.doc)) return;
+      setRestorableDraft(draft);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Runs every render, so it deliberately skips encoding the drawing canvas —
+  // docFingerprint ignores those pixels anyway.
+  const currentDoc = buildCurrentDoc(false);
+  const isDirty = !isLoadingProject && isDocDirty(currentDoc, savedDoc);
+
+  /** Renders the small JPEG the Projects grid shows for this canvas. */
+  const renderThumbnail = async (doc: EditorDoc): Promise<string> => {
+    const { width, height } = thumbnailSize(doc.committedCrop.ratio);
+    return renderComposite({
+      width,
+      height,
+      containerWidth: canvasRef.current?.clientWidth || 360,
+      containerHeight: canvasRef.current?.clientHeight || 640,
+      background: "#000000",
+      capturedImage: doc.capturedImage,
+      textOverlays: doc.textOverlays,
+      stickerOverlays: doc.stickerOverlays,
+      routeOverlay: doc.routeOverlay,
+      drawingCanvas: doc.isDrawingHidden ? null : drawingCanvasRef.current,
+      committedCrop: doc.committedCrop,
+      isBaseImageHidden: doc.isBaseImageHidden,
+      isDrawingHidden: doc.isDrawingHidden,
+      baseImageZIndex: doc.baseImageZIndex,
+      drawingZIndex: doc.drawingZIndex,
+      templateId: doc.templateId,
+      statLayout: doc.statLayout,
+      statData: doc.statData,
+      mimeType: "image/jpeg",
+      quality: 0.7,
+    });
+  };
+
+  /** Save keeps your layers editable. Export flattens. They are not the same. */
+  const handleSaveProject = async (): Promise<boolean> => {
+    if (isSaving) return false;
+    setIsSaving(true);
+
+    const doc = buildCurrentDoc();
+    const id = projectId ?? newProjectId();
+
+    try {
+      const thumbnail = await renderThumbnail(doc);
+      const ok = await saveProject({
+        id,
+        title: projectTitle(doc.statData),
+        updatedAt: new Date().toISOString(),
+        doc,
+        thumbnail,
+      });
+
+      if (!ok) {
+        showToast("Could not save — storage unavailable");
+        return false;
+      }
+
+      setProjectId(id);
+      setSavedDoc(doc);
+      await clearDraft();
+      showToast("Saved to Projects");
+      return true;
+    } catch {
+      showToast("Could not save this project");
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Autosave the in-progress canvas. Debounced on idle rather than run on an
+  // interval, so dragging a layer doesn't hammer IndexedDB.
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftFingerprint = isLoadingProject ? "" : docFingerprint(currentDoc);
+
+  useEffect(() => {
+    if (isLoadingProject || !isDirty) return;
+
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => {
+      const doc = buildCurrentDoc();
+      saveDraft({
+        projectId,
+        title: projectTitle(doc.statData),
+        savedAt: new Date().toISOString(),
+        doc,
+      });
+    }, 2000);
+
+    return () => {
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftFingerprint, isDirty, isLoadingProject]);
+
+  /** The X button. Ten minutes of layering used to end here with no warning. */
+  const handleRequestExit = () => {
+    if (isDirty) {
+      setPendingExit(true);
+      return;
+    }
+    navigate("/home");
+  };
+
+  const handleSaveAndExit = async () => {
+    const ok = await handleSaveProject();
+    if (ok) navigate("/home");
+  };
+
+  const handleDiscardAndExit = async () => {
+    await clearDraft();
+    navigate("/home");
+  };
+
+  const handleRestoreDraft = () => {
+    if (!restorableDraft) return;
+    const doc = normalizeDoc(restorableDraft.doc);
+    if (doc) {
+      applyDoc(doc);
+      setProjectId(restorableDraft.projectId);
+      showToast("Last session restored");
+    }
+    setRestorableDraft(null);
+  };
+
+  const handleDismissDraft = async () => {
+    setRestorableDraft(null);
+    await clearDraft();
+  };
+
 
   // Global Keyboard Shortcuts for Undo/Redo
   useEffect(() => {
@@ -1783,7 +1986,7 @@ export default function EditorScreen() {
       <div className="relative z-20 flex items-center gap-2 px-4 pt-12 pb-3 w-full">
         {/* Close */}
         <button
-          onClick={() => navigate("/home")}
+          onClick={handleRequestExit}
           className="shrink-0 w-10 h-10 rounded-full bg-black/50 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-95 transition-transform"
           aria-label="Close Editor"
         >
@@ -1835,11 +2038,34 @@ export default function EditorScreen() {
           >
             <Redo className="w-4 h-4" />
           </button>
+          {/* Save keeps your layers editable; Export flattens. Two actions,
+              because the single download icon used to do both jobs badly. */}
+          <button
+            onClick={handleSaveProject}
+            disabled={isSaving || !isDirty}
+            className={`h-9 px-3 rounded-full backdrop-blur-md border flex items-center justify-center gap-1.5 text-xs font-bold active:scale-95 transition-all disabled:opacity-40 ${
+              isDirty
+                ? "bg-ember text-ink border-ember"
+                : "bg-black/50 text-white/80 border-white/15"
+            }`}
+            aria-label={isDirty ? "Save project" : "Project saved"}
+            title="Save project (keeps layers editable)"
+          >
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : isDirty ? (
+              <Save className="w-4 h-4" />
+            ) : (
+              <Check className="w-4 h-4" />
+            )}
+            <span>{isSaving ? "Saving" : isDirty ? "Save" : "Saved"}</span>
+          </button>
+
           <button
             onClick={() => setIsExportModalOpen(true)}
             className="w-9 h-9 rounded-full bg-black/50 backdrop-blur-md border border-white/15 flex items-center justify-center text-white/80 hover:text-white active:scale-95 transition-transform"
-            aria-label="Export / Save"
-            title="Export / Save Creation"
+            aria-label="Export"
+            title="Export image"
           >
             <Download className="w-4 h-4" />
           </button>
@@ -1868,6 +2094,99 @@ export default function EditorScreen() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* EXIT GUARD — the X button used to discard everything silently.
+          Rendered without AnimatePresence: an exit animation that stalls would
+          leave an invisible panel over the canvas still swallowing taps, and a
+          dialog that must disappear the instant it is dismissed is not worth
+          that risk for a fade-out. */}
+      {pendingExit && (
+          <motion.div
+            key="exit-guard"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="absolute inset-0 z-[60] bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="exit-guard-title"
+          >
+            <motion.div
+              initial={{ y: 40, scale: 0.96 }}
+              animate={{ y: 0, scale: 1 }}
+              className="w-full max-w-sm bg-neutral-900 border border-white/15 rounded-3xl p-5 text-white shadow-2xl"
+            >
+              <h3 id="exit-guard-title" className="text-base font-extrabold tracking-tight">
+                Keep your edits?
+              </h3>
+              <p className="text-xs text-white/60 mt-1.5">
+                You have unsaved changes on this canvas.
+              </p>
+
+              <div className="mt-5 space-y-2">
+                <button
+                  onClick={handleSaveAndExit}
+                  disabled={isSaving}
+                  className="w-full py-3 rounded-2xl bg-ember hover:bg-ember-press text-ink font-black text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  <span>{isSaving ? "Saving…" : "Save & exit"}</span>
+                </button>
+                <button
+                  onClick={handleDiscardAndExit}
+                  disabled={isSaving}
+                  className="w-full py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold text-xs active:scale-[0.98] transition-transform disabled:opacity-50"
+                >
+                  Discard changes
+                </button>
+                <button
+                  onClick={() => setPendingExit(false)}
+                  className="w-full py-2.5 rounded-2xl text-white/60 hover:text-white font-bold text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+      {/* RESTORE LAST SESSION — offered only on a genuinely blank entry.
+          Same reasoning as the exit guard: no exit animation, so dismissing it
+          cannot leave a transparent panel sitting over the lens strip. */}
+      {restorableDraft && (
+          <motion.div
+            key="restore-draft"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="absolute inset-x-4 bottom-28 z-[55] bg-neutral-900/95 backdrop-blur-md border border-white/15 rounded-2xl p-4 shadow-2xl"
+            role="status"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 shrink-0 rounded-full bg-ember/20 text-ember border border-ember/30 flex items-center justify-center">
+                <RotateCcw className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-white">Restore your last session?</p>
+                <p className="text-[11px] text-white/60 mt-0.5 truncate">
+                  {restorableDraft.title} · {formatRelativeTime(restorableDraft.savedAt)}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                onClick={handleDismissDraft}
+                className="py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold text-xs active:scale-95 transition-transform"
+              >
+                Start fresh
+              </button>
+              <button
+                onClick={handleRestoreDraft}
+                className="py-2.5 rounded-xl bg-ember hover:bg-ember-press text-ink font-black text-xs active:scale-95 transition-transform"
+              >
+                Restore
+              </button>
+            </div>
+          </motion.div>
+        )}
 
       {/* 4. FULL-SCREEN TEXT EDITOR OVERLAY MODAL */}
       <AnimatePresence>
