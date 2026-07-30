@@ -3,9 +3,9 @@ import type {
   StatData,
   StatSlotId,
   TemplateLayout,
-  TextSlotId,
 } from "../types";
 import { getStatDesign } from "../data/templateStatDesigns";
+import { resolveSlotStyle } from "./metricSlots";
 import { roundRectPath } from "../data/templateStatDesigns/shared";
 
 /** Must match REFERENCE_WIDTH in StatLayer.tsx. */
@@ -49,7 +49,9 @@ export async function drawStatLayer(
       continue;
     }
 
-    const style = design.slots[slot as TextSlotId];
+    // One resolver for the DOM preview and this canvas twin, so a metric chip
+    // cannot look different in the export than it did on screen.
+    const style = resolveSlotStyle(design, slot, data);
     if (!style) continue;
 
     ctx.save();

@@ -75,6 +75,9 @@ export default function HomeScreen() {
         distance: `${statData.distance} ${statData.distanceUnit}`,
         pace: `${statData.pace} ${paceSuffix(distanceUnit)}`,
         time: statData.time,
+        // Everything else the activity recorded — heart rate, elevation,
+        // watts, kudos. Without this the metric picker has nothing to offer.
+        metrics: statData.metrics,
         // Absent for treadmill runs, gym sessions, and Health Connect
         // activities — the editor hides the Route tool when it's missing.
         route: activity.route,

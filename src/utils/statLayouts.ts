@@ -1,7 +1,13 @@
 import type { CustomLayouts, SlotPosition, TemplateLayout } from "../types";
 import { getStatDesign } from "../data/templateStatDesigns";
 
-const STORAGE_KEY = "stride_stat_layouts";
+/**
+ * Versioned: layouts are keyed by slot id, and slot ids gained an open-ended
+ * `metric:*` form. An unversioned key would resolve old layouts against a slot
+ * vocabulary that has changed underneath them.
+ */
+const STORAGE_KEY = "stride_stat_layouts_v2";
+const LEGACY_STORAGE_KEY = "stride_stat_layouts";
 
 /** The layout in effect for a template: the user's drags, else its design. */
 export function resolveLayout(
@@ -89,7 +95,20 @@ export function hasCustomLayout(customs: CustomLayouts, templateId: string): boo
 export function loadCustomLayouts(): CustomLayouts {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
+    if (!raw) {
+      // v1 layouts only ever held the five core slots, which still resolve, so
+      // they are worth carrying over once rather than discarding.
+      const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacy) {
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
+        const migrated = JSON.parse(legacy);
+        if (migrated && typeof migrated === "object") {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+          return migrated as CustomLayouts;
+        }
+      }
+      return {};
+    }
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === "object" ? (parsed as CustomLayouts) : {};
   } catch {

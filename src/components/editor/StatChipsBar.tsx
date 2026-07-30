@@ -2,10 +2,11 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { Layers, RefreshCw, Sliders, X } from "lucide-react";
-import type { StatSlotId } from "../../types";
+import type { CoreSlotId, StatData, StatSlotId } from "../../types";
 import { triggerHaptic } from "../../utils/haptics";
+import { metricSlot, metricsByCategory } from "../../utils/metricSlots";
 
-const SLOT_LABELS: Record<StatSlotId, string> = {
+const SLOT_LABELS: Record<CoreSlotId, string> = {
   distance: "Distance",
   pace: "Pace",
   time: "Time",
@@ -13,7 +14,7 @@ const SLOT_LABELS: Record<StatSlotId, string> = {
   accent: "Accent Decoration",
 };
 
-const SLOT_INITIALS: Record<StatSlotId, string> = {
+const SLOT_INITIALS: Record<CoreSlotId, string> = {
   distance: "D",
   pace: "P",
   time: "T",
@@ -21,7 +22,7 @@ const SLOT_INITIALS: Record<StatSlotId, string> = {
   accent: "✦",
 };
 
-const ALL_SLOTS: StatSlotId[] = ["distance", "pace", "time", "title", "accent"];
+const ALL_SLOTS: CoreSlotId[] = ["distance", "pace", "time", "title", "accent"];
 
 interface StatChipsBarProps {
   hiddenSlots: Set<StatSlotId>;
@@ -31,6 +32,11 @@ interface StatChipsBarProps {
   /** Whether the active template has a user-dragged layout worth resetting. */
   isCustomized: boolean;
   onReset: () => void;
+  /** The activity, which decides which metrics can be offered at all. */
+  statData: StatData;
+  /** Metric slots currently placed on the canvas. */
+  placedMetricSlots: StatSlotId[];
+  onToggleMetric: (slot: StatSlotId) => void;
 }
 
 /**
@@ -44,7 +50,12 @@ export default function StatChipsBar({
   onToggleGroup,
   isCustomized,
   onReset,
+  statData,
+  placedMetricSlots,
+  onToggleMetric,
 }: StatChipsBarProps) {
+  const metricGroups = metricsByCategory(statData);
+  const placed = new Set(placedMetricSlots);
   const [isSelectorOpen, setIsSelectorOpen] = useState<boolean>(false);
 
   return (
@@ -182,6 +193,55 @@ export default function StatChipsBar({
                     );
                   })}
                 </div>
+
+                {/* Everything else the activity carries. These were fetched
+                    and discarded before the slot system could hold them. */}
+                {metricGroups.length > 0 && (
+                  <div className="space-y-3 pb-2 max-h-[38vh] overflow-y-auto">
+                    <div className="pt-1">
+                      <h4 className="text-sm font-extrabold text-white">Add a metric</h4>
+                      <p className="text-xs text-text-secondary mt-0.5">
+                        Only what this activity recorded
+                      </p>
+                    </div>
+
+                    {metricGroups.map(({ category, metrics }) => (
+                      <div key={category} className="space-y-1.5">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-white/40 px-1">
+                          {category}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {metrics.map((metric) => {
+                            const slot = metricSlot(metric.id);
+                            const isPlaced = placed.has(slot);
+                            return (
+                              <button
+                                key={metric.id}
+                                onClick={() => {
+                                  onToggleMetric(slot);
+                                  triggerHaptic("light");
+                                }}
+                                aria-pressed={isPlaced}
+                                className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 ${
+                                  isPlaced
+                                    ? "bg-ember text-ink"
+                                    : "bg-white/5 border border-white/10 text-white/70 hover:text-white"
+                                }`}
+                              >
+                                <span aria-hidden="true">{metric.icon}</span>
+                                <span>{metric.label}</span>
+                                <span className={isPlaced ? "text-ink/60" : "text-white/40"}>
+                                  {metric.value}
+                                  {metric.unit && ` ${metric.unit}`}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 <button
                   onClick={() => setIsSelectorOpen(false)}

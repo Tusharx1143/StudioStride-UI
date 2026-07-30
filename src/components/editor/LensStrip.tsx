@@ -1,4 +1,5 @@
 import { motion } from "motion/react";
+import { Star } from "lucide-react";
 import type { TemplateFamily } from "../../types";
 import { triggerHaptic } from "../../utils/haptics";
 
@@ -6,6 +7,34 @@ interface LensStripProps {
   templates: TemplateFamily[];
   selectedId: string;
   onSelect: (template: TemplateFamily) => void;
+  /** Starred template ids — pinned to the head of the strip. */
+  favouriteIds?: string[];
+  /** Recently used template ids, most recent first. */
+  recentIds?: string[];
+  onToggleFavourite?: (templateId: string) => void;
+}
+
+/**
+ * Favourites first, then recents, then everything else in its authored order.
+ *
+ * The strip is the most-looked-at control in the editor, and a creator who
+ * uses three templates should not scroll past twenty-odd to reach them.
+ */
+function orderTemplates(
+  templates: TemplateFamily[],
+  favouriteIds: string[],
+  recentIds: string[]
+): TemplateFamily[] {
+  const rank = (t: TemplateFamily): number => {
+    if (favouriteIds.includes(t.id)) return -1000 + favouriteIds.indexOf(t.id);
+    const recent = recentIds.indexOf(t.id);
+    return recent === -1 ? 0 : -500 + recent;
+  };
+
+  return templates
+    .map((t, index) => ({ t, index }))
+    .sort((a, b) => rank(a.t) - rank(b.t) || a.index - b.index)
+    .map(({ t }) => t);
 }
 
 /**
@@ -13,7 +42,16 @@ interface LensStripProps {
  * as any camera lens picker: a conic active ring, an abstract thumbnail built
  * from the family's accent colour, and a label that never hides.
  */
-export default function LensStrip({ templates, selectedId, onSelect }: LensStripProps) {
+export default function LensStrip({
+  templates,
+  selectedId,
+  onSelect,
+  favouriteIds = [],
+  recentIds = [],
+  onToggleFavourite,
+}: LensStripProps) {
+  const ordered = orderTemplates(templates, favouriteIds, recentIds);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -28,8 +66,9 @@ export default function LensStrip({ templates, selectedId, onSelect }: LensStrip
         className="flex items-start gap-3 px-3 overflow-x-auto pb-1"
         style={{ scrollbarWidth: "none" }}
       >
-        {templates.map((tmpl) => {
+        {ordered.map((tmpl) => {
           const isActive = tmpl.id === selectedId;
+          const isFavourite = favouriteIds.includes(tmpl.id);
           return (
             <motion.button
               key={tmpl.id}
@@ -42,11 +81,24 @@ export default function LensStrip({ templates, selectedId, onSelect }: LensStrip
                 onSelect(tmpl);
                 triggerHaptic("selection");
               }}
+              onDoubleClick={(e) => {
+                // Double-tap stars a template — LensTemplate.isFavorite was
+                // declared in the types and never had a way to be set.
+                e.preventDefault();
+                e.stopPropagation();
+                onToggleFavourite?.(tmpl.id);
+              }}
               className="flex flex-col items-center gap-1 shrink-0 relative w-[64px]"
-              aria-label={`${tmpl.name} template`}
+              aria-label={`${tmpl.name} template${isFavourite ? ", favourite" : ""}`}
               aria-pressed={isActive}
+              title={`${tmpl.name} — double-tap to ${isFavourite ? "unfavourite" : "favourite"}`}
             >
               <div className="relative">
+                {isFavourite && (
+                  <span className="absolute -top-1 -right-1 z-10 w-4 h-4 rounded-full bg-ember flex items-center justify-center shadow-md">
+                    <Star className="w-2.5 h-2.5 text-ink fill-ink" />
+                  </span>
+                )}
                 {isActive && (
                   <motion.div
                     layoutId="lensActiveRing"

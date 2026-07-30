@@ -78,6 +78,19 @@ import {
 } from "../utils/projectStore";
 import { renderComposite } from "../utils/renderComposite";
 import { scaleFilter } from "../utils/filterScale";
+import { isMetricSlot, pruneUnavailableMetricSlots } from "../utils/metricSlots";
+import {
+  addCustomColor,
+  addPreset,
+  loadBrandKit,
+  newPresetId,
+  pushRecentTemplate,
+  removePreset,
+  saveBrandKit,
+  toggleFavouriteTemplate,
+  type BrandKit,
+  type StylePreset,
+} from "../utils/brandKit";
 import { getDistanceUnit } from "../utils/unitPreference";
 import GestureSwipeCarousel from "./GestureSwipeCarousel";
 import ExportModal from "./ExportModal";
@@ -234,6 +247,7 @@ export default function EditorScreen() {
     ).replace(/\s*\/\s*\w+$/, ""),
     time: (routeState.time as string) ?? (routeState.activityTime as string) ?? "52:18",
     title: (routeState.title as string) ?? (routeState.activityTitle as string) ?? "Morning Run",
+    metrics: (routeState.metrics as StatData["metrics"]) ?? undefined,
   }));
 
   // Slot positions the user has dragged, remembered per template.
@@ -256,8 +270,15 @@ export default function EditorScreen() {
   const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
   const [isBackgroundSheetOpen, setIsBackgroundSheetOpen] = useState<boolean>(false);
 
+  // A layout is remembered per template and reused across activities, so a
+  // cycling layout carrying metric:power must not leave a blank chip behind on
+  // a treadmill run.
+  const resolvedStatLayout = pruneUnavailableMetricSlots(statLayout, statData) as TemplateLayout;
+
+  const placedMetricSlots = (Object.keys(resolvedStatLayout) as StatSlotId[]).filter(isMetricSlot);
+
   const visibleStatLayout: TemplateLayout = Object.fromEntries(
-    Object.entries(statLayout).filter(([slot]) => !hiddenSlots.has(slot as StatSlotId))
+    Object.entries(resolvedStatLayout).filter(([slot]) => !hiddenSlots.has(slot as StatSlotId))
   ) as TemplateLayout;
 
   // Which stat carries the selection outline. Templates are switched from the
@@ -279,6 +300,7 @@ export default function EditorScreen() {
     if (template.id === templateId) return;
     pushHistorySnapshot();
     setTemplateId(template.id);
+    updateKit(pushRecentTemplate(brandKit, template.id));
     setStatLayout(resolveLayout(template.id, customLayouts));
     setHiddenSlots(new Set());
     setSelectedStatSlot((prev) => (prev && prev !== "accent" ? prev : "distance"));
@@ -325,6 +347,32 @@ export default function EditorScreen() {
     saveCustomLayouts(updated);
     setCustomLayouts(updated);
     setStatLayout(resolveLayout(templateId, updated));
+  };
+
+  /**
+   * Adds or removes a metric chip.
+   *
+   * New chips land just below centre rather than at the template's origin, so
+   * two metrics added in a row don't stack invisibly on top of each other.
+   */
+  const handleToggleMetric = (slot: StatSlotId) => {
+    pushHistorySnapshot();
+
+    setStatLayout((prev) => {
+      if (prev[slot]) {
+        const next = { ...prev };
+        delete next[slot];
+        return next;
+      }
+
+      const placedMetrics = (Object.keys(prev) as StatSlotId[]).filter(isMetricSlot).length;
+      return {
+        ...prev,
+        [slot]: { x: 12, y: Math.min(88, 58 + placedMetrics * 8) },
+      };
+    });
+
+    setSelectedStatSlot(slot);
   };
 
   const handleToggleSlot = (slot: StatSlotId) => {
@@ -533,6 +581,61 @@ export default function EditorScreen() {
 
     applySnapshot(nextSnapshot);
     showToast("Redo applied");
+  };
+
+  // ── Brand kit ─────────────────────────────────────────────────────────
+  //
+  // Every session used to start from scratch: pick template, recolour,
+  // reposition. LensTemplate.isFavorite was declared and never used, and the
+  // nine hardcoded swatches were a ceiling rather than a starting point.
+
+  const [brandKit, setBrandKit] = useState<BrandKit>(() => loadBrandKit());
+
+  const updateKit = (next: BrandKit) => {
+    setBrandKit(next);
+    saveBrandKit(next);
+  };
+
+  const handleToggleFavouriteTemplate = (id: string) => {
+    updateKit(toggleFavouriteTemplate(brandKit, id));
+    triggerHaptic("light");
+  };
+
+  const handleAddCustomColor = (hex: string) => {
+    updateKit(addCustomColor(brandKit, hex));
+  };
+
+  /** Captures the current look — template, layout, filter, colour — as a preset. */
+  const handleSaveStylePreset = () => {
+    const preset: StylePreset = {
+      id: newPresetId(),
+      name: `Style ${brandKit.presets.length + 1}`,
+      createdAt: new Date().toISOString(),
+      templateId,
+      statLayout: JSON.parse(JSON.stringify(statLayout)),
+      hiddenSlots: [...hiddenSlots],
+      lensFilter,
+      filterIntensity,
+      textColor: selectedColor,
+    };
+
+    updateKit(addPreset(brandKit, preset));
+    showToast("Style saved");
+  };
+
+  const handleApplyStylePreset = (preset: StylePreset) => {
+    pushHistorySnapshot();
+    setTemplateId(preset.templateId);
+    setStatLayout(preset.statLayout);
+    setHiddenSlots(new Set(preset.hiddenSlots));
+    setLensFilter(preset.lensFilter);
+    setFilterIntensity(preset.filterIntensity);
+    setSelectedColor(preset.textColor);
+    showToast(`Applied ${preset.name}`);
+  };
+
+  const handleRemoveStylePreset = (presetId: string) => {
+    updateKit(removePreset(brandKit, presetId));
   };
 
   // Crop & Orientation Tool State
@@ -2018,6 +2121,9 @@ export default function EditorScreen() {
 
           {/* Stat chips — act on the template's stats as a set */}
           <StatChipsBar
+            statData={statData}
+            placedMetricSlots={placedMetricSlots}
+            onToggleMetric={handleToggleMetric}
             hiddenSlots={hiddenSlots}
             onToggleSlot={handleToggleSlot}
             isGrouped={isGrouped}
@@ -2096,6 +2202,8 @@ export default function EditorScreen() {
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            role="status"
+            aria-live="polite"
             className="absolute top-24 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-full bg-black/80 backdrop-blur-md border border-white/20 text-xs text-white font-medium shadow-xl flex items-center gap-2"
           >
             <Info className="w-3.5 h-3.5 text-ember" />
@@ -2308,6 +2416,8 @@ export default function EditorScreen() {
                     <button
                       key={bg.id}
                       onClick={() => setSelectedBgStyle(bg.id)}
+                      aria-pressed={selectedBgStyle === bg.id}
+                      aria-label={`Text background: ${bg.label}`}
                       className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
                         selectedBgStyle === bg.id
                           ? "bg-ember text-ink shadow-md"
@@ -2376,10 +2486,47 @@ export default function EditorScreen() {
                           ? "ring-2 ring-ember ring-offset-2 ring-offset-black scale-110 border-white"
                           : "border-white/20"
                       }`}
-                      aria-label={`Select color ${c.name}`}
+                      aria-label={`Text colour ${c.name}`}
+                      aria-pressed={isSelected}
                     />
                   );
                 })}
+
+                {/* The nine built-ins are a starting point, not a ceiling. */}
+                {brandKit.customColors.map((hex) => {
+                  const isSelected = selectedColor.toLowerCase() === hex.toLowerCase();
+                  return (
+                    <button
+                      key={hex}
+                      onClick={() => setSelectedColor(hex)}
+                      style={{ backgroundColor: hex }}
+                      className={`w-8 h-8 rounded-full shrink-0 border-2 transition-transform active:scale-90 ${
+                        isSelected
+                          ? "ring-2 ring-ember ring-offset-2 ring-offset-black scale-110 border-white"
+                          : "border-white/20"
+                      }`}
+                      aria-label={`Saved colour ${hex}`}
+                      aria-pressed={isSelected}
+                    />
+                  );
+                })}
+
+                <label
+                  className="w-8 h-8 rounded-full shrink-0 border-2 border-dashed border-white/30 flex items-center justify-center text-white/60 hover:text-white cursor-pointer active:scale-90 transition-transform"
+                  title="Add a custom colour"
+                >
+                  <Plus className="w-4 h-4" />
+                  <input
+                    type="color"
+                    value={selectedColor}
+                    onChange={(e) => {
+                      setSelectedColor(e.target.value);
+                      handleAddCustomColor(e.target.value);
+                    }}
+                    className="sr-only"
+                    aria-label="Add a custom text colour"
+                  />
+                </label>
               </div>
             </div>
           </motion.div>
@@ -2594,6 +2741,8 @@ export default function EditorScreen() {
                             ? "ring-2 ring-ember ring-offset-2 ring-offset-black scale-110 border-white"
                             : "border-white/20"
                         }`}
+                        aria-label={`Brush colour ${c.name}`}
+                        aria-pressed={isSelected}
                       />
                     );
                   })}
@@ -2834,6 +2983,8 @@ export default function EditorScreen() {
                     min={-45}
                     max={45}
                     value={imagePerspectiveX}
+                    aria-label="Tilt X"
+                    aria-valuetext={`${imagePerspectiveX} degrees`}
                     onChange={(e) => {
                       pushHistorySnapshot();
                       setImagePerspectiveX(Number(e.target.value));
@@ -2856,6 +3007,8 @@ export default function EditorScreen() {
                     min={-45}
                     max={45}
                     value={imagePerspectiveY}
+                    aria-label="Tilt Y"
+                    aria-valuetext={`${imagePerspectiveY} degrees`}
                     onChange={(e) => {
                       pushHistorySnapshot();
                       setImagePerspectiveY(Number(e.target.value));
@@ -2883,6 +3036,8 @@ export default function EditorScreen() {
                     min={0}
                     max={50}
                     value={imageShadowBlur}
+                    aria-label="Shadow blur"
+                    aria-valuetext={`${imageShadowBlur} pixels`}
                     onChange={(e) => {
                       pushHistorySnapshot();
                       setImageShadowBlur(Number(e.target.value));
@@ -2899,6 +3054,8 @@ export default function EditorScreen() {
                     min={0}
                     max={30}
                     value={imageShadowOffsetY}
+                    aria-label="Shadow offset"
+                    aria-valuetext={`${imageShadowOffsetY} pixels`}
                     onChange={(e) => {
                       pushHistorySnapshot();
                       setImageShadowOffsetY(Number(e.target.value));
@@ -3124,6 +3281,9 @@ export default function EditorScreen() {
           templates={TEMPLATE_FAMILIES}
           selectedId={templateId}
           onSelect={handleSelectTemplate}
+          favouriteIds={brandKit.favouriteTemplates}
+          recentIds={brandKit.recentTemplates}
+          onToggleFavourite={handleToggleFavouriteTemplate}
         />
 
         <motion.div
@@ -3320,6 +3480,56 @@ export default function EditorScreen() {
                     );
                   })}
                 </div>
+              </div>
+
+              {/* Saved styles — template + layout + filter + colour, one tap
+                  to reapply. Creators post several times a week; every session
+                  used to start from scratch. */}
+              <div className="bg-white/5 rounded-2xl p-3.5 border border-white/5 space-y-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-white/80">Saved styles</p>
+                    <p className="text-[10px] text-text-secondary mt-0.5">
+                      Template, layout, filter and colour
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleSaveStylePreset}
+                    className="shrink-0 px-3 py-1.5 rounded-full bg-ember text-ink text-[11px] font-extrabold flex items-center gap-1 active:scale-95 transition-transform"
+                  >
+                    <Plus className="w-3 h-3 stroke-[3]" />
+                    <span>Save current</span>
+                  </button>
+                </div>
+
+                {brandKit.presets.length === 0 ? (
+                  <p className="text-[10px] text-text-secondary">
+                    No saved styles yet — build a look you like, then save it.
+                  </p>
+                ) : (
+                  <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                    {brandKit.presets.map((preset) => (
+                      <div
+                        key={preset.id}
+                        className="shrink-0 flex items-center gap-1 rounded-full bg-white/10 border border-white/10 pl-3 pr-1 py-1"
+                      >
+                        <button
+                          onClick={() => handleApplyStylePreset(preset)}
+                          className="text-[11px] font-bold text-white/80 hover:text-white"
+                        >
+                          {preset.name}
+                        </button>
+                        <button
+                          onClick={() => handleRemoveStylePreset(preset.id)}
+                          aria-label={`Delete ${preset.name}`}
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-white/40 hover:text-rose-400"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Intensity slider (for filter adjustment) */}

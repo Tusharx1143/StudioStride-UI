@@ -3,8 +3,30 @@ import type { RouteGeometry } from "./utils/routeGeometry";
 
 export type { RouteGeometry };
 
+/**
+ * The typeset stats every template authors by hand.
+ *
+ * Deliberately closed: a template's design table gives each of these an
+ * explicit SlotStyle.
+ */
+export type TextSlotId = "distance" | "pace" | "time" | "title";
+
+/** The pieces a template decomposes into before any metric is added. */
+export type CoreSlotId = TextSlotId | "accent";
+
+/**
+ * Any other metric the activity happens to carry — heart rate, elevation,
+ * watts, kudos.
+ *
+ * Open-ended because the set depends on the activity and the source, not on
+ * the template. Templates cannot author a style for a slot they have never
+ * heard of, so metric slots inherit one from the template's own secondary
+ * stat (see `resolveSlotStyle`).
+ */
+export type MetricSlotId = `metric:${string}`;
+
 /** The fixed set of draggable pieces every template decomposes into. */
-export type StatSlotId = "distance" | "pace" | "time" | "title" | "accent";
+export type StatSlotId = CoreSlotId | MetricSlotId;
 
 /** Position of a slot's top-left anchor, as a percentage of the canvas. */
 export interface SlotPosition {
@@ -18,12 +40,42 @@ export type TemplateLayout = Partial<Record<StatSlotId, SlotPosition>>;
 /** Custom layouts the user has dragged, keyed by template id. */
 export type CustomLayouts = Record<string, TemplateLayout>;
 
+export type MetricCategory =
+  | "Running"
+  | "Performance"
+  | "Elevation"
+  | "Ride"
+  | "Achievements";
+
+/**
+ * One resolved metric from an activity, ready to typeset.
+ *
+ * `value` and `unit` are already formatted — the sources know their own units,
+ * and a template should never be doing arithmetic.
+ */
+export interface MetricValue {
+  id: string;
+  label: string;
+  value: string;
+  unit: string;
+  category: MetricCategory;
+  icon: string;
+}
+
 export interface StatData {
   distance: number;
   distanceUnit: string;
   pace: string;
   time: string;
   title: string;
+  /**
+   * Everything beyond the core four, keyed by metric id.
+   *
+   * Populated only with what the activity actually has: a treadmill run has no
+   * elevation, a Health Connect walk has no watts. Absent keys are what gates
+   * the metric picker, so it never offers a stat that would render blank.
+   */
+  metrics?: Record<string, MetricValue>;
 }
 
 export interface SlotBackground {
@@ -72,9 +124,6 @@ export interface SlotBox {
   y: number;
   scale: number;
 }
-
-/** Every slot except `accent`, which is drawn rather than typeset. */
-export type TextSlotId = Exclude<StatSlotId, "accent">;
 
 export interface TemplateStatDesign {
   slots: Partial<Record<TextSlotId, SlotStyle>>;
