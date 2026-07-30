@@ -109,7 +109,9 @@ export default function SnapCamera() {
   const [showCameraSettings, setShowCameraSettings] = useState<boolean>(false);
 
   // Template family — the camera's "lenses" are template families (stat layouts)
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateFamily>(templateFamilies[0]);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateFamily>(
+    templateFamilies[0] ?? { id: "default", name: "Default", category: "Custom", icon: "🏃", tagline: "", accentColor: "#FF7A1A" }
+  );
   // Capture state
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
 
@@ -597,7 +599,7 @@ export default function SnapCamera() {
               className={`absolute inset-0 bg-cover bg-center transition-all duration-500 ${
                 isNightMode ? "brightness-125 contrast-125" : ""
               }`}
-              style={{ backgroundImage: `url("${stockPhotos[1].url}")`, filter: lensFilter || undefined }}
+              style={{ backgroundImage: `url("${stockPhotos[1]?.url ?? stockPhotos[0]?.url ?? ""}")`, filter: lensFilter || undefined }}
             ></div>
           )}
 

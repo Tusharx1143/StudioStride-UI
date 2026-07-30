@@ -525,6 +525,112 @@ export const LENS_TEMPLATES_EXPANDED: LensTemplate[] = [
   },
 ];
 
+export const SAMPLE_STUDIO_TEMPLATES: LensTemplate[] = [
+  {
+    id: "studio_speed",
+    name: "Speed Pulse",
+    category: "Studio",
+    icon: "⚡",
+    tagline: "Speed in bold — top-right placement",
+    badgeColor: "bg-cyan-500 text-white",
+    overlayType: "minimal",
+    defaultElements: [
+      { id: "ss_1", metricId: "speed", type: "metric", content: "{value} km/h", x: 55, y: 8, fontSize: 48, fontFamily: "'Archivo', sans-serif", fontWeight: "900", fontStyle: "normal", textAlign: "right", color: "#06B6D4", opacity: 0.95 },
+      { id: "ss_2", metricId: "distance", type: "metric", content: "{value} {unit}", x: 55, y: 22, fontSize: 18, fontFamily: "'Inter', sans-serif", fontWeight: "600", fontStyle: "normal", textAlign: "right", color: "#FFFFFFCC", opacity: 0.8 },
+    ],
+  },
+  {
+    id: "studio_heart",
+    name: "Heart Zone",
+    category: "Studio",
+    icon: "❤️",
+    tagline: "Heart rate centered with large metrics",
+    badgeColor: "bg-rose-500 text-white",
+    overlayType: "minimal",
+    defaultElements: [
+      { id: "sh_1", metricId: "avg_hr", type: "metric", content: "{value}", x: 35, y: 15, fontSize: 64, fontFamily: "'Archivo', sans-serif", fontWeight: "900", fontStyle: "normal", textAlign: "center", color: "#F43F5E", opacity: 0.95 },
+      { id: "sh_2", metricId: "max_hr", type: "metric", content: "max {value}", x: 35, y: 30, fontSize: 16, fontFamily: "'Inter', sans-serif", fontWeight: "600", fontStyle: "normal", textAlign: "center", color: "#FDA4AF", opacity: 0.7 },
+      { id: "sh_3", type: "text", content: "❤️", x: 42, y: 5, fontSize: 28, fontFamily: "'Archivo', sans-serif", fontWeight: "400", fontStyle: "normal", textAlign: "center", color: "#FF0000", opacity: 0.85 },
+    ],
+  },
+  {
+    id: "studio_elevation",
+    name: "Peak Elevation",
+    category: "Studio",
+    icon: "⛰️",
+    tagline: "Elevation gain card bottom-left",
+    badgeColor: "bg-emerald-500 text-white",
+    overlayType: "minimal",
+    defaultElements: [
+      { id: "se_1", metricId: "elev_gain", type: "metric", content: "+{value}{unit}", x: 8, y: 68, fontSize: 42, fontFamily: "'Space Grotesk', sans-serif", fontWeight: "900", fontStyle: "normal", textAlign: "left", color: "#10B981", bgFill: "#000000", bgOpacity: 0.6, borderRadius: 16, opacity: 0.95 },
+      { id: "se_2", metricId: "elev_loss", type: "metric", content: "↓ {value}{unit}", x: 8, y: 82, fontSize: 18, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: "600", fontStyle: "normal", textAlign: "left", color: "#6EE7B7", opacity: 0.7 },
+    ],
+  },
+  {
+    id: "studio_pace",
+    name: "Pace Setter",
+    category: "Studio",
+    icon: "⏱",
+    tagline: "Pace + distance dual layout",
+    badgeColor: "bg-amber-500 text-ink",
+    overlayType: "minimal",
+    defaultElements: [
+      { id: "sp_1", metricId: "pace", type: "metric", content: "{value}", x: 8, y: 60, fontSize: 52, fontFamily: "'Archivo', sans-serif", fontWeight: "900", fontStyle: "normal", textAlign: "left", color: "#F4E409", opacity: 0.95 },
+      { id: "sp_2", metricId: "distance", type: "metric", content: "{value} {unit}", x: 8, y: 75, fontSize: 22, fontFamily: "'Inter', sans-serif", fontWeight: "700", fontStyle: "normal", textAlign: "left", color: "#FFFFFF", opacity: 0.8 },
+      { id: "sp_3", metricId: "time", type: "metric", content: "{value}", x: 50, y: 75, fontSize: 18, fontFamily: "'Inter', sans-serif", fontWeight: "500", fontStyle: "normal", textAlign: "right", color: "#FFFFFF99", opacity: 0.6 },
+    ],
+  },
+  {
+    id: "studio_power",
+    name: "Power Meter",
+    category: "Studio",
+    icon: "🔋",
+    tagline: "Cycling power with avg/max split",
+    badgeColor: "bg-yellow-500 text-ink",
+    overlayType: "minimal",
+    defaultElements: [
+      { id: "spw_1", metricId: "power", type: "metric", content: "{value} {unit}", x: 8, y: 60, fontSize: 46, fontFamily: "'Space Grotesk', sans-serif", fontWeight: "900", fontStyle: "normal", textAlign: "left", color: "#FBBF24", opacity: 0.95 },
+      { id: "spw_2", metricId: "cadence", type: "metric", content: "{value} {unit}", x: 8, y: 75, fontSize: 18, fontFamily: "'Inter', sans-serif", fontWeight: "600", fontStyle: "normal", textAlign: "left", color: "#FDE68A", opacity: 0.7 },
+    ],
+  },
+  {
+    id: "studio_badge_dist",
+    name: "Distance Badge",
+    category: "Studio",
+    icon: "📏",
+    tagline: "Clean distance pill badge",
+    badgeColor: "bg-blue-500 text-white",
+    overlayType: "minimal",
+    defaultElements: [
+      { id: "sbd_1", metricId: "distance", type: "metric", content: "{value} {unit}", x: 50, y: 50, fontSize: 28, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: "800", fontStyle: "normal", textAlign: "center", color: "#FFFFFF", bgFill: "#1D4ED8", bgOpacity: 0.9, borderRadius: 100, opacity: 1 },
+    ],
+  },
+  {
+    id: "studio_badge_hr",
+    name: "Heart Rate Badge",
+    category: "Studio",
+    icon: "💓",
+    tagline: "Minimal heart rate pill",
+    badgeColor: "bg-rose-500 text-white",
+    overlayType: "minimal",
+    defaultElements: [
+      { id: "sbh_1", metricId: "avg_hr", type: "metric", content: "{value} {unit}", x: 50, y: 50, fontSize: 26, fontFamily: "'Archivo', sans-serif", fontWeight: "800", fontStyle: "normal", textAlign: "center", color: "#FFFFFF", bgFill: "#BE123C", bgOpacity: 0.9, borderRadius: 100, opacity: 1 },
+    ],
+  },
+  {
+    id: "studio_badge_cal",
+    name: "Calories Badge",
+    category: "Studio",
+    icon: "🔥",
+    tagline: "Energy burn pill badge",
+    badgeColor: "bg-orange-500 text-white",
+    overlayType: "minimal",
+    defaultElements: [
+      { id: "sbc_1", metricId: "calories", type: "metric", content: "{value} {unit}", x: 50, y: 50, fontSize: 24, fontFamily: "'Inter', sans-serif", fontWeight: "800", fontStyle: "normal", textAlign: "center", color: "#FFFFFF", bgFill: "#EA580C", bgOpacity: 0.9, borderRadius: 100, opacity: 1 },
+    ],
+  },
+];
+
 export const TEMPLATE_FAMILIES: TemplateFamily[] = [
   {
     id: "hero",

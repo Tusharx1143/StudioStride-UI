@@ -12,3 +12,6 @@ docs
 
 # bun.lock is the lockfile of record; npm's must not drift alongside it
 package-lock.json
+
+# Firebase service account keys — never commit
+scripts/*.json

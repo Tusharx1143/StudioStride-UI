@@ -26,6 +26,8 @@ import type {
   FirestoreSticker,
   FirestoreTemplateFamily,
   FirestoreTemplateStatDesign,
+  FirestoreFont,
+  FirestoreColorPalette,
   LensTemplateFormData,
   LensFilterFormData,
   StickerFormData,
@@ -33,6 +35,8 @@ import type {
   TemplateFamilyFormData,
   StorableTemplateStatDesign,
   StickerItem,
+  FontFormData,
+  ColorPaletteFormData,
 } from "../types/content";
 import { ContentRepository } from "./contentRepository";
 import { resolveFormatter } from "../data/formatterRegistry";
@@ -89,6 +93,8 @@ const stockPhotoRepo = new ContentRepository<FirestoreStockPhoto>("stockPhotos")
 const lensFilterRepo = new ContentRepository<FirestoreLensFilter>(
   "lensFilters"
 );
+const fontRepo = new ContentRepository<FirestoreFont>("fonts");
+const colorPaletteRepo = new ContentRepository<FirestoreColorPalette>("colorPalettes");
 
 // ====================================================================
 // Stat design resolution helpers
@@ -344,6 +350,8 @@ export async function getStickers(): Promise<StickerItem[]> {
     type: doc.type as StickerItem["type"],
     bgGradient: doc.bgGradient,
     statKey: doc.statKey,
+    format: doc.format,
+    transparent: doc.transparent,
   }));
   cache.set("sticker", result);
   return result;
@@ -479,6 +487,66 @@ export async function updateLensFilter(
 export async function deleteLensFilter(id: string): Promise<void> {
   await lensFilterRepo.softDelete(id);
   cache.invalidate("lens_filter");
+}
+
+// ====================================================================
+// Fonts
+// ====================================================================
+
+export async function getFonts(): Promise<FirestoreFont[]> {
+  const cached = cache.get<FirestoreFont[]>("font");
+  if (cached) return cached;
+  const data = await fontRepo.getActive();
+  cache.set("font", data);
+  return data;
+}
+
+export async function createFont(data: FontFormData): Promise<void> {
+  const now = new Date().toISOString();
+  const doc: Omit<FirestoreFont, "id"> = { ...data, createdAt: now, updatedAt: now, isActive: true, createdBy: "admin" };
+  const id = data.name.toLowerCase().replace(/\s+/g, "_");
+  await fontRepo.create(id, doc);
+  cache.invalidate("font");
+}
+
+export async function updateFont(id: string, data: Partial<FontFormData>): Promise<void> {
+  await fontRepo.update(id, { ...data, updatedAt: new Date().toISOString() });
+  cache.invalidate("font");
+}
+
+export async function deleteFont(id: string): Promise<void> {
+  await fontRepo.softDelete(id);
+  cache.invalidate("font");
+}
+
+// ====================================================================
+// Color Palettes
+// ====================================================================
+
+export async function getColorPalettes(): Promise<FirestoreColorPalette[]> {
+  const cached = cache.get<FirestoreColorPalette[]>("colorPalette");
+  if (cached) return cached;
+  const data = await colorPaletteRepo.getActive();
+  cache.set("colorPalette", data);
+  return data;
+}
+
+export async function createColorPalette(data: ColorPaletteFormData): Promise<void> {
+  const now = new Date().toISOString();
+  const doc: Omit<FirestoreColorPalette, "id"> = { ...data, createdAt: now, updatedAt: now, isActive: true, createdBy: "admin" };
+  const id = data.name.toLowerCase().replace(/\s+/g, "_");
+  await colorPaletteRepo.create(id, doc);
+  cache.invalidate("colorPalette");
+}
+
+export async function updateColorPalette(id: string, data: Partial<ColorPaletteFormData>): Promise<void> {
+  await colorPaletteRepo.update(id, { ...data, updatedAt: new Date().toISOString() });
+  cache.invalidate("colorPalette");
+}
+
+export async function deleteColorPalette(id: string): Promise<void> {
+  await colorPaletteRepo.softDelete(id);
+  cache.invalidate("colorPalette");
 }
 
 // ====================================================================

@@ -16,7 +16,7 @@ import AuthScreen from "./components/AuthScreen";
 import HomeScreen from "./components/HomeScreen";
 import ProfileScreen from "./components/ProfileScreen";
 import ProjectsScreen from "./components/ProjectsScreen";
-import SnapCamera from "./components/SnapCamera";
+import EditorScreen from "./components/EditorScreen";
 import AdminLoginScreen from "./components/admin/AdminLoginScreen";
 import AdminDashboard from "./components/admin/AdminDashboard";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -71,7 +71,7 @@ function AnimatedRoutes() {
   const location = useLocation();
 
   return (
-    <AnimatePresence mode="wait">
+    <AnimatePresence mode="wait" initial={false}>
       <Routes location={location} key={location.pathname}>
         <Route
           path="/"
@@ -125,7 +125,7 @@ function AnimatedRoutes() {
             <ErrorBoundary>
               <RequireAnyAuth>
                 <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={pageTransition} className="w-full h-full">
-                  <SnapCamera />
+                  <EditorScreen />
                 </motion.div>
               </RequireAnyAuth>
             </ErrorBoundary>
@@ -167,19 +167,21 @@ function AnimatedRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <ThemeProvider>
-        <AuthProvider>
-          <HealthConnectProvider>
-            <ActivitySourcesProvider>
-              <ContentProvider>
-                <AdminAuthProvider>
-                  <AnimatedRoutes />
-                </AdminAuthProvider>
-              </ContentProvider>
-            </ActivitySourcesProvider>
-          </HealthConnectProvider>
-        </AuthProvider>
-      </ThemeProvider>
+      <ErrorBoundary>
+        <ThemeProvider>
+          <AuthProvider>
+            <HealthConnectProvider>
+              <ActivitySourcesProvider>
+                <ContentProvider>
+                  <AdminAuthProvider>
+                    <AnimatedRoutes />
+                  </AdminAuthProvider>
+                </ContentProvider>
+              </ActivitySourcesProvider>
+            </HealthConnectProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

@@ -8,7 +8,7 @@ import type { TemplateFamilyFormData } from "../../types/content";
 import { getTemplateFamilies, createTemplateFamily, updateTemplateFamily, deleteTemplateFamily } from "../../services/contentService";
 import ContentListCard from "./shared/ContentListCard";
 import ConfirmDialog from "./shared/ConfirmDialog";
-import { Plus, Save, X } from "lucide-react";
+import { Plus, Save, X, Eye } from "lucide-react";
 
 const CATEGORIES = ["Bold", "Classic", "Clean", "Modern", "Tech", "Gaming", "Maps", "Vintage", "Premium", "Art", "Social", "Dynamic", "Utility"];
 
@@ -149,6 +149,59 @@ export default function TemplateFamilyManager() {
             </div>
           </div>
 
+          {/* Live canvas preview — shows stat overlays with transparent bg */}
+          <div>
+            <label className="text-label text-white/60 block mb-2 flex items-center gap-1.5">
+              <Eye className="w-3.5 h-3.5" /> Preview
+            </label>
+            <div className="relative w-full aspect-[9/16] max-h-[320px] rounded-xl overflow-hidden bg-ink">
+              {/* Sample photo background */}
+              <img
+                src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=400&auto=format&fit=crop"
+                alt="Preview"
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              {/* Dark scrim for readability */}
+              <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/50" />
+              {/* Transparent stat overlays */}
+              <div className="absolute inset-0 flex flex-col justify-end p-4 pb-8 pointer-events-none">
+                <div className="space-y-1">
+                  <div
+                    className="text-4xl font-black tracking-tighter"
+                    style={{ color: form.accentColor, textShadow: "0 2px 12px rgba(0,0,0,0.7)" }}
+                  >
+                    8.42
+                  </div>
+                  <div className="flex gap-3">
+                    <span
+                      className="text-sm font-bold uppercase tracking-wider"
+                      style={{ color: form.accentColor + "CC", textShadow: "0 1px 6px rgba(0,0,0,0.6)" }}
+                    >
+                      6:12 /km
+                    </span>
+                    <span
+                      className="text-sm font-bold uppercase tracking-wider"
+                      style={{ color: "#FFFFFFCC", textShadow: "0 1px 6px rgba(0,0,0,0.6)" }}
+                    >
+                      52:18
+                    </span>
+                  </div>
+                  <div
+                    className="text-xs font-semibold uppercase tracking-widest"
+                    style={{ color: "#FFFFFF99", textShadow: "0 1px 4px rgba(0,0,0,0.5)" }}
+                  >
+                    {form.name || "Morning Run"}
+                  </div>
+                </div>
+              </div>
+              {/* Badge */}
+              <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1" style={{ backgroundColor: form.accentColor + "22", color: form.accentColor, backdropFilter: "blur(8px)" }}>
+                <span>{form.icon || "◻️"}</span>
+                <span>{form.name || "Template"}</span>
+              </div>
+            </div>
+          </div>
+
           <button type="submit" className="flex items-center gap-2 px-4 py-2 rounded-lg bg-ember text-ink text-sm font-bold hover:brightness-110 transition-all">
             <Save className="w-4 h-4" /> {editing ? "Update" : "Create"}
           </button>
@@ -167,8 +220,16 @@ export default function TemplateFamilyManager() {
             onToggleActive={() => {}}
             onDelete={() => setDeleteTarget(tf.id)}
             preview={
-              <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: tf.accentColor + "20" }}>
-                <span className="text-2xl">{tf.icon}</span>
+              <div className="w-full h-full relative flex items-center justify-center overflow-hidden" style={{ backgroundColor: "#0a0a0a" }}>
+                <div className="absolute inset-0 opacity-20" style={{ background: `linear-gradient(135deg, ${tf.accentColor}88, transparent 60%)` }} />
+                <div className="relative flex flex-col items-center gap-0.5">
+                  <span className="text-lg">{tf.icon}</span>
+                  <span className="text-[7px] font-black uppercase tracking-wider" style={{ color: tf.accentColor }}>STATS</span>
+                  <div className="flex gap-1">
+                    <span className="text-[5px] font-bold" style={{ color: tf.accentColor + "99" }}>8.4</span>
+                    <span className="text-[5px] font-bold text-white/50">6:12</span>
+                  </div>
+                </div>
               </div>
             }
           />

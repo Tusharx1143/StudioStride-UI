@@ -8,7 +8,7 @@ import type { LensTemplateFormData } from "../../types/content";
 import { getLensTemplates, createLensTemplate, updateLensTemplate, deleteLensTemplate } from "../../services/contentService";
 import ContentListCard from "./shared/ContentListCard";
 import ConfirmDialog from "./shared/ConfirmDialog";
-import { Plus, Save, X, Trash2 } from "lucide-react";
+import { Plus, Save, X, Trash2, Eye } from "lucide-react";
 
 const CATEGORIES = ["AI", "Trending", "Atmosphere", "Portrait", "Vintage", "Maps", "Brands", "Custom"];
 const OVERLAY_TYPES = ["minimal", "strava", "cyberpunk", "vintage", "route", "trophy", "music", "custom"];
@@ -229,7 +229,7 @@ export default function LensTemplateManager() {
                     <input type="number" value={el.fontSize} onChange={(e) => updateElement(i, { fontSize: Number(e.target.value) })} className="w-full px-2 py-1 rounded bg-surface-raised border hairline-border text-white text-xs" min={8} max={80} />
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   <div>
                     <label className="text-[10px] text-white/40">X%</label>
                     <input type="number" value={el.x} onChange={(e) => updateElement(i, { x: Number(e.target.value) })} className="w-full px-2 py-1 rounded bg-surface-raised border hairline-border text-white text-xs" min={0} max={100} />
@@ -239,12 +239,88 @@ export default function LensTemplateManager() {
                     <input type="number" value={el.y} onChange={(e) => updateElement(i, { y: Number(e.target.value) })} className="w-full px-2 py-1 rounded bg-surface-raised border hairline-border text-white text-xs" min={0} max={100} />
                   </div>
                   <div>
+                    <label className="text-[10px] text-white/40">Opacity</label>
+                    <input type="number" value={el.opacity ?? 1} onChange={(e) => updateElement(i, { opacity: Number(e.target.value) })} className="w-full px-2 py-1 rounded bg-surface-raised border hairline-border text-white text-xs" min={0} max={1} step={0.1} />
+                  </div>
+                  <div>
                     <label className="text-[10px] text-white/40">Color</label>
                     <input type="color" value={el.color} onChange={(e) => updateElement(i, { color: e.target.value })} className="w-full h-7 rounded bg-surface-raised border hairline-border cursor-pointer" />
                   </div>
                 </div>
+                {/* Inline element preview */}
+                <div className="mt-1.5 px-2 py-1 rounded bg-ink/50 border border-white/5 overflow-hidden">
+                  <span
+                    className="block truncate leading-tight"
+                    style={{
+                      fontFamily: el.fontFamily,
+                      fontWeight: el.fontWeight,
+                      fontStyle: el.fontStyle,
+                      fontSize: `${Math.min(el.fontSize, 14)}px`,
+                      color: el.color,
+                      textShadow: "0 1px 4px rgba(0,0,0,0.6)",
+                      textAlign: el.textAlign as "left" | "center" | "right",
+                    }}
+                  >
+                    {el.content || "Preview"}
+                  </span>
+                </div>
               </div>
             ))}
+          </div>
+
+          {/* Live canvas preview — lens elements as transparent overlays */}
+          <div>
+            <label className="text-label text-white/60 block mb-2 flex items-center gap-1.5">
+              <Eye className="w-3.5 h-3.5" /> Live Preview
+            </label>
+            <div className="relative w-full aspect-[9/16] max-h-[360px] rounded-xl overflow-hidden bg-ink">
+              {/* Sample photo */}
+              <img
+                src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=400&auto=format&fit=crop"
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              {/* Dark scrim */}
+              <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60" />
+              {/* Overlay badge */}
+              <div className="absolute top-3 left-3 z-10 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1" style={{ backgroundColor: "#00000055", color: "#FFFFFF", backdropFilter: "blur(8px)" }}>
+                <span>{form.icon || "📷"}</span>
+                <span>{form.name || "Lens"}</span>
+                <span className="text-white/50 ml-1">· {form.overlayType}</span>
+              </div>
+              {/* Transparent element overlays */}
+              {form.defaultElements.map((el) => (
+                <div
+                  key={el.id}
+                  className="absolute pointer-events-none"
+                  style={{
+                    left: `${el.x}%`,
+                    top: `${el.y}%`,
+                    fontSize: `${Math.round(el.fontSize * 0.6)}px`,
+                    fontFamily: el.fontFamily,
+                    fontWeight: el.fontWeight,
+                    fontStyle: el.fontStyle,
+                    color: el.color,
+                    textAlign: el.textAlign,
+                    textShadow: "0 2px 10px rgba(0,0,0,0.8)",
+                    transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
+                    opacity: el.opacity ?? 1,
+                    maxWidth: "80%",
+                    lineHeight: 1.2,
+                    whiteSpace: "pre-wrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  } as React.CSSProperties}
+                >
+                  {el.content}
+                </div>
+              ))}
+              {form.defaultElements.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-xs text-white/30">Add elements to see preview</span>
+                </div>
+              )}
+            </div>
           </div>
 
           <button type="submit" className="flex items-center gap-2 px-4 py-2 rounded-lg bg-ember text-ink text-sm font-bold hover:brightness-110 transition-all">
@@ -259,11 +335,36 @@ export default function LensTemplateManager() {
           <ContentListCard
             key={lt.id}
             title={`${lt.icon} ${lt.name}`}
-            subtitle={`${lt.category} · ${lt.overlayType} · ${lt.defaultElements.length} elements`}
+            subtitle={`${lt.category} · ${lt.overlayType} · ${lt.defaultElements.length} el`}
             isActive
             onEdit={() => startEdit(lt)}
             onToggleActive={() => {}}
             onDelete={() => setDeleteTarget(lt.id)}
+            preview={
+              <div className="w-full h-full relative overflow-hidden" style={{ backgroundColor: "#0a0a0a" }}>
+                {/* Mini photo bg */}
+                <div className="absolute inset-0 opacity-60" style={{ background: `linear-gradient(135deg, #1a1a2e, #16213e)` }} />
+                {/* Mini elements */}
+                {lt.defaultElements.slice(0, 3).map((el, i) => (
+                  <div
+                    key={el.id}
+                    className="absolute font-black leading-none"
+                    style={{
+                      left: `${el.x * 0.7}%`,
+                      top: `${el.y * 0.7}%`,
+                      fontSize: `${Math.max(4, Math.round(el.fontSize * 0.2))}px`,
+                      color: el.color,
+                      textShadow: "0 1px 4px rgba(0,0,0,0.8)",
+                      opacity: 1 - i * 0.15,
+                    }}
+                  >
+                    {el.content.slice(0, 12)}
+                  </div>
+                ))}
+                {/* Icon */}
+                <span className="absolute bottom-1 right-1 text-[10px] opacity-40">{lt.icon}</span>
+              </div>
+            }
           />
         ))}
         {templates.length === 0 && <p className="text-sm text-white/30 text-center py-8">No lens templates defined.</p>}

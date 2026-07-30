@@ -16,15 +16,30 @@ import {
   PenTool,
   LogOut,
   Shield,
+  Type,
+  Palette,
+  WandSparkles,
+  Library,
+  BookOpen,
+  ChevronDown,
+  Globe,
 } from "lucide-react";
+import { useState } from "react";
 
 interface NavItem {
   path: string;
   label: string;
   icon: typeof LayoutTemplate;
+  badge?: string;
 }
 
-const NAV_ITEMS: NavItem[] = [
+const PRIMARY: NavItem[] = [
+  { path: "/admin/studio", label: "Studio", icon: WandSparkles, badge: "Create" },
+  { path: "/admin/library", label: "Library", icon: Library, badge: "Assets" },
+  { path: "/admin/published", label: "Published", icon: Globe, badge: "Live" },
+];
+
+const ADVANCED: NavItem[] = [
   { path: "/admin/templates", label: "Templates", icon: LayoutTemplate },
   { path: "/admin/stat-designs", label: "Stat Designs", icon: PenTool },
   { path: "/admin/lenses", label: "Lenses", icon: Camera },
@@ -37,6 +52,7 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { adminUser, signOut } = useAdminAuth();
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
@@ -56,9 +72,9 @@ export default function AdminLayout() {
           <span className="text-xs text-white/40 mt-1 block">Content Manager</span>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 p-2 space-y-1">
-          {NAV_ITEMS.map((item) => {
+        {/* Primary nav */}
+        <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+          {PRIMARY.map((item) => {
             const Icon = item.icon;
             const active = location.pathname.startsWith(item.path);
             return (
@@ -72,6 +88,42 @@ export default function AdminLayout() {
                 }`}
               >
                 <Icon className="w-4 h-4 flex-shrink-0" />
+                <span className="flex-1 text-left">{item.label}</span>
+                {item.badge && (
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full uppercase font-bold ${active ? "bg-ember/20 text-ember" : "bg-white/5 text-white/30"}`}>
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+
+          {/* Divider */}
+          <div className="my-2 border-t hairline-border" />
+
+          {/* Advanced toggle */}
+          <button
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white/40 hover:text-white/60 hover:bg-surface-overlay transition-colors"
+          >
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAdvanced ? "rotate-0" : "-rotate-90"}`} />
+            <span className="text-[10px] uppercase tracking-wider">Advanced</span>
+          </button>
+
+          {showAdvanced && ADVANCED.map((item) => {
+            const Icon = item.icon;
+            const active = location.pathname.startsWith(item.path);
+            return (
+              <button
+                key={item.path}
+                onClick={() => navigate(item.path)}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs transition-colors ${
+                  active
+                    ? "bg-ember/10 text-ember"
+                    : "text-white/40 hover:text-white hover:bg-surface-overlay"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5 flex-shrink-0" />
                 <span>{item.label}</span>
               </button>
             );

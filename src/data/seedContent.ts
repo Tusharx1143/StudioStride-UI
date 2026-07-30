@@ -14,6 +14,7 @@
 import {
   TEMPLATE_FAMILIES,
   LENS_TEMPLATES_EXPANDED,
+  SAMPLE_STUDIO_TEMPLATES,
   STOCK_PHOTOS,
   LENS_FILTER_MAP,
 } from "./mockData";
@@ -150,7 +151,8 @@ async function seedStatDesigns(): Promise<void> {
 
 async function seedLensTemplates(): Promise<void> {
   const now = new Date().toISOString();
-  for (const lt of LENS_TEMPLATES_EXPANDED) {
+  const allTemplates = [...LENS_TEMPLATES_EXPANDED, ...SAMPLE_STUDIO_TEMPLATES];
+  for (const lt of allTemplates) {
     // defaultElements is already serializable — store directly
     await lensTemplateRepo.create(lt.id, {
       name: lt.name,
@@ -166,22 +168,41 @@ async function seedLensTemplates(): Promise<void> {
       createdBy: "seed",
     });
   }
-  console.log(`✅ Seeded ${LENS_TEMPLATES_EXPANDED.length} lens templates`);
+  console.log(`✅ Seeded ${allTemplates.length} lens templates`);
 }
 
 async function seedStickers(): Promise<void> {
   const now = new Date().toISOString();
-  const stickers = [
-    { id: "st_s1", content: "DISTANCE", label: "Distance", category: "Stats", type: "metric", bgGradient: "from-ember to-ember-lift text-ink", statKey: "distance" },
-    { id: "st_s2", content: "PACE", label: "Pace", category: "Stats", type: "metric", bgGradient: "from-sky-500 to-blue-600", statKey: "pace" },
-    { id: "st_s3", content: "TIME", label: "Time", category: "Stats", type: "metric", bgGradient: "from-rose-500 to-pink-600", statKey: "time" },
-    { id: "st_s4", content: "TITLE", label: "Activity Title", category: "Stats", type: "metric", bgGradient: "from-amber-500 to-orange-600", statKey: "title" },
-    { id: "st_2", content: "BEAST MODE 🔥", label: "Beast Mode", category: "Badges", type: "badge", bgGradient: "from-orange-600 to-red-500" },
-    { id: "st_5", content: "RUNNER'S HIGH ⚡", label: "Runner's High", category: "Badges", type: "badge", bgGradient: "from-cyan-500 to-blue-600" },
-    { id: "st_7", content: "FINISHER", label: "Finisher", category: "Badges", type: "badge", bgGradient: "from-yellow-400 to-amber-600" },
-    { id: "st_l1", content: "CENTRAL PARK", label: "Central Park", category: "Locations", type: "location", bgGradient: "from-emerald-600 to-green-500" },
-    { id: "st_l2", content: "SEA OCEAN TRAIL", label: "Sea Trail", category: "Locations", type: "location", bgGradient: "from-indigo-600 to-blue-500" },
-    { id: "st_l4", content: "GOLDEN GATE", label: "Golden Gate", category: "Locations", type: "location", bgGradient: "from-rose-600 to-orange-500" },
+  const stickers: Array<{
+    id: string; content: string; label: string; category: string;
+    type: string; bgGradient?: string; statKey?: string; format?: string; transparent?: boolean;
+  }> = [
+    // Transparent stat overlays
+    { id: "st_dist", content: "{value} {unit}", label: "Distance", category: "Distance", type: "metric", statKey: "distance", format: "{value} {unit}", transparent: true },
+    { id: "st_pace", content: "{value} /km", label: "Pace", category: "Pace", type: "metric", statKey: "pace", format: "{value} /km", transparent: true },
+    { id: "st_time", content: "{value}", label: "Duration", category: "Time", type: "metric", statKey: "time", transparent: true },
+    { id: "st_title", content: "{value}", label: "Activity Title", category: "Activity", type: "metric", statKey: "title", transparent: true },
+    { id: "st_avg_hr", content: "{value} {unit}", label: "Avg Heart Rate", category: "Heart Rate", type: "metric", statKey: "avg_hr", format: "{value} {unit}", transparent: true },
+    { id: "st_max_hr", content: "{value} {unit}", label: "Max Heart Rate", category: "Heart Rate", type: "metric", statKey: "max_hr", format: "{value} {unit}", transparent: true },
+    { id: "st_elev", content: "+{value}{unit}", label: "Elevation Gain", category: "Elevation", type: "metric", statKey: "elev_gain", format: "+{value}{unit}", transparent: true },
+    { id: "st_elev_loss", content: "{value}{unit}", label: "Elevation Loss", category: "Elevation", type: "metric", statKey: "elev_loss", format: "{value}{unit}", transparent: true },
+    { id: "st_speed", content: "{value} km/h", label: "Speed", category: "Speed", type: "metric", statKey: "speed", format: "{value} km/h", transparent: true },
+    { id: "st_max_speed", content: "{value} km/h", label: "Max Speed", category: "Speed", type: "metric", statKey: "max_speed", format: "{value} km/h", transparent: true },
+    { id: "st_cadence", content: "{value} {unit}", label: "Cadence", category: "Cadence", type: "metric", statKey: "cadence", format: "{value} {unit}", transparent: true },
+    { id: "st_calories", content: "{value} {unit}", label: "Calories", category: "Energy", type: "metric", statKey: "calories", format: "{value} {unit}", transparent: true },
+    { id: "st_power", content: "{value} {unit}", label: "Power", category: "Power", type: "metric", statKey: "power", format: "{value} {unit}", transparent: true },
+    { id: "st_avg_power", content: "{value} {unit}", label: "Avg Power", category: "Power", type: "metric", statKey: "avg_power", format: "{value} {unit}", transparent: true },
+    { id: "st_temp", content: "{value}{unit}", label: "Temperature", category: "Weather", type: "metric", statKey: "temp", format: "{value}{unit}", transparent: true },
+    // Metric pills (colored bg)
+    { id: "st_p_hr", content: "{value} {unit}", label: "Heart Rate", category: "Heart Rate", type: "metric", statKey: "avg_hr", format: "{value} {unit}", bgGradient: "from-rose-500 to-pink-600" },
+    { id: "st_p_elev", content: "+{value}{unit}", label: "Elevation", category: "Elevation", type: "metric", statKey: "elev_gain", format: "+{value}{unit}", bgGradient: "from-emerald-600 to-green-500" },
+    { id: "st_p_cal", content: "{value} {unit}", label: "Calories", category: "Energy", type: "metric", statKey: "calories", format: "{value} {unit}", bgGradient: "from-orange-500 to-red-500" },
+    { id: "st_p_speed", content: "{value} km/h", label: "Speed", category: "Speed", type: "metric", statKey: "speed", format: "{value} km/h", bgGradient: "from-cyan-500 to-blue-600" },
+    { id: "st_p_cad", content: "{value} {unit}", label: "Cadence", category: "Cadence", type: "metric", statKey: "cadence", format: "{value} {unit}", bgGradient: "from-violet-500 to-purple-600" },
+    { id: "st_p_pwr", content: "{value} {unit}", label: "Power", category: "Power", type: "metric", statKey: "power", format: "{value} {unit}", bgGradient: "from-yellow-400 to-amber-600" },
+    { id: "st_p_temp", content: "{value}{unit}", label: "Temperature", category: "Weather", type: "metric", statKey: "temp", format: "{value}{unit}", bgGradient: "from-sky-400 to-indigo-500" },
+    { id: "st_p_dist", content: "{value} {unit}", label: "Distance", category: "Distance", type: "metric", statKey: "distance", format: "{value} {unit}", bgGradient: "from-blue-500 to-indigo-600" },
+    { id: "st_p_pace", content: "{value}", label: "Pace", category: "Pace", type: "metric", statKey: "pace", bgGradient: "from-teal-500 to-cyan-600" },
   ];
 
   for (const s of stickers) {
@@ -192,6 +213,8 @@ async function seedStickers(): Promise<void> {
       type: s.type,
       bgGradient: s.bgGradient,
       statKey: s.statKey,
+      format: s.format,
+      transparent: s.transparent,
       createdAt: now,
       updatedAt: now,
       isActive: true,
@@ -277,8 +300,8 @@ export async function seedAllContentToFirebase(): Promise<SeedResult> {
     counts: {
       templateFamilies: TEMPLATE_FAMILIES.length,
       statDesigns: Object.keys(TEMPLATE_STAT_DESIGNS).length,
-      lensTemplates: LENS_TEMPLATES_EXPANDED.length,
-      stickers: 10, // hardcoded count from STICKER_LIBRARY
+      lensTemplates: LENS_TEMPLATES_EXPANDED.length + SAMPLE_STUDIO_TEMPLATES.length,
+      stickers: 24, // hardcoded count from seedStickers
       stockPhotos: STOCK_PHOTOS.length,
       lensFilters: Object.keys(LENS_FILTER_MAP).length,
     },

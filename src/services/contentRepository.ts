@@ -20,7 +20,6 @@ import {
   deleteDoc,
   query,
   where,
-  orderBy,
   type DocumentData,
   type Firestore,
 } from "firebase/firestore";
@@ -60,8 +59,7 @@ export class ContentRepository<T extends { id: string }> {
   async getActive(): Promise<T[]> {
     const q = query(
       collection(this.getDb(), this.collectionName),
-      where("isActive", "==", true),
-      orderBy("createdAt", "desc")
+      where("isActive", "==", true)
     );
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as T[];

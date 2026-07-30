@@ -8,6 +8,7 @@ import { getStickers, createSticker, updateSticker, deleteSticker } from "../../
 import ContentListCard from "./shared/ContentListCard";
 import ConfirmDialog from "./shared/ConfirmDialog";
 import { Plus, Save, X } from "lucide-react";
+import { resolveStickerContent } from "../../data/resolveStickerContent";
 
 const DEFAULT_GRADIENTS = [
   "from-ember to-ember-lift text-ink",
@@ -23,16 +24,18 @@ const DEFAULT_GRADIENTS = [
   "from-purple-600 to-pink-500",
 ];
 
-const CATEGORIES = ["Badges", "Stats", "Locations"];
-const TYPES = ["badge", "metric", "location", "emoji"];
+const CATEGORIES = ["Distance", "Pace", "Time", "Heart Rate", "Elevation", "Speed", "Cadence", "Energy", "Power", "Weather", "Activity"];
+const TYPES = ["metric"];
 
 const emptyForm = (): StickerFormData => ({
   content: "",
   label: "",
-  category: "Badges",
-  type: "badge",
+  category: "Distance",
+  type: "metric",
   bgGradient: DEFAULT_GRADIENTS[0],
   statKey: "",
+  format: "",
+  transparent: false,
 });
 
 export default function StickerManager() {
@@ -72,6 +75,8 @@ export default function StickerManager() {
       type: item.type,
       bgGradient: item.bgGradient,
       statKey: item.statKey,
+      format: item.format ?? "",
+      transparent: item.transparent,
     });
     setEditing({ id: item.id, data: item });
     setCreating(false);
@@ -168,17 +173,48 @@ export default function StickerManager() {
           </div>
 
           <div>
-            <label className="text-label text-white/60 block mb-1">Stat Key (optional)</label>
-            <input value={form.statKey ?? ""} onChange={(e) => setForm({ ...form, statKey: e.target.value || undefined })} className="w-full px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="distance / pace / time / title" />
+            <label className="text-label text-white/60 block mb-1">Stat Key</label>
+            <input value={form.statKey ?? ""} onChange={(e) => setForm({ ...form, statKey: e.target.value || undefined })} className="w-full px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="distance / pace / time / title / avg_hr / elev_gain / …" />
           </div>
+
+          {/* Format template — always visible, all stickers are dynamic */}
+          <div>
+            <label className="text-label text-white/60 block mb-1">Format Template <span className="text-white/30 normal-case">({`{value}`}, {`{label}`}, {`{unit}`})</span></label>
+            <input value={form.format ?? ""} onChange={(e) => setForm({ ...form, format: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder='"{value} {unit}" or "+{value}{unit}"' />
+            {/* Live dynamic preview */}
+            <div className="mt-1.5 px-3 py-2 rounded-lg bg-ink/50 border border-white/5">
+              <span className="text-[10px] text-white/30 block mb-0.5">Preview:</span>
+              <span className="text-sm font-bold text-ember">
+                {resolveStickerContent(form.content, form.format || undefined, form.statKey || undefined, {
+                  distance: 12.4, pace: "5:32", time: "1:24:15", title: "Morning Run",
+                  avg_hr: 154, elev_gain: 142, calories: 685, cadence: 82, speed: 10.5,
+                }) || form.content || "(no content)"}
+              </span>
+            </div>
+          </div>
+
+          {/* Transparent toggle */}
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" checked={form.transparent ?? false} onChange={(e) => setForm({ ...form, transparent: e.target.checked })} className="rounded border-white/20 bg-surface accent-ember w-4 h-4" />
+            <div>
+              <span className="text-sm font-medium text-white">Transparent background</span>
+              <p className="text-xs text-white/40">Renders directly on photo without bg pill</p>
+            </div>
+          </label>
 
           {/* Live preview */}
           {form.bgGradient && (
             <div>
               <label className="text-label text-white/60 block mb-1">Preview</label>
-              <span className={`inline-block px-4 py-2 rounded-full bg-gradient-to-r ${form.bgGradient} text-xs font-bold uppercase tracking-wider`}>
-                {form.content || "PREVIEW"}
-              </span>
+              {form.transparent ? (
+                <span className="inline-block px-4 py-2 text-xs font-bold uppercase tracking-wider text-white" style={{ textShadow: "0 1px 4px rgba(0,0,0,0.6)" }}>
+                  {form.content || "PREVIEW"}
+                </span>
+              ) : (
+                <span className={`inline-block px-4 py-2 rounded-full bg-gradient-to-r ${form.bgGradient} text-xs font-bold uppercase tracking-wider`}>
+                  {form.content || "PREVIEW"}
+                </span>
+              )}
             </div>
           )}
 
@@ -194,16 +230,22 @@ export default function StickerManager() {
           <ContentListCard
             key={s.id}
             title={s.label}
-            subtitle={`${s.category} · ${s.type}${s.statKey ? ` · ${s.statKey}` : ""}`}
+            subtitle={`${s.category} · ${s.type}${s.statKey ? ` · ${s.statKey}` : ""}${s.transparent ? " · transparent" : ""}`}
             isActive
             onEdit={() => startEdit(s)}
             onToggleActive={() => {}}
             onDelete={() => setDeleteTarget(s.id)}
             preview={
               <div className="w-full h-full flex items-center justify-center">
-                <span className={`inline-block px-2 py-1 rounded-full bg-gradient-to-r ${s.bgGradient ?? "from-gray-500 to-gray-600"} text-[8px] font-bold uppercase tracking-wider text-white`}>
-                  {s.content.slice(0, 8)}
-                </span>
+                {s.transparent ? (
+                  <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-white" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.7)" }}>
+                    {s.content.slice(0, 8)}
+                  </span>
+                ) : (
+                  <span className={`inline-block px-2 py-1 rounded-full bg-gradient-to-r ${s.bgGradient ?? "from-gray-500 to-gray-600"} text-[8px] font-bold uppercase tracking-wider text-white`}>
+                    {s.content.slice(0, 8)}
+                  </span>
+                )}
               </div>
             }
           />

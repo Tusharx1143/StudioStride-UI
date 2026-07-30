@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useMotionValue } from "motion/react";
 import {
   X,
   Type,
@@ -39,17 +39,19 @@ import {
   ArrowDown,
   Copy,
   Plus,
+  LayoutTemplate,
   Image as ImageIcon
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useContent } from "../contexts/ContentContext";
-import type { StatData, StatSlotId, TemplateFamily, TemplateLayout } from "../types";
+import type { EditableLensElement, StatData, StatSlotId, TemplateFamily, TemplateLayout, LensTemplate } from "../types";
 import GestureSwipeCarousel from "./GestureSwipeCarousel";
 import ExportModal from "./ExportModal";
 import StatLayer from "./StatLayer";
 import StatToolbar from "./StatToolbar";
 import DraggableLayer from "./DraggableLayer";
 import SnapGuides from "./SnapGuides";
+import TemplateCarousel from "./TemplateCarousel";
 import type { SnapLine } from "../utils/snapping";
 import { triggerHaptic } from "../utils/haptics";
 import {
@@ -61,6 +63,7 @@ import {
 import { markStripSeen, shouldAutoOpenStrip } from "../utils/statStrip";
 import { FONT_STYLES, COLOR_PALETTE, BG_STYLES } from "../data/editorConstants";
 import type { StickerItem } from "../types/content";
+import { resolveStickerContent } from "../data/resolveStickerContent";
 
 // Text Overlay item model
 interface TextOverlay {
@@ -90,6 +93,8 @@ interface StickerOverlay {
   x: number;
   y: number;
   bgGradient?: string;
+  /** When true, render without background — just text/emoji over the photo. */
+  transparent?: boolean;
   hidden?: boolean;
   locked?: boolean;
   zIndex?: number;
@@ -125,11 +130,21 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
   const location = useLocation();
   const canvasRef = useRef<HTMLDivElement>(null);
   const { templateFamilies, lensTemplates, lensFilters, stockPhotos, stickers } = useContent();
+  const [showTemplateCarousel, setShowTemplateCarousel] = useState(false);
+  const [showStatSelector, setShowStatSelector] = useState(false);
+  const [showPhotoPicker, setShowPhotoPicker] = useState(false);
+  const [hiddenSlots, setHiddenSlots] = useState<Set<StatSlotId>>(new Set());
+  const [customPhoto, setCustomPhoto] = useState<string | null>(null);
+  const [lensPositions, setLensPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [hiddenLensElements, setHiddenLensElements] = useState<Set<string>>(new Set());
+  const [isGrouped, setIsGrouped] = useState(false);
+  const [groupOffset, setGroupOffset] = useState({ x: 0, y: 0 });
 
   // Image source captured from camera or gallery.
   // When embedded, use embeddedProps; otherwise fall back to sessionStorage
   // + router state + stock default.
   const capturedImage =
+    customPhoto ??
     embeddedProps?.capturedImage ??
     sessionStorage.getItem("temp_captured_image") ??
     (location.state?.capturedImage as string | undefined) ??
@@ -152,6 +167,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     (location.state?.lensFilter as string) ??
     "";
   const [lensFilter, setLensFilter] = useState<string>(cameraLensFilter);
+  const [activeLens, setActiveLens] = useState<LensTemplate | null>(null);
 
   // Filter picker
   const [isFilterPickerOpen, setIsFilterPickerOpen] = useState<boolean>(false);
@@ -161,14 +177,13 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     selectedTemplateFamily?.id ?? "default"
   );
 
-  // Stat data and slot positions handed over from the camera. The layout the
-  // user arranged there is the starting point here.
+  // Stat data — from embedded props (camera), route state (home screen), or defaults
   const routeStatData = {
-    distance: parseFloat((location.state?.activityDistance as string) ?? "") || 8.4,
+    distance: parseFloat((location.state?.distance as string) ?? "") || parseFloat((location.state?.activityDistance as string) ?? "") || 8.4,
     distanceUnit: "km",
-    pace: ((location.state?.activityPace as string) ?? "6:12 /km").replace(" /km", ""),
-    time: (location.state?.activityTime as string) ?? "52:18",
-    title: (location.state?.activityTitle as string) ?? "Morning Run",
+    pace: ((location.state?.pace as string) ?? (location.state?.activityPace as string) ?? "6:12 /km").replace(" /km", ""),
+    time: (location.state?.time as string) ?? (location.state?.activityTime as string) ?? "52:18",
+    title: (location.state?.title as string) ?? (location.state?.activityTitle as string) ?? "Morning Run",
   };
   const statData: StatData = embeddedProps?.statData ?? routeStatData;
 
@@ -791,17 +806,15 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
   // Add Sticker to canvas
   const handleAddSticker = (item: StickerItem) => {
     pushHistorySnapshot();
-    // Interpolate stat data if this sticker references a stat
-    let stickerContent = item.content;
-    if (item.statKey) {
-      const statValue = statData[item.statKey as keyof StatData];
-      if (statValue !== undefined && statValue !== null) {
-        stickerContent = String(statValue).toUpperCase();
-        if (item.statKey === "distance") stickerContent += " KM";
-        if (item.statKey === "pace") stickerContent += " /KM";
-        if (item.statKey === "time") stickerContent += "";
-      }
-    }
+    // Build a unified stats record from available data.
+    // Extended metrics (HR, elevation, etc.) resolve to "--" until richer data flows through.
+    const stats: Record<string, string | number | undefined> = {
+      distance: statData.distance,
+      pace: statData.pace,
+      time: statData.time,
+      title: statData.title,
+    };
+    const stickerContent = resolveStickerContent(item.content, item.format, item.statKey, stats);
     const newSticker: StickerOverlay = {
       id: `sticker_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       content: stickerContent,
@@ -811,6 +824,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
       x: 0,
       y: 0,
       bgGradient: item.bgGradient,
+      transparent: item.transparent,
     };
     setStickerOverlays((prev) => [...prev, newSticker]);
     setSelectedStickerId(newSticker.id);
@@ -919,16 +933,24 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
 
   // Floating toolbar tools list (only implemented features)
   const tools = [
+    { id: "group", label: "Group", icon: Layers },
     { id: "layers", label: "Layers", icon: Layers },
     { id: "text", label: "Text", icon: Type },
     { id: "draw", label: "Draw", icon: PenTool },
     { id: "stickers", label: "Stickers", icon: StickyNote },
     { id: "crop", label: "Crop", icon: Crop },
     { id: "filters", label: "Filter", icon: Sparkles },
+    { id: "photo", label: "Photo", icon: ImageIcon },
+    { id: "stats", label: "Stats", icon: Eye },
+    { id: "template", label: "Layout", icon: LayoutTemplate },
   ];
 
   const handleToolClick = (toolId: string) => {
-    if (toolId === "layers") {
+    if (toolId === "group") {
+      setIsGrouped((g) => !g);
+      setGroupOffset({ x: 0, y: 0 });
+      showToast(isGrouped ? "Ungrouped" : "Grouped — drag any element to move all");
+    } else if (toolId === "layers") {
       setActiveTool(activeTool === "layers" ? null : "layers");
       showToast(activeTool === "layers" ? "Layers closed" : "Layer Manager opened");
     } else if (toolId === "text") {
@@ -949,17 +971,33 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     } else if (toolId === "filters") {
       setIsFilterPickerOpen(true);
       setActiveTool("filters");
+    } else if (toolId === "photo") {
+      setShowPhotoPicker(true);
+      setActiveTool("photo");
+    } else if (toolId === "stats") {
+      setShowStatSelector(true);
+      setActiveTool("stats");
+    } else if (toolId === "template") {
+      setShowTemplateCarousel(true);
+      setActiveTool("template");
     }
+  };
+
+  // Live stats for sticker resolution in the picker + search
+  const liveStats: Record<string, string | number | undefined> = {
+    distance: statData.distance, pace: statData.pace,
+    time: statData.time, title: statData.title,
   };
 
   // Filtered stickers for the picker modal
   const filteredStickers = stickers.filter((item) => {
     const matchesCategory =
       selectedStickerCategory === "All" || item.category === selectedStickerCategory;
+    const resolved = resolveStickerContent(item.content, item.format, item.statKey, liveStats);
     const matchesSearch =
       !stickerSearch.trim() ||
       item.label.toLowerCase().includes(stickerSearch.toLowerCase()) ||
-      item.content.toLowerCase().includes(stickerSearch.toLowerCase());
+      resolved.toLowerCase().includes(stickerSearch.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
@@ -1012,6 +1050,60 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         return { width: "100%", height: "100%" };
     }
   };
+
+  // ── Draggable lens element wrapper ──
+  function LensDragElement({ el, idx, pos }: { el: EditableLensElement; idx: number; pos: { x: number; y: number } }) {
+    const dx = useMotionValue(0);
+    const dy = useMotionValue(0);
+
+    return (
+      <motion.div
+        drag
+        dragConstraints={canvasRef}
+        dragElastic={0.05}
+        dragMomentum={false}
+        style={{
+          left: `${pos.x}%`, top: `${pos.y}%`, x: dx, y: dy,
+          fontSize: `${Math.round(el.fontSize * 0.45)}px`,
+          fontFamily: el.fontFamily, fontWeight: el.fontWeight,
+          fontStyle: el.fontStyle, color: el.color,
+          textAlign: el.textAlign, opacity: el.opacity ?? 1,
+          textShadow: "0 2px 10px rgba(0,0,0,0.8)",
+          transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
+          maxWidth: "70%", lineHeight: 1.2, whiteSpace: "pre-wrap",
+          overflow: "hidden", textOverflow: "ellipsis",
+          zIndex: 10 + idx,
+        }}
+        onDragEnd={(_, info) => {
+          const canvas = canvasRef.current?.getBoundingClientRect();
+          if (!canvas) return;
+          setLensPositions((prev) => ({
+            ...prev,
+            [el.id]: {
+              x: pos.x + (info.offset.x / canvas.width) * 100,
+              y: pos.y + (info.offset.y / canvas.height) * 100,
+            },
+          }));
+          dx.set(0); dy.set(0);
+        }}
+        className="absolute touch-none select-none cursor-grab active:cursor-grabbing group"
+      >
+        {/* Delete button — visible on hover */}
+        <button onClick={(e) => {
+          e.stopPropagation();
+          setHiddenLensElements((prev) => new Set(prev).add(el.id));
+        }}
+          className="absolute -top-2.5 -right-2.5 w-5 h-5 rounded-full bg-rose-600/90 border border-white/30 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity z-50 hover:scale-110"
+          title="Remove element"
+        >
+          <X className="w-3 h-3" />
+        </button>
+        {el.type === "metric" && el.metricId
+          ? resolveStickerContent(el.content, el.content, el.metricId, statData as unknown as Record<string, string | number | undefined>)
+          : el.content}
+      </motion.div>
+    );
+  }
 
   return (
     <div className="relative w-full h-screen bg-black text-white overflow-hidden flex flex-col justify-between select-none">
@@ -1100,10 +1192,15 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         </div>
 
         {/* DRAGGABLE TEMPLATE STATS — sit under user-added text overlays */}
-        <StatLayer
+        {(() => {
+          const visibleStatLayout: TemplateLayout = Object.fromEntries(
+            Object.entries(statLayout).filter(([slot]) => !hiddenSlots.has(slot as StatSlotId))
+          ) as TemplateLayout;
+          return (
+          <StatLayer
           templateId={templateId}
           data={statData}
-          layout={statLayout}
+          layout={visibleStatLayout}
           onLayoutChange={handleStatLayoutChange}
           constraintsRef={canvasRef}
           selectedSlot={selectedStatSlot}
@@ -1120,8 +1217,29 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
           onGuidesChange={setSnapGuides}
           onSnap={() => triggerHaptic("snap")}
         />
+        );
+        })()}
 
         <SnapGuides guides={snapGuides} canvas={canvasSize} />
+
+        {/* GROUP DRAG PLANE — intercepts drags when grouped */}
+        {isGrouped && (
+          <motion.div
+            drag dragConstraints={canvasRef} dragElastic={0.05} dragMomentum={false}
+            onDragEnd={(_, info) => setGroupOffset((p) => ({ x: p.x + info.offset.x, y: p.y + info.offset.y }))}
+            className="absolute inset-0 z-45 cursor-grab active:cursor-grabbing"
+            style={{ pointerEvents: "auto" }}
+          />
+        )}
+
+        {/* GROUP WRAPPER — all groupable elements move together when grouped */}
+        <div style={{ transform: isGrouped ? `translate(${groupOffset.x}px,${groupOffset.y}px)` : undefined }}>
+
+        {/* LENS TEMPLATE ELEMENTS — draggable overlays from the active lens design */}
+        {activeLens?.defaultElements.filter((el) => !hiddenLensElements.has(el.id)).map((el, idx) => {
+          const pos = lensPositions[el.id] ?? { x: el.x, y: el.y };
+          return <LensDragElement key={`${activeLens.id}_${el.id}`} el={el} idx={idx} pos={pos} />;
+        })}
 
         {/* CONTEXTUAL STAT TOOLBAR — template switching for the tapped stat */}
         <AnimatePresence>
@@ -1348,7 +1466,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                 sticker.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
               } ${
                 isSelected
-                  ? "border-2 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.6)] bg-black/30 backdrop-blur-xs relative z-30"
+                  ? "border-2 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.6)] " + (sticker.transparent ? "" : "bg-black/30 backdrop-blur-xs ") + "relative z-30"
                   : ""
               }`}
             >
@@ -1362,13 +1480,22 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                 </>
               )}
 
-              <div
-                className={`px-4 py-2 rounded-2xl bg-gradient-to-r ${
-                  sticker.bgGradient || "from-amber-500 to-yellow-400"
-                } text-white font-extrabold text-lg tracking-wider uppercase shadow-2xl border border-white/30 flex items-center gap-2 select-none`}
-              >
-                {sticker.content}
-              </div>
+              {sticker.transparent ? (
+                <div
+                  className="px-2 py-1 text-white font-extrabold text-lg tracking-wider uppercase flex items-center gap-2 select-none"
+                  style={{ textShadow: "0 2px 8px rgba(0,0,0,0.7)" }}
+                >
+                  {sticker.content}
+                </div>
+              ) : (
+                <div
+                  className={`px-4 py-2 rounded-2xl bg-gradient-to-r ${
+                    sticker.bgGradient || "from-amber-500 to-yellow-400"
+                  } text-white font-extrabold text-lg tracking-wider uppercase shadow-2xl border border-white/30 flex items-center gap-2 select-none`}
+                >
+                  {sticker.content}
+                </div>
+              )}
 
               {/* Sticker Layer Floating Blue Action Toolbar */}
               {isSelected && (
@@ -1460,6 +1587,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
           );
         })}
 
+        </div>{/* end group wrapper */}
+
         {/* DRAWING CANVAS LAYER */}
         <canvas
           ref={drawingCanvasRef}
@@ -1481,6 +1610,56 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         {/* Subtle dark gradient overlay for top/bottom bars legibility */}
         <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/80 via-black/40 to-transparent pointer-events-none z-0" />
         <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none z-0" />
+
+        {/* TEMPLATE & LENS CAROUSEL — always-visible strip at bottom */}
+        <div className="absolute bottom-2 inset-x-2 z-10">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 px-1" style={{ scrollbarWidth: "none" }}>
+            {templateFamilies.map((tmpl) => {
+              const isActive = tmpl.id === templateId;
+              return (
+                <button key={tmpl.id} onClick={() => handleSelectTemplate(tmpl)}
+                  className={`flex flex-col items-center gap-0.5 shrink-0 w-[52px] transition-all active:scale-90 ${
+                    isActive ? "scale-105" : "opacity-50 hover:opacity-85"
+                  }`}
+                >
+                  <div className={`w-[44px] h-[44px] rounded-full flex items-center justify-center text-base border-2 transition-all ${
+                    isActive ? "border-ember bg-ember/10 shadow-[0_0_10px_var(--color-ember-glow)]" : "border-white/15 bg-black/60 backdrop-blur-md"
+                  }`}>
+                    <span className="drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]">{tmpl.icon}</span>
+                  </div>
+                  <span className="text-[8px] font-semibold text-center leading-tight max-w-[52px] text-white/70 truncate">
+                    {tmpl.name}
+                  </span>
+                </button>
+              );
+            })}
+            {lensTemplates.length > 0 && (
+              <div className="w-px h-8 bg-white/10 mx-1 shrink-0" />
+            )}
+            {lensTemplates.map((lens) => {
+              const isActive = activeLens?.id === lens.id;
+              return (
+                <button key={lens.id} onClick={() => {
+                  setActiveLens(isActive ? null : lens);
+                  setLensFilter(isActive ? "" : (lensFilters[lens.overlayType] || ""));
+                }}
+                  className={`flex flex-col items-center gap-0.5 shrink-0 w-[52px] transition-all active:scale-90 ${
+                    isActive ? "scale-105" : "opacity-50 hover:opacity-85"
+                  }`}
+                >
+                  <div className={`w-[44px] h-[44px] rounded-full flex items-center justify-center text-base border-2 transition-all ${
+                    isActive ? "border-ember bg-ember/10 shadow-[0_0_10px_var(--color-ember-glow)]" : "border-white/15 bg-black/60 backdrop-blur-md"
+                  }`}>
+                    <span className="drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]">{lens.icon}</span>
+                  </div>
+                  <span className="text-[8px] font-semibold text-center leading-tight max-w-[52px] text-white/70 truncate">
+                    {lens.name}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* 2. TOP BAR */}
@@ -1494,21 +1673,22 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
           <X className="w-5 h-5" />
         </button>
 
-        {/* Center Title or Indicator — shows active lens filter */}
-        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-xs font-semibold text-white/90">
-          <span>Editor</span>
+        {/* Center — template name (tappable) + active lens filter */}
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowTemplateCarousel(true)}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-xs font-semibold text-white/90 hover:bg-black/60 transition-all active:scale-95">
+            <span className="text-sm">{templateFamilies.find(t => t.id === templateId)?.icon || "🏃"}</span>
+            <span>{templateFamilies.find(t => t.id === templateId)?.name || "Default"}</span>
+          </button>
           {lensFilter && (
-            <>
-              <span className="w-[3px] h-[3px] rounded-full bg-white/30" />
-              <span className="flex items-center gap-1 text-ember">
-                <Sparkles className="w-3 h-3" />
-                <span>
-                  {lensTemplates.find(
-                    (l) => lensFilters[l.overlayType] === lensFilter
-                  )?.name || "Filtered"}
-                </span>
+            <span className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-xs font-semibold text-ember">
+              <Sparkles className="w-3 h-3" />
+              <span>
+                {lensTemplates.find(
+                  (l) => lensFilters[l.overlayType] === lensFilter
+                )?.name || "Filtered"}
               </span>
-            </>
+            </span>
           )}
         </div>
 
@@ -1549,6 +1729,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
           const Icon = tool.icon;
           const isActive =
             activeTool === tool.id ||
+            (tool.id === "group" && isGrouped) ||
             (tool.id === "layers" && activeTool === "layers") ||
             (tool.id === "text" && textOverlays.length > 0) ||
             (tool.id === "draw" && (hasDrawnStrokes || activeTool === "draw")) ||
@@ -1559,7 +1740,10 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                 committedCrop.flipH ||
                 committedCrop.flipV ||
                 activeTool === "crop")) ||
-            (tool.id === "filters" && (lensFilter !== "" || isFilterPickerOpen));
+            (tool.id === "filters" && (lensFilter !== "" || isFilterPickerOpen)) ||
+            (tool.id === "photo" && showPhotoPicker) ||
+            (tool.id === "stats" && showStatSelector) ||
+            (tool.id === "template" && showTemplateCarousel);
           return (
             <button
               key={tool.id}
@@ -1842,10 +2026,10 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
               {/* CATEGORY TABS */}
               <div className="w-full">
                 <GestureSwipeCarousel
-                  items={["All", "Badges", "Stats", "Locations"]}
-                  selectedIndex={["All", "Badges", "Stats", "Locations"].indexOf(selectedStickerCategory)}
+                  items={["All", "Distance", "Pace", "Time", "Heart Rate", "Elevation", "Speed", "Cadence", "Energy", "Power", "Weather"]}
+                  selectedIndex={["All", "Distance", "Pace", "Time", "Heart Rate", "Elevation", "Speed", "Cadence", "Energy", "Power", "Weather"].indexOf(selectedStickerCategory)}
                   onSelectIndex={(index) => {
-                    const cats = ["All", "Badges", "Stats", "Locations"];
+                    const cats = ["All", "Distance", "Pace", "Time", "Heart Rate", "Elevation", "Speed", "Cadence", "Energy", "Power", "Weather"];
                     setSelectedStickerCategory(cats[index]);
                   }}
                   itemGap={8}
@@ -1879,12 +2063,21 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                     <button
                       key={item.id}
                       onClick={() => handleAddSticker(item)}
-                      className={`flex items-center justify-center p-3 rounded-2xl border transition-all active:scale-95 group relative ${
-                        `bg-gradient-to-r ${item.bgGradient || "from-amber-500 to-yellow-400"} border-white/20 shadow-lg min-h-[56px]`
+                      className={`flex items-center justify-center p-3 rounded-2xl border transition-all active:scale-95 group relative min-h-[56px] ${
+                        item.transparent
+                          ? "bg-surface border-white/10 hover:border-white/30"
+                          : `bg-gradient-to-r ${item.bgGradient || "from-amber-500 to-yellow-400"} border-white/20 shadow-lg`
                       }`}
                     >
-                      <span className="text-xs font-extrabold text-white tracking-wider uppercase text-center drop-shadow-md leading-tight">
-                        {item.content}
+                      <span
+                        className={`text-xs font-extrabold uppercase text-center leading-tight ${
+                          item.transparent
+                            ? "text-white"
+                            : "text-white tracking-wider drop-shadow-md"
+                        }`}
+                        style={item.transparent ? { textShadow: "0 1px 4px rgba(0,0,0,0.6)" } : undefined}
+                      >
+                        {resolveStickerContent(item.content, item.format, item.statKey, liveStats)}
                       </span>
                     </button>
                   ))}
@@ -2577,7 +2770,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                 <div className="flex items-start gap-3 px-1 py-2 min-w-max">
                   {/* No filter */}
                   <button
-                    onClick={() => setLensFilter("")}
+                    onClick={() => { setLensFilter(""); setActiveLens(null); }}
                     className="flex flex-col items-center gap-1.5 shrink-0 w-[58px]"
                   >
                     <div
@@ -2599,7 +2792,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                     return (
                       <button
                         key={lens.id}
-                        onClick={() => setLensFilter(filterVal)}
+                        onClick={() => { setLensFilter(filterVal); setActiveLens(lens); }}
                         className="flex flex-col items-center gap-1.5 shrink-0 w-[58px]"
                       >
                         <div className="relative">
@@ -2664,6 +2857,214 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                   Adjust the overall intensity of the applied lens effect
                 </p>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* STAT SELECTOR — show/hide individual stats */}
+      <AnimatePresence>
+        {showStatSelector && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex flex-col justify-end"
+          >
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 350, damping: 30 }}
+              className="bg-black/90 backdrop-blur-2xl rounded-t-3xl p-6 pt-6 space-y-4 border-t border-white/10"
+            >
+              <div className="flex justify-between items-center pb-2 border-b border-white/5">
+                <div>
+                  <h3 className="text-sm font-bold text-white">Toggle Stats</h3>
+                  <p className="text-xs text-white/40 mt-0.5">Show or hide individual stats on your photo</p>
+                </div>
+                <button onClick={() => setShowStatSelector(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:text-white">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="space-y-2 pb-2">
+                {(["distance", "pace", "time", "title", "accent"] as StatSlotId[]).map((slot) => {
+                  const isVisible = !hiddenSlots.has(slot);
+                  const slotLabels: Record<StatSlotId, string> = {
+                    distance: "Distance", pace: "Pace", time: "Time",
+                    title: "Activity Title", accent: "Accent Decoration",
+                  };
+                  return (
+                    <button key={slot}
+                      onClick={() => {
+                        setHiddenSlots((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(slot)) next.delete(slot); else next.add(slot);
+                          return next;
+                        });
+                        triggerHaptic("light");
+                      }}
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all ${
+                        isVisible ? "bg-ember/10 border border-ember/30" : "bg-white/5 border border-white/10"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-extrabold ${
+                          isVisible ? "bg-ember text-ink" : "bg-white/10 text-white/40"
+                        }`}>
+                          {slot === "distance" ? "D" : slot === "pace" ? "P" : slot === "time" ? "T" : slot === "title" ? "A" : "✨"}
+                        </div>
+                        <span className={`text-sm font-bold ${isVisible ? "text-white" : "text-white/40"}`}>
+                          {slotLabels[slot]}
+                        </span>
+                      </div>
+                      {isVisible ? <Eye className="w-4 h-4 text-ember" /> : <EyeOff className="w-4 h-4 text-white/30" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* PHOTO PICKER — switch background image */}
+      <AnimatePresence>
+        {showPhotoPicker && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex flex-col justify-end"
+          >
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 350, damping: 30 }}
+              className="bg-black/90 backdrop-blur-2xl rounded-t-3xl p-6 pt-6 space-y-4 border-t border-white/10 max-h-[70vh]"
+            >
+              <div className="flex justify-between items-center pb-2 border-b border-white/5">
+                <div>
+                  <h3 className="text-sm font-bold text-white">Background Photo</h3>
+                  <p className="text-xs text-white/40 mt-0.5">Choose a photo for your creation</p>
+                </div>
+                <button onClick={() => setShowPhotoPicker(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:text-white">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              {/* Gallery upload button */}
+              <button onClick={() => document.getElementById("editor-photo-input")?.click()}
+                className="flex items-center gap-2 w-full px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-dashed border-white/15 text-white/70 hover:text-white text-xs font-medium transition-all"
+              >
+                <ImageIcon className="w-4 h-4" />
+                Upload from Gallery
+              </button>
+              <input id="editor-photo-input" type="file" accept="image/*" className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                      setCustomPhoto(ev.target?.result as string);
+                      setShowPhotoPicker(false);
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+              />
+              <div className="grid grid-cols-3 gap-2 overflow-y-auto max-h-[50vh] pb-2">
+                {stockPhotos.map((photo, idx) => (
+                  <button key={photo.id || idx}
+                    onClick={() => { setCustomPhoto(photo.url); setShowPhotoPicker(false); }}
+                    className={`relative aspect-[9/16] rounded-xl overflow-hidden border-2 transition-all hover:scale-[1.02] active:scale-95 ${
+                      (customPhoto ?? capturedImage) === photo.url ? "border-ember" : "border-white/10"
+                    }`}
+                  >
+                    <img src={photo.url} alt={photo.name} className="w-full h-full object-cover" />
+                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-1.5">
+                      <span className="text-[9px] font-semibold text-white truncate block">{photo.name}</span>
+                    </div>
+                  </button>
+                ))}
+                {stockPhotos.length === 0 && (
+                  <div className="col-span-3 text-center py-8 text-xs text-white/30">No stock photos available</div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* TEMPLATE FAMILY CAROUSEL — pick stat layout style */}
+      <AnimatePresence>
+        {showTemplateCarousel && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex flex-col justify-end"
+          >
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 350, damping: 30 }}
+              className="bg-black/90 backdrop-blur-2xl rounded-t-3xl p-6 pt-6 space-y-4 border-t border-white/10"
+            >
+              <div className="flex justify-between items-center pb-2 border-b border-white/5">
+                <div>
+                  <h3 className="text-sm font-bold text-white">Template Style</h3>
+                  <p className="text-xs text-white/40 mt-0.5">Choose how your stats are displayed</p>
+                </div>
+                <button onClick={() => setShowTemplateCarousel(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:text-white">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              {/* Template families (stat layouts) */}
+              <TemplateCarousel
+                templates={templateFamilies}
+                selectedId={templateId}
+                onSelect={(template) => {
+                  handleSelectTemplate(template);
+                  setShowTemplateCarousel(false);
+                }}
+              />
+              {/* Lens overlays (designed elements like "India") */}
+              {lensTemplates.length > 0 && (
+                <div className="pt-2 border-t border-white/5">
+                  <label className="text-[10px] text-white/40 uppercase tracking-wider font-bold block mb-2">Lens Overlays</label>
+                  <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+                    {lensTemplates.map((lens) => {
+                      const isActive = activeLens?.id === lens.id;
+                      return (
+                        <button key={lens.id}
+                          onClick={() => {
+                            setActiveLens(isActive ? null : lens);
+                            setLensFilter(isActive ? "" : (lensFilters[lens.overlayType] || ""));
+                            setShowTemplateCarousel(false);
+                          }}
+                          className={`flex flex-col items-center gap-1.5 shrink-0 w-[60px] transition-all ${
+                            isActive ? "scale-105" : "opacity-60 hover:opacity-100"
+                          }`}
+                        >
+                          <div className={`w-[52px] h-[52px] rounded-full flex items-center justify-center text-xl border-2 transition-all ${
+                            isActive ? "border-ember bg-ember/10 shadow-[0_0_12px_var(--color-ember-glow)]" : "border-white/15 bg-white/5"
+                          }`}>
+                            <span className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">{lens.icon}</span>
+                          </div>
+                          <span className="text-[9px] font-semibold text-center leading-tight max-w-[60px] text-white/80">
+                            {lens.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}

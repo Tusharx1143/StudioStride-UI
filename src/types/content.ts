@@ -30,7 +30,9 @@ export type ContentType =
   | "lens_template"
   | "sticker"
   | "stock_photo"
-  | "lens_filter";
+  | "lens_filter"
+  | "font"
+  | "colorPalette";
 
 export interface ContentMeta {
   /** Document ID (same as Firestore doc id). */
@@ -136,6 +138,17 @@ export interface FirestoreSticker extends ContentMeta {
   bgGradient?: string;
   /** Optional stat key for dynamic metric stickers. */
   statKey?: string;
+  /**
+   * Format template for dynamic stickers. Interpolates:
+   *  {value}  — the raw stat value
+   *  {label}  — human-readable stat label
+   *  {unit}   — measurement unit
+   * Example: "❤️ {value} bpm" → "❤️ 154 bpm"
+   * When absent, `content` is used as-is.
+   */
+  format?: string;
+  /** When true, render without background — just text/emoji over the photo. */
+  transparent?: boolean;
 }
 
 /** Firestore document for the `stockPhotos` collection. */
@@ -153,6 +166,30 @@ export interface FirestoreLensFilter extends ContentMeta {
   overlayType: string;
   /** CSS filter string, e.g. "contrast(1.15) saturate(1.3)". */
   filterCSS: string;
+}
+
+/** Firestore document for the `fonts` collection. */
+export interface FirestoreFont extends ContentMeta {
+  name: string;
+  /** CSS font-family value, e.g. "'Inter', sans-serif" */
+  fontFamily: string;
+  /** Category for grouping: "sans-serif" | "serif" | "display" | "handwriting" | "monospace" */
+  category: string;
+  /** Available font weights, e.g. ["300","400","600","700","800","900"] */
+  weights: string[];
+  /** Google Fonts CSS URL to load this font */
+  googleFontUrl?: string;
+  /** Fallback stack, e.g. "sans-serif" */
+  fallback: string;
+}
+
+/** Firestore document for the `colorPalettes` collection. */
+export interface FirestoreColorPalette extends ContentMeta {
+  name: string;
+  /** Array of hex color values */
+  colors: string[];
+  /** Category e.g. "Neon", "Earth", "Ocean", "Brand" */
+  category: string;
 }
 
 // ====================================================================
@@ -191,6 +228,8 @@ export interface StickerFormData {
   type: string;
   bgGradient?: string;
   statKey?: string;
+  format?: string;
+  transparent?: boolean;
 }
 
 export interface StockPhotoFormData {
@@ -208,6 +247,21 @@ export interface LensFilterFormData {
   filterCSS: string;
 }
 
+export interface FontFormData {
+  name: string;
+  fontFamily: string;
+  category: string;
+  weights: string[];
+  googleFontUrl?: string;
+  fallback: string;
+}
+
+export interface ColorPaletteFormData {
+  name: string;
+  colors: string[];
+  category: string;
+}
+
 /**
  * A sticker item as stored in the stickers collection and consumed by the editor.
  * Mirrors the shape used in STICKER_LIBRARY within EditorScreen.
@@ -220,6 +274,10 @@ export interface StickerItem {
   type: "emoji" | "badge" | "metric" | "location";
   bgGradient?: string;
   statKey?: string;
+  /** Format template for dynamic stickers (see FirestoreSticker.format). */
+  format?: string;
+  /** When true, render without background — just text/emoji over the photo. */
+  transparent?: boolean;
 }
 
 /** Runtime content bundle — what ContentContext exposes. */
