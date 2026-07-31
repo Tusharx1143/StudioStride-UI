@@ -5,6 +5,7 @@ import type {
   RouteOverlay,
   StatData,
   StatSlotId,
+  StatSlotOverrides,
   StickerOverlay,
   TemplateLayout,
   TextOverlay,
@@ -66,6 +67,7 @@ export interface EditorDocParts {
   stickerOverlays: StickerOverlay[];
   templateId: string;
   statLayout: TemplateLayout;
+  statSlotOverrides: StatSlotOverrides;
   capturedImage: string;
   /** Accepts the editor's Set directly; stored as a sorted array. */
   hiddenSlots: Iterable<StatSlotId>;
@@ -102,6 +104,7 @@ export function buildDoc(parts: EditorDocParts): EditorDoc {
     stickerOverlays: clone(parts.stickerOverlays),
     templateId: parts.templateId,
     statLayout: clone(parts.statLayout),
+    statSlotOverrides: clone(parts.statSlotOverrides),
     capturedImage: parts.capturedImage,
     hiddenSlots: [...parts.hiddenSlots].sort(),
     committedCrop: { ...parts.committedCrop },
@@ -148,6 +151,11 @@ export function normalizeDoc(raw: unknown): EditorDoc | null {
     stickerOverlays: arr<StickerOverlay>(raw.stickerOverlays),
     templateId: str(raw.templateId, ""),
     statLayout: isRecord(raw.statLayout) ? (raw.statLayout as TemplateLayout) : {},
+    // Absent in projects saved before slot styling existed — an empty map
+    // means "use the template's design", which is what they looked like.
+    statSlotOverrides: isRecord(raw.statSlotOverrides)
+      ? (raw.statSlotOverrides as StatSlotOverrides)
+      : {},
     capturedImage,
     hiddenSlots: arr<StatSlotId>(raw.hiddenSlots).slice().sort(),
     committedCrop: {
@@ -201,6 +209,7 @@ export function docFingerprint(doc: EditorDoc): string {
     doc.stickerOverlays,
     doc.templateId,
     doc.statLayout,
+    doc.statSlotOverrides,
     doc.capturedImage,
     [...doc.hiddenSlots].sort(),
     doc.committedCrop,

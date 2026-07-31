@@ -78,11 +78,44 @@ export class ContentRepository<T extends { id: string }> {
     return snap.docs.map((d) => ({ id: d.id, ...d.data() })) as T[];
   }
 
-  /** Create or overwrite a document. Document ID equals the logical id. */
+  /**
+   * Create or overwrite a document. Document ID equals the logical id.
+   *
+   * The overwrite is deliberate and load-bearing: `seedContent.ts` re-runs the
+   * whole mock library through here and relies on it being idempotent. Admin
+   * UI creates must use `createUnique` instead.
+   */
   async create(id: string, data: Omit<T, "id">): Promise<T> {
     const ref = doc(this.getDb(), this.collectionName, id);
     await setDoc(ref, data as DocumentData);
     return { id, ...data } as T;
+  }
+
+  /**
+   * Create a document without ever clobbering one that already exists.
+   *
+   * `preferredId` is derived from a user-supplied name, so two items called
+   * "Sunset" land on the same id — with `create` the second silently replaced
+   * the first. Here the id gains a `_2`, `_3`… suffix until it's free.
+   *
+   * Returns the document with whichever id it actually got.
+   */
+  async createUnique(preferredId: string, data: Omit<T, "id">): Promise<T> {
+    const db = this.getDb();
+    // ponytail: read-then-write, so two admins saving the same name in the
+    // same second can still collide. Single-admin CMS — upgrade to a
+    // transaction if that stops being true.
+    for (let n = 1; n <= 50; n++) {
+      const id = n === 1 ? preferredId : `${preferredId}_${n}`;
+      const ref = doc(db, this.collectionName, id);
+      if (!(await getDoc(ref)).exists()) {
+        await setDoc(ref, data as DocumentData);
+        return { id, ...data } as T;
+      }
+    }
+    throw new Error(
+      `No free document id for "${preferredId}" in ${this.collectionName} after 50 attempts`
+    );
   }
 
   /** Partial update. */

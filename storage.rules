@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// Nothing in StudioStride uploads to Storage — stock photos are external URLs
+// entered in /admin. This denies everything so an enabled-but-unused bucket
+// isn't left open by the default test-mode rules.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -43,6 +43,7 @@ function parts(overrides: Partial<EditorDocParts> = {}): EditorDocParts {
     stickerOverlays: [STICKER],
     templateId: "hero",
     statLayout: { distance: { x: 10, y: 20 } },
+    statSlotOverrides: {},
     capturedImage: "data:image/jpeg;base64,AAAA",
     hiddenSlots: new Set<StatSlotId>(["pace"]),
     committedCrop: { ratio: "9:16", rotation: 0, flipH: false, flipV: false },

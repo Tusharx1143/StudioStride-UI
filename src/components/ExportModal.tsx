@@ -17,6 +17,7 @@ import type {
   CommittedCrop,
   RouteOverlay,
   StatData,
+  StatSlotOverrides,
   StickerOverlay,
   TemplateLayout,
   TextOverlay,
@@ -46,6 +47,8 @@ interface ExportModalProps {
   templateId: string;
   statLayout: TemplateLayout;
   statData: StatData;
+  /** Per-slot font/colour tweaks, so the export matches the canvas. */
+  statSlotOverrides?: StatSlotOverrides;
 }
 
 type ExportFormat = "png" | "jpeg" | "webp";
@@ -70,6 +73,7 @@ export default function ExportModal({
   templateId,
   statLayout,
   statData,
+  statSlotOverrides,
 }: ExportModalProps) {
   const { statDesigns } = useContent();
   const [format, setFormat] = useState<ExportFormat>("png");
@@ -137,6 +141,7 @@ export default function ExportModal({
       statData,
       // Export has to use the same published design the canvas rendered.
       statDesign: statDesigns[templateId],
+      statSlotOverrides,
       mimeType:
         format === "jpeg" ? "image/jpeg" : format === "webp" ? "image/webp" : "image/png",
       quality,

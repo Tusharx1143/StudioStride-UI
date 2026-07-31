@@ -3,7 +3,7 @@ import type { EditableLensElement } from "../../types";
 import type { LensTemplateFormData, FirestoreFont, FirestoreColorPalette } from "../../types/content";
 import { getLensTemplates, createLensTemplate, updateLensTemplate, deleteLensTemplate } from "../../services/contentService";
 import { getFonts } from "../../services/contentService";
-import { getColorPalettes } from "../../services/contentService";
+import { getColorPalettes, getLensFilters } from "../../services/contentService";
 import ContentListCard from "./shared/ContentListCard";
 import ConfirmDialog from "./shared/ConfirmDialog";
 import { resolveStickerContent, getStatValue } from "../../data/resolveStickerContent";
@@ -11,6 +11,22 @@ import { Plus, Save, X, Trash2, GripVertical, Search, Eye, EyeOff } from "lucide
 
 const CANVAS_W = 390;
 const CANVAS_H = 780;
+
+// Kept in step with LensTemplateManager's lists — these are the values the app
+// actually understands. `overlayType` selects the photo filter applied to the
+// lens (see LENS_FILTER_MAP), which is why it is a real choice and not the
+// cosmetic overlay/badge toggle that used to sit here.
+const CATEGORIES = ["AI", "Trending", "Atmosphere", "Portrait", "Vintage", "Maps", "Brands", "Custom"];
+const OVERLAY_TYPES = ["minimal", "strava", "cyberpunk", "vintage", "route", "trophy", "music", "custom"];
+const BADGE_COLORS = [
+  { label: "Purple", value: "bg-purple-500 text-white" },
+  { label: "Ember", value: "bg-ember text-ink" },
+  { label: "Cyan", value: "bg-cyan-500 text-white" },
+  { label: "Rose", value: "bg-rose-500 text-white" },
+  { label: "Emerald", value: "bg-emerald-500 text-white" },
+  { label: "Amber", value: "bg-amber-500 text-ink" },
+  { label: "Slate", value: "bg-slate-700 text-white" },
+];
 
 // Friendly stat definitions — shown in the "Show data from" picker
 const STAT_PICKER = [
@@ -78,7 +94,8 @@ export default function Studio() {
   const [fonts, setFonts] = useState<FirestoreFont[]>([]);
   const [palettes, setPalettes] = useState<FirestoreColorPalette[]>([]);
   const [loading, setLoading] = useState(true);
-  const [creationType, setCreationType] = useState<"overlay" | "badge">("overlay");
+  /** overlayType → CSS filter, shown so the filter choice isn't a blind pick. */
+  const [filters, setFilters] = useState<Record<string, string>>({});
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -96,8 +113,8 @@ export default function Studio() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [t, f, p] = await Promise.all([getLensTemplates(), getFonts(), getColorPalettes()]);
-      setTemplates(t); setFonts(f); setPalettes(p);
+      const [t, f, p, lf] = await Promise.all([getLensTemplates(), getFonts(), getColorPalettes(), getLensFilters()]);
+      setTemplates(t); setFonts(f); setPalettes(p); setFilters(lf);
     } catch (err) { console.error("Failed to load", err); }
     setLoading(false);
   }, []);
@@ -242,12 +259,44 @@ export default function Studio() {
               <h3 className="text-sm font-bold text-white">{editingId ? "Edit Design" : "New Design"}</h3>
               <button type="button" onClick={() => { setCreating(false); setEditingId(null); }} className="p-1 rounded-lg hover:bg-surface-overlay transition-colors"><X className="w-4 h-4 text-white/40" /></button>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="flex rounded-lg bg-surface border hairline-border p-0.5">
-                <button type="button" onClick={() => setCreationType("overlay")} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${creationType === "overlay" ? "bg-ember text-ink" : "text-white/50 hover:text-white"}`}>Photo Overlay</button>
-                <button type="button" onClick={() => setCreationType("badge")} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${creationType === "badge" ? "bg-ember text-ink" : "text-white/50 hover:text-white"}`}>Stat Badge</button>
-              </div>
+            <div className="flex items-center gap-2">
+              <input value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })} className="w-14 px-2 py-2 rounded-lg bg-surface border hairline-border text-white text-center text-lg focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="📷" title="Icon shown on the lens chip" />
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="flex-1 px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="Name your design..." />
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+              <div>
+                <label className="text-[10px] text-white/40 block mb-1">Category</label>
+                <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-2 py-1.5 rounded-lg bg-surface border hairline-border text-white text-xs focus:outline-none focus:ring-2 focus:ring-ember/50">
+                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-white/40 block mb-1">Photo filter</label>
+                <select value={form.overlayType} onChange={(e) => setForm({ ...form, overlayType: e.target.value })} className="w-full px-2 py-1.5 rounded-lg bg-surface border hairline-border text-white text-xs focus:outline-none focus:ring-2 focus:ring-ember/50">
+                  {OVERLAY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <p className="text-[9px] text-white/30 mt-0.5 truncate" title={filters[form.overlayType] || "no filter"}>
+                  {filters[form.overlayType] ? filters[form.overlayType] : "no filter applied"}
+                </p>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-white/40 block mb-1">Badge colour</label>
+                <select value={form.badgeColor} onChange={(e) => setForm({ ...form, badgeColor: e.target.value })} className="w-full px-2 py-1.5 rounded-lg bg-surface border hairline-border text-white text-xs focus:outline-none focus:ring-2 focus:ring-ember/50">
+                  {BADGE_COLORS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  {/* Preserve a hand-written value coming from an older doc. */}
+                  {!BADGE_COLORS.some((c) => c.value === form.badgeColor) && (
+                    <option value={form.badgeColor}>{form.badgeColor}</option>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-white/40 block mb-1">Tagline</label>
+                <input value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} className="w-full px-2 py-1.5 rounded-lg bg-surface border hairline-border text-white text-xs focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="Short subtitle" />
+              </div>
             </div>
           </div>
 
@@ -262,12 +311,12 @@ export default function Studio() {
                 <div ref={canvasRef} className="relative w-full mx-auto rounded-xl overflow-hidden select-none flex-1 border-2 border-white/10" style={{ aspectRatio: `${CANVAS_W}/${CANVAS_H}`, maxHeight: "min(75vh, 720px)", minHeight: "400px", backgroundColor: "#0a0a0a" }}>
                   {/* Dotted grid overlay for blank canvas feel */}
                   <div className="absolute inset-0 pointer-events-none opacity-[0.03]" style={{ backgroundImage: "radial-gradient(circle, #ffffff 1px, transparent 1px)", backgroundSize: "24px 24px" }} />
-                  {creationType === "overlay" && (
-                    <div className="absolute top-3 left-3 z-10 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1 pointer-events-none" style={{ backgroundColor: "#00000055", color: "#FFFFFF", backdropFilter: "blur(8px)" }}>
-                      <span>{form.icon}</span>
-                      <span>{form.name || "Design"}</span>
-                    </div>
-                  )}
+                  {/* The lens chip as the app renders it — doubles as the
+                      preview for the icon, name and badge colour fields. */}
+                  <div className={`absolute top-3 left-3 z-10 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1 pointer-events-none ${form.badgeColor}`}>
+                    <span>{form.icon}</span>
+                    <span>{form.name || "Design"}</span>
+                  </div>
                   {form.defaultElements.map((el) => (
                     <div key={el.id} className={`absolute cursor-grab active:cursor-grabbing transition-shadow ${selectedEl === el.id ? "ring-2 ring-ember ring-offset-1 ring-offset-black/60" : "hover:ring-1 hover:ring-white/30"}`}
                       style={{
@@ -308,10 +357,11 @@ export default function Studio() {
               <div className="p-3 rounded-xl bg-surface-raised border hairline-border space-y-3">
                 <label className="text-[11px] font-bold text-white/60 uppercase tracking-wider">Add to Canvas</label>
                 {/* Text / Image */}
-                <div className="flex gap-1.5">
-                  <button type="button" onClick={() => addElement("text")} className="flex-1 px-2.5 py-2 rounded-lg bg-surface border hairline-border text-xs text-white/60 hover:text-white hover:border-white/20 transition-all text-center">+ Text</button>
-                  <button type="button" onClick={() => addElement("badge")} className="flex-1 px-2.5 py-2 rounded-lg bg-surface border hairline-border text-xs text-white/60 hover:text-white hover:border-white/20 transition-all text-center">+ Badge</button>
-                  <button type="button" onClick={() => addElement("sticker")} className="flex-1 px-2.5 py-2 rounded-lg bg-surface border hairline-border text-xs text-white/60 hover:text-white hover:border-white/20 transition-all text-center">+ Image</button>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button type="button" onClick={() => addElement("text")} className="px-2.5 py-2 rounded-lg bg-surface border hairline-border text-xs text-white/60 hover:text-white hover:border-white/20 transition-all text-center">+ Text</button>
+                  <button type="button" onClick={() => addElement("badge")} className="px-2.5 py-2 rounded-lg bg-surface border hairline-border text-xs text-white/60 hover:text-white hover:border-white/20 transition-all text-center">+ Badge</button>
+                  <button type="button" onClick={() => addElement("sticker")} className="px-2.5 py-2 rounded-lg bg-surface border hairline-border text-xs text-white/60 hover:text-white hover:border-white/20 transition-all text-center">+ Image</button>
+                  <button type="button" onClick={() => addElement("route_graphic")} className="px-2.5 py-2 rounded-lg bg-surface border hairline-border text-xs text-white/60 hover:text-white hover:border-white/20 transition-all text-center">+ Route</button>
                 </div>
                 {/* Font picker for new elements */}
                 <div>

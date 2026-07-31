@@ -6,11 +6,13 @@ import type {
   SlotStyle,
   StatData,
   StatSlotId,
+  StatSlotOverrides,
   TemplateLayout,
+  TemplateStatDesign,
 } from "../types";
 import { getStatDesign } from "../data/templateStatDesigns";
 import { useContent } from "../contexts/ContentContext";
-import { metricForSlot, resolveSlotStyle } from "../utils/metricSlots";
+import { applySlotOverride, metricForSlot, resolveSlotStyle } from "../utils/metricSlots";
 import { commitDrag } from "../utils/statLayouts";
 import { computeSnap, type SnapLine } from "../utils/snapping";
 import { SNAP_TARGET_ATTR, collectSnapLines, localRect } from "../utils/snapTargets";
@@ -45,6 +47,14 @@ interface StatLayerProps {
   interactive?: boolean;
   selectedSlot?: StatSlotId | null;
   onSelectSlot?: (slot: StatSlotId | null) => void;
+  /** Creator's per-slot font/colour tweaks over the template's design. */
+  overrides?: StatSlotOverrides;
+  /**
+   * Render this design instead of the published one. Lets the admin preview a
+   * design it is still editing, which is otherwise unreachable — the published
+   * record is by definition the last saved state.
+   */
+  design?: TemplateStatDesign;
   onDragStart?: () => void;
   /** Reports the alignment lines a drag is currently snapped to. */
   onGuidesChange?: (guides: SnapLine[]) => void;
@@ -60,13 +70,16 @@ export default function StatLayer({
   interactive = true,
   selectedSlot = null,
   onSelectSlot,
+  overrides,
+  design: designOverride,
   onDragStart,
   onGuidesChange,
   onSnap,
 }: StatLayerProps) {
   const { statDesigns } = useContent();
-  // Published design wins; the hardcoded table covers anything unconfigured.
-  const design = statDesigns[templateId] ?? getStatDesign(templateId);
+  // An explicit design wins (the admin previewing unsaved edits), then the
+  // published one; the hardcoded table covers anything unconfigured.
+  const design = designOverride ?? statDesigns[templateId] ?? getStatDesign(templateId);
   const slots = Object.keys(layout) as StatSlotId[];
 
   return (
@@ -106,8 +119,9 @@ export default function StatLayer({
         // Shared with drawStatLayer: a metric slot borrows the template's own
         // secondary-stat styling, and resolves to null when this activity does
         // not carry that metric — so no blank chip is ever rendered.
-        const style = resolveSlotStyle(design, slot, data);
-        if (!style) return null;
+        const designed = resolveSlotStyle(design, slot, data);
+        if (!designed) return null;
+        const style = applySlotOverride(designed, overrides?.[slot]);
 
         return (
           <StatChip

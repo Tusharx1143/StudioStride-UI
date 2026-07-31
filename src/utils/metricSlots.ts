@@ -4,6 +4,7 @@ import type {
   SlotStyle,
   StatData,
   StatSlotId,
+  StatSlotOverride,
   TemplateStatDesign,
   TextSlotId,
 } from "../types";
@@ -105,6 +106,32 @@ export function resolveSlotStyle(
     suffix: () => metric.unit,
     suffixScale: base.suffixScale ?? 0.45,
     suffixColor: base.suffixColor,
+  };
+}
+
+/**
+ * Fold a creator's per-slot tweaks onto the style the template produced.
+ *
+ * Kept here beside `resolveSlotStyle` because both the DOM renderer and the
+ * canvas exporter call it — a style the two disagree on is an export that
+ * doesn't match the preview.
+ *
+ * `suffixColor` follows `color` only when the design had not given the suffix
+ * a colour of its own; a template that deliberately tints the unit differently
+ * keeps that relationship.
+ */
+export function applySlotOverride(
+  style: SlotStyle,
+  override: StatSlotOverride | undefined
+): SlotStyle {
+  if (!override || (!override.fontFamily && !override.color)) return style;
+
+  return {
+    ...style,
+    fontFamily: override.fontFamily ?? style.fontFamily,
+    color: override.color ?? style.color,
+    suffixColor:
+      override.color && !style.suffixColor ? override.color : style.suffixColor,
   };
 }
 

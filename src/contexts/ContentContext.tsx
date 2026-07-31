@@ -17,6 +17,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   useCallback,
   type ReactNode,
@@ -35,9 +36,12 @@ import {
   getStickers,
   getStockPhotos,
   getLensFilters,
-  getFonts,
+  getAllFonts,
   getColorPalettes,
+  invalidateAllCaches,
 } from "../services/contentService";
+import { injectFontStylesheets, familyFromFontUrl } from "../services/fontLoader";
+import { BUILT_IN_FONTS } from "../data/builtInFonts";
 import { TEMPLATE_FAMILIES, LENS_TEMPLATES_EXPANDED, SAMPLE_STUDIO_TEMPLATES, STOCK_PHOTOS, LENS_FILTER_MAP } from "../data/mockData";
 import { TEMPLATE_STAT_DESIGNS } from "../data/templateStatDesigns";
 
@@ -67,6 +71,60 @@ function pickList<T>(fromFirebase: T[], fallback: T[]): T[] {
 }
 
 /**
+ * Whether a font record can actually render.
+ *
+ * Two ways it can't: the stylesheet URL isn't one we'll load, or `fontFamily`
+ * doesn't name the family that stylesheet registers — in which case the face
+ * downloads and nothing is able to select it.
+ */
+function isUsableFont(font: FirestoreFont): boolean {
+  const declared = familyFromFontUrl(font.googleFontUrl);
+  if (!declared) return false;
+  return font.fontFamily.toLowerCase().includes(declared.toLowerCase());
+}
+
+/**
+ * Built-in typefaces plus whatever /admin holds, de-duplicated by name.
+ *
+ * Unlike the other lists this one merges rather than replaces: the curated set
+ * is what the editor's typeface picker is built around, and one published font
+ * must not wipe it. On a name collision the usable record wins — a published
+ * entry pointing at a preview page instead of a stylesheet shouldn't shadow a
+ * working built-in of the same name — and otherwise the published one does,
+ * since that's the admin deliberately overriding a default.
+ *
+ * `fromFirebase` must include *inactive* documents. Once the built-ins are
+ * seeded, unpublishing one is the only way to retire it, and a merge that only
+ * saw active records would keep handing the bundled copy straight back.
+ */
+export function mergeFonts(
+  fromFirebase: FirestoreFont[],
+  builtIn: FirestoreFont[]
+): FirestoreFont[] {
+  const byName = new Map<string, FirestoreFont>();
+
+  for (const font of builtIn) {
+    byName.set(font.name.trim().toLowerCase(), font);
+  }
+
+  for (const font of fromFirebase) {
+    const key = font.name.trim().toLowerCase();
+
+    // Explicitly retired: drop it, bundled counterpart and all.
+    if (font.isActive === false) {
+      byName.delete(key);
+      continue;
+    }
+
+    const existing = byName.get(key);
+    if (existing && isUsableFont(existing) && !isUsableFont(font)) continue;
+    byName.set(key, font);
+  }
+
+  return [...byName.values()];
+}
+
+/**
  * Fold what Firestore returned onto the hardcoded library, per collection.
  *
  * Deliberately not all-or-nothing: a store with lenses but no stock photos
@@ -86,7 +144,7 @@ export function resolveBundle(
     stickers: pickList(fromFirebase.stickers, mock.stickers),
     stockPhotos: pickList(fromFirebase.stockPhotos, mock.stockPhotos),
     lensFilters: { ...mock.lensFilters, ...fromFirebase.lensFilters },
-    fonts: fromFirebase.fonts,
+    fonts: mergeFonts(fromFirebase.fonts, mock.fonts),
     colorPalettes: fromFirebase.colorPalettes,
   };
 }
@@ -100,9 +158,10 @@ function loadMockBundle(): ContentBundle {
     stickers: loadMockStickers(),
     stockPhotos: loadMockStockPhotos(),
     lensFilters: loadMockFilters(),
-    // No hardcoded equivalents — the editor keeps its own built-in font and
-    // colour lists, and these only add to them.
-    fonts: [],
+    // Typefaces ship with the app; published fonts merge on top rather than
+    // replacing them. Palettes have no curated equivalent — the editor keeps
+    // its own swatch list and published palettes only add to it.
+    fonts: BUILT_IN_FONTS,
     colorPalettes: [],
   };
 }
@@ -184,7 +243,18 @@ export function ContentProvider({ children }: ContentProviderProps) {
   // them has to guard against an empty list that only exists for one tick.
   const [bundle, setBundle] = useState<ContentBundle>(loadMockBundle);
 
-  const loadContent = useCallback(async () => {
+  // When the last successful fetch finished, so a refresh can be throttled.
+  const lastLoadedAt = useRef(0);
+
+  /**
+   * Fetch the content bundle.
+   *
+   * `force` drops the contentService cache first. Without it a "refresh" is
+   * silently a no-op for up to the cache's 5-minute TTL — the reason the
+   * existing refresh control could appear to do nothing.
+   */
+  const loadContent = useCallback(async (force = false) => {
+    if (force) invalidateAllCaches();
     setLoading(true);
     setError(null);
 
@@ -207,7 +277,7 @@ export function ContentProvider({ children }: ContentProviderProps) {
           getStickers(),
           getStockPhotos(),
           getLensFilters(),
-          getFonts(),
+          getAllFonts(),
           getColorPalettes(),
         ]);
 
@@ -226,6 +296,7 @@ export function ContentProvider({ children }: ContentProviderProps) {
           mock
         )
       );
+      lastLoadedAt.current = Date.now();
       setLoading(false);
       return;
     } catch (err) {
@@ -241,11 +312,49 @@ export function ContentProvider({ children }: ContentProviderProps) {
     loadContent();
   }, [loadContent]);
 
+  /**
+   * Re-fetch when the app comes back to the foreground.
+   *
+   * The bundle was otherwise fetched once per mount, so anything published in
+   * /admin stayed invisible until a full reload. Refreshing on resume is the
+   * cheapest thing that makes publishing actually land: no persistent
+   * listeners, no extra reads while the app sits idle.
+   */
+  useEffect(() => {
+    if (!USE_FIREBASE) return;
+
+    // Long enough that tab-flipping doesn't hammer Firestore, short enough
+    // that coming back to the app shows current content.
+    const MIN_INTERVAL_MS = 60_000;
+
+    const refreshIfStale = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastLoadedAt.current < MIN_INTERVAL_MS) return;
+      loadContent(true);
+    };
+
+    document.addEventListener("visibilitychange", refreshIfStale);
+    window.addEventListener("focus", refreshIfStale);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshIfStale);
+      window.removeEventListener("focus", refreshIfStale);
+    };
+  }, [loadContent]);
+
+  // Pull down the stylesheets for admin-defined fonts. Without this every
+  // `fontFamily` those fonts advertise — in lens elements, stat designs, and
+  // the editor's font picker — silently falls back to a system face.
+  useEffect(() => {
+    if (bundle.fonts.length > 0) injectFontStylesheets(bundle.fonts);
+  }, [bundle.fonts]);
+
   const value: ContentContextValue = {
     ...bundle,
     loading,
     error,
-    refreshAll: loadContent,
+    // Wrapped rather than passed directly: `refreshAll` is wired straight to
+    // onClick in places, which would hand a MouseEvent to the `force` param.
+    refreshAll: () => loadContent(true),
   };
 
   return (

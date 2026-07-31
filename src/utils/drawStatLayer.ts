@@ -2,11 +2,12 @@ import type {
   SlotStyle,
   StatData,
   StatSlotId,
+  StatSlotOverrides,
   TemplateLayout,
   TemplateStatDesign,
 } from "../types";
 import { getStatDesign } from "../data/templateStatDesigns";
-import { resolveSlotStyle } from "./metricSlots";
+import { applySlotOverride, resolveSlotStyle } from "./metricSlots";
 import { roundRectPath } from "../data/templateStatDesigns/shared";
 
 /** Must match REFERENCE_WIDTH in StatLayer.tsx. */
@@ -23,7 +24,9 @@ export async function drawStatLayer(
   layout: TemplateLayout,
   data: StatData,
   /** Published design for this template. Omitted = use the hardcoded table. */
-  design: TemplateStatDesign = getStatDesign(templateId)
+  design: TemplateStatDesign = getStatDesign(templateId),
+  /** Creator's per-slot font/colour tweaks, as applied in the preview. */
+  overrides?: StatSlotOverrides
 ): Promise<void> {
   // ctx.font falls back silently when a webfont has not loaded yet.
   if (typeof document !== "undefined" && document.fonts?.ready) {
@@ -53,8 +56,9 @@ export async function drawStatLayer(
 
     // One resolver for the DOM preview and this canvas twin, so a metric chip
     // cannot look different in the export than it did on screen.
-    const style = resolveSlotStyle(design, slot, data);
-    if (!style) continue;
+    const designed = resolveSlotStyle(design, slot, data);
+    if (!designed) continue;
+    const style = applySlotOverride(designed, overrides?.[slot]);
 
     ctx.save();
     drawSlot(ctx, style, data, originX, originY, scale);

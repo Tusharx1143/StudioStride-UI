@@ -20,11 +20,8 @@ import {
   connectFirestoreEmulator,
   type Firestore,
 } from "firebase/firestore";
-import {
-  getStorage,
-  connectStorageEmulator,
-  type FirebaseStorage,
-} from "firebase/storage";
+// No Storage import: stock photos are external URLs entered in /admin, so
+// nothing here uploads. storage.rules denies the bucket outright.
 
 // ---------------------------------------------------------------------------
 // Config
@@ -49,7 +46,6 @@ const isConfigured = (): boolean =>
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
-let storage: FirebaseStorage | null = null;
 let initialized = false;
 
 /**
@@ -57,7 +53,7 @@ let initialized = false;
  * Safe to call multiple times — subsequent calls are no-ops.
  */
 export function getFirebase() {
-  if (initialized) return { app, auth, db, storage };
+  if (initialized) return { app, auth, db };
 
   if (!isConfigured()) {
     console.warn(
@@ -65,24 +61,22 @@ export function getFirebase() {
         "Firebase features (admin auth, content storage) will be unavailable."
     );
     initialized = true;
-    return { app: null, auth: null, db: null, storage: null };
+    return { app: null, auth: null, db: null };
   }
 
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
-  storage = getStorage(app);
 
   // ── Emulator support (local dev) ──
   if (import.meta.env.VITE_FIREBASE_EMULATOR === "true") {
     connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
     connectFirestoreEmulator(db, "127.0.0.1", 8080);
-    connectStorageEmulator(storage, "127.0.0.1", 9199);
     console.log("[Firebase] Connected to local emulators");
   }
 
   initialized = true;
-  return { app, auth, db, storage };
+  return { app, auth, db };
 }
 
 /** Convenience accessors — ensure init before use. */
@@ -94,11 +88,6 @@ export function getAuthInstance(): Auth | null {
 export function getDbInstance(): Firestore | null {
   getFirebase();
   return db;
-}
-
-export function getStorageInstance(): FirebaseStorage | null {
-  getFirebase();
-  return storage;
 }
 
 /** Whether Firebase has been configured (env vars present). */

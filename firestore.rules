@@ -1,0 +1,54 @@
+rules_version = '2';
+
+// StudioStride content collections.
+//
+// Every document here is design content authored in /admin and consumed by the
+// app: template families, lens overlays, stickers, stock photos, fonts,
+// palettes. None of it is user data, so reads are open — the app fetches this
+// before anyone signs in. Writes require the `admin` custom claim, which is
+// set out-of-band by scripts/setAdminClaim.mjs.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    // Content documents carry these bookkeeping fields; the admin UI always
+    // writes them. Checking shape here stops a stray client from parking
+    // arbitrary documents in a public-read collection.
+    function hasContentShape() {
+      return request.resource.data.keys().hasAll(['isActive', 'createdAt', 'updatedAt'])
+             && request.resource.data.isActive is bool;
+    }
+
+    match /{collection}/{docId} {
+      allow read: if collection in [
+        'templateFamilies',
+        'templateStatDesigns',
+        'lensTemplates',
+        'stickers',
+        'stockPhotos',
+        'lensFilters',
+        'fonts',
+        'colorPalettes'
+      ];
+
+      allow create, update: if isAdmin() && hasContentShape() && collection in [
+        'templateFamilies',
+        'templateStatDesigns',
+        'lensTemplates',
+        'stickers',
+        'stockPhotos',
+        'lensFilters',
+        'fonts',
+        'colorPalettes'
+      ];
+
+      // Deletes go through softDelete (isActive: false) in the admin UI, so a
+      // hard delete is never issued by the app. Keeping it admin-only rather
+      // than denied outright leaves the console usable for real cleanup.
+      allow delete: if isAdmin();
+    }
+  }
+}

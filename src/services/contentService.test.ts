@@ -7,7 +7,28 @@
 
 import { describe, test, expect } from "vitest";
 import type { StorableTemplateStatDesign } from "../types/content";
-import { resolveStatDesign } from "../services/contentService";
+import { resolveStatDesign, slugify } from "../services/contentService";
+
+describe("slugify", () => {
+  test("collapses whitespace to underscores", () => {
+    expect(slugify("Golden Hour Trail")).toBe("golden_hour_trail");
+  });
+
+  test("strips characters illegal in a Firestore document id", () => {
+    // A slash would have made the id an invalid document path.
+    expect(slugify("Trail / Road")).toBe("trail_road");
+    expect(slugify("Sunset!!")).toBe("sunset");
+  });
+
+  test("never returns an empty id", () => {
+    expect(slugify("")).toBe("item");
+    expect(slugify("!!!")).toBe("item");
+  });
+
+  test("does not leave leading or trailing underscores", () => {
+    expect(slugify("  Neon  ")).toBe("neon");
+  });
+});
 
 describe("resolveStatDesign", () => {
   const minimalStorable: StorableTemplateStatDesign = {

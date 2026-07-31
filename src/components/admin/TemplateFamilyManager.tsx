@@ -1,18 +1,66 @@
 /**
- * Template Family admin manager — list + create/edit form.
+ * Template Family admin — identity and stat design in one editor.
+ *
+ * These were two screens: a family (name, icon, accent) over here, and its
+ * stat design (typography, layout) over there, keyed by the family's id. A
+ * template is not usable until both exist, so editing them apart meant
+ * round-tripping between screens to judge one result — and the family screen's
+ * "preview" was hardcoded numbers that reflected none of the design.
+ *
+ * Now the form sits beside a live preview rendered by `StatLayer`, the same
+ * component the editor and exporter use, so what an admin approves here is
+ * what a creator gets.
  */
 
-import { useState, useEffect, useCallback, type FormEvent } from "react";
-import type { TemplateFamily } from "../../types";
-import type { TemplateFamilyFormData } from "../../types/content";
-import { getTemplateFamilies, createTemplateFamily, updateTemplateFamily, deleteTemplateFamily } from "../../services/contentService";
+import { useState, useEffect, useCallback, useMemo, useRef, type FormEvent } from "react";
+import type { TemplateFamily, TextSlotId, StatData, SlotPosition } from "../../types";
+import type {
+  TemplateFamilyFormData,
+  StorableSlotStyle,
+  StorableTemplateStatDesign,
+} from "../../types/content";
+import {
+  getTemplateFamilies,
+  createTemplateFamily,
+  updateTemplateFamily,
+  deleteTemplateFamily,
+  getStatDesignDocs,
+  createStatDesign,
+  updateStatDesign,
+  resolveStatDesign,
+  getFonts,
+} from "../../services/contentService";
+import { FORMATTER_OPTIONS } from "../../data/formatterRegistry";
+import { ACCENT_OPTIONS } from "../../data/accentRegistry";
+import { BUILT_IN_FONTS } from "../../data/builtInFonts";
+import StatLayer from "../StatLayer";
 import ContentListCard from "./shared/ContentListCard";
 import ConfirmDialog from "./shared/ConfirmDialog";
 import { Plus, Save, X, Eye } from "lucide-react";
 
 const CATEGORIES = ["Bold", "Classic", "Clean", "Modern", "Tech", "Gaming", "Maps", "Vintage", "Premium", "Art", "Social", "Dynamic", "Utility"];
+const SLOT_IDS: TextSlotId[] = ["distance", "pace", "time", "title"];
+const FONT_WEIGHTS = [300, 400, 500, 600, 700, 800, 900];
+const FONT_COLORS = ["#FFFFFF", "#F4E409", "#FF7A1A", "#22D3EE", "#34D399", "#A78BFA", "#F472B6", "#FF4D3D", "#000000"];
 
-const emptyForm = (): TemplateFamilyFormData => ({
+/** Where a slot lands if the design never said. */
+const FALLBACK_POS: Record<TextSlotId, SlotPosition> = {
+  distance: { x: 6, y: 58 },
+  pace: { x: 6, y: 72 },
+  time: { x: 40, y: 72 },
+  title: { x: 6, y: 86 },
+};
+
+/** Stand-in activity, so the preview reads like a real card. */
+const SAMPLE: StatData = {
+  distance: 8.42,
+  distanceUnit: "km",
+  pace: "6:12",
+  time: "52:18",
+  title: "Morning Run",
+};
+
+const emptyFamily = (): TemplateFamilyFormData => ({
   name: "",
   category: "Clean",
   icon: "◻️",
@@ -20,19 +68,53 @@ const emptyForm = (): TemplateFamilyFormData => ({
   accentColor: "#FFFFFF",
 });
 
+const emptyDesign = (templateFamilyId: string): StorableTemplateStatDesign => ({
+  templateFamilyId,
+  slots: {},
+  defaultLayout: {},
+  accentType: "none",
+});
+
+function defaultSlotStyle(accentColor: string, slot: TextSlotId): StorableSlotStyle {
+  const isHero = slot === "distance";
+  return {
+    textFormatter: slot === "distance" ? "dist2" : slot,
+    fontFamily: "'Archivo', sans-serif",
+    fontSize: isHero ? 36 : 14,
+    fontWeight: isHero ? 900 : 600,
+    color: isHero ? accentColor : "#FFFFFFCC",
+  };
+}
+
 export default function TemplateFamilyManager() {
   const [families, setFamilies] = useState<TemplateFamily[]>([]);
+  const [designs, setDesigns] = useState<Record<string, StorableTemplateStatDesign>>({});
+  const [fontFamilies, setFontFamilies] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<{ id: string; data: TemplateFamilyFormData } | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const [form, setForm] = useState<TemplateFamilyFormData>(emptyForm());
+  const [saving, setSaving] = useState(false);
+
+  const [form, setForm] = useState<TemplateFamilyFormData>(emptyFamily());
+  const [design, setDesign] = useState<StorableTemplateStatDesign>(emptyDesign(""));
+  const [selectedSlot, setSelectedSlot] = useState<TextSlotId>("distance");
+
+  const previewRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getTemplateFamilies();
-      setFamilies(data);
+      const [fams, docs, fonts] = await Promise.all([
+        getTemplateFamilies(),
+        getStatDesignDocs(),
+        getFonts(),
+      ]);
+      setFamilies(fams);
+      setDesigns(docs);
+      setFontFamilies([
+        ...new Set([...BUILT_IN_FONTS.map((f) => f.fontFamily), ...fonts.map((f) => f.fontFamily)]),
+      ]);
     } catch (err) {
       console.error("Failed to load template families", err);
     }
@@ -41,12 +123,12 @@ export default function TemplateFamilyManager() {
 
   useEffect(() => { load(); }, [load]);
 
-  const resetForm = () => setForm(emptyForm());
-
   const startCreate = () => {
-    resetForm();
+    setForm(emptyFamily());
+    setDesign(emptyDesign(""));
+    setSelectedSlot("distance");
     setCreating(true);
-    setEditing(null);
+    setEditingId(null);
   };
 
   const startEdit = (tf: TemplateFamily) => {
@@ -57,26 +139,83 @@ export default function TemplateFamilyManager() {
       tagline: tf.tagline,
       accentColor: tf.accentColor,
     });
-    setEditing({ id: tf.id, data: form });
+    // Load the stored design rather than a blank one — the old screen built a
+    // storable here, threw it away, and always started empty, so saving an
+    // existing design overwrote it with defaults.
+    setDesign(designs[tf.id] ?? emptyDesign(tf.id));
+    setSelectedSlot("distance");
+    setEditingId(tf.id);
     setCreating(false);
   };
 
+  const closeEditor = () => { setCreating(false); setEditingId(null); };
+
+  const updateSlot = (slot: TextSlotId, updates: Partial<StorableSlotStyle>) => {
+    setDesign((prev) => ({
+      ...prev,
+      slots: {
+        ...prev.slots,
+        [slot]: { ...(prev.slots[slot] ?? defaultSlotStyle(form.accentColor, slot)), ...updates },
+      },
+    }));
+  };
+
+  const toggleSlot = (slot: TextSlotId) => {
+    setDesign((prev) => {
+      const slots = { ...prev.slots };
+      const layout = { ...prev.defaultLayout };
+      if (slots[slot]) {
+        delete slots[slot];
+        delete layout[slot];
+      } else {
+        slots[slot] = defaultSlotStyle(form.accentColor, slot);
+        layout[slot] = FALLBACK_POS[slot];
+      }
+      return { ...prev, slots, defaultLayout: layout };
+    });
+    setSelectedSlot(slot);
+  };
+
+  const moveSlot = (slot: TextSlotId, axis: "x" | "y", value: number) => {
+    setDesign((prev) => {
+      const pos = prev.defaultLayout[slot] ?? FALLBACK_POS[slot];
+      return { ...prev, defaultLayout: { ...prev.defaultLayout, [slot]: { ...pos, [axis]: value } } };
+    });
+  };
+
+  /** The in-progress design, resolved for the same renderer the app uses. */
+  const previewDesign = useMemo(() => resolveStatDesign(design), [design]);
+
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
-    if (!form.name) return;
-
+    if (!form.name || saving) return;
+    setSaving(true);
     try {
-      if (editing) {
-        await updateTemplateFamily(editing.id, form);
-      } else {
-        await createTemplateFamily(form);
+      // The design is keyed by the family id, which a new family only gets on
+      // create — so the family is always written first.
+      const familyId = editingId ?? (await createTemplateFamily(form)).id;
+      if (editingId) await updateTemplateFamily(editingId, form);
+
+      const hasSlots = Object.keys(design.slots).length > 0;
+      if (hasSlots) {
+        const payload = {
+          ...design,
+          templateFamilyId: familyId,
+          accentType: design.accentType ?? "none",
+        };
+        if (designs[familyId]) {
+          await updateStatDesign(familyId, payload);
+        } else {
+          await createStatDesign(payload);
+        }
       }
+
       await load();
-      setCreating(false);
-      setEditing(null);
+      closeEditor();
     } catch (err) {
-      console.error("Failed to save template family", err);
+      console.error("Failed to save template", err);
     }
+    setSaving(false);
   };
 
   const handleDelete = async () => {
@@ -94,146 +233,277 @@ export default function TemplateFamilyManager() {
     return <div className="flex items-center justify-center h-48"><div className="w-6 h-6 border-2 border-ember border-t-transparent rounded-full animate-spin" /></div>;
   }
 
+  const currentStyle = design.slots[selectedSlot];
+  const configuredCount = Object.keys(design.slots).length;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-section-header">Template Families</h2>
-          <p className="text-body text-white/40 text-sm">{families.length} template{families.length !== 1 ? "s" : ""}</p>
+          <h2 className="text-section-header">Templates</h2>
+          <p className="text-body text-white/40 text-sm">
+            {families.length} template{families.length !== 1 ? "s" : ""} · identity and stat design together
+          </p>
         </div>
-        {!creating && !editing && (
+        {!creating && !editingId && (
           <button onClick={startCreate} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-ember text-ink text-sm font-bold uppercase tracking-wider hover:brightness-110 transition-all">
             <Plus className="w-4 h-4" /> New Template
           </button>
         )}
       </div>
 
-      {/* Form */}
-      {(creating || editing) && (
-        <form onSubmit={handleSave} className="p-4 rounded-xl bg-surface-raised border hairline-border space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-white">{editing ? "Edit Template" : "New Template"}</h3>
-            <button type="button" onClick={() => { setCreating(false); setEditing(null); }} className="p-1 rounded-lg hover:bg-surface-overlay transition-colors">
-              <X className="w-4 h-4 text-white/40" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-label text-white/60 block mb-1">Name</label>
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="Hero" />
-            </div>
-            <div>
-              <label className="text-label text-white/60 block mb-1">Category</label>
-              <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm focus:outline-none focus:ring-2 focus:ring-ember/50">
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
+      {(creating || editingId) && (
+        <form onSubmit={handleSave} className="space-y-4">
+          <div className="flex items-center justify-between p-4 rounded-xl bg-surface-raised border hairline-border">
+            <h3 className="text-sm font-bold text-white">{editingId ? "Edit Template" : "New Template"}</h3>
+            <div className="flex items-center gap-2">
+              <button type="submit" disabled={!form.name || saving}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-ember text-ink text-sm font-bold hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                <Save className="w-4 h-4" /> {saving ? "Saving…" : editingId ? "Update" : "Create"}
+              </button>
+              <button type="button" onClick={closeEditor} className="p-2 rounded-lg hover:bg-surface-overlay transition-colors">
+                <X className="w-4 h-4 text-white/40" />
+              </button>
             </div>
           </div>
 
-          <div>
-            <label className="text-label text-white/60 block mb-1">Icon (emoji)</label>
-            <input value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="🦸" />
-          </div>
-
-          <div>
-            <label className="text-label text-white/60 block mb-1">Tagline</label>
-            <input value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="Bold hero layout with oversized metrics" />
-          </div>
-
-          <div>
-            <label className="text-label text-white/60 block mb-1">Accent Color</label>
-            <div className="flex items-center gap-3">
-              <input type="color" value={form.accentColor} onChange={(e) => setForm({ ...form, accentColor: e.target.value })} className="w-10 h-10 rounded-lg border hairline-border cursor-pointer bg-surface" />
-              <input value={form.accentColor} onChange={(e) => setForm({ ...form, accentColor: e.target.value })} className="flex-1 px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="#F4E409" />
-            </div>
-          </div>
-
-          {/* Live canvas preview — shows stat overlays with transparent bg */}
-          <div>
-            <label className="text-label text-white/60 block mb-2 flex items-center gap-1.5">
-              <Eye className="w-3.5 h-3.5" /> Preview
-            </label>
-            <div className="relative w-full aspect-[9/16] max-h-[320px] rounded-xl overflow-hidden bg-ink">
-              {/* Sample photo background */}
-              <img
-                src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=400&auto=format&fit=crop"
-                alt="Preview"
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-              {/* Dark scrim for readability */}
-              <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/50" />
-              {/* Transparent stat overlays */}
-              <div className="absolute inset-0 flex flex-col justify-end p-4 pb-8 pointer-events-none">
-                <div className="space-y-1">
-                  <div
-                    className="text-4xl font-black tracking-tighter"
-                    style={{ color: form.accentColor, textShadow: "0 2px 12px rgba(0,0,0,0.7)" }}
-                  >
-                    8.42
+          {/* Form on the left, live preview pinned on the right. */}
+          <div className="flex flex-col lg:flex-row gap-4 items-start">
+            <div className="flex-1 min-w-0 space-y-4">
+              {/* ── Identity ── */}
+              <div className="p-4 rounded-xl bg-surface-raised border hairline-border space-y-3">
+                <span className="text-[11px] font-bold text-white/60 uppercase tracking-wider">Identity</span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] text-white/40 block mb-1">Name</label>
+                    <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="Hero" />
                   </div>
-                  <div className="flex gap-3">
-                    <span
-                      className="text-sm font-bold uppercase tracking-wider"
-                      style={{ color: form.accentColor + "CC", textShadow: "0 1px 6px rgba(0,0,0,0.6)" }}
-                    >
-                      6:12 /km
-                    </span>
-                    <span
-                      className="text-sm font-bold uppercase tracking-wider"
-                      style={{ color: "#FFFFFFCC", textShadow: "0 1px 6px rgba(0,0,0,0.6)" }}
-                    >
-                      52:18
-                    </span>
+                  <div>
+                    <label className="text-[10px] text-white/40 block mb-1">Category</label>
+                    <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm focus:outline-none focus:ring-2 focus:ring-ember/50">
+                      {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
                   </div>
-                  <div
-                    className="text-xs font-semibold uppercase tracking-widest"
-                    style={{ color: "#FFFFFF99", textShadow: "0 1px 4px rgba(0,0,0,0.5)" }}
-                  >
-                    {form.name || "Morning Run"}
+                </div>
+                <div className="grid grid-cols-[4rem_1fr] gap-3">
+                  <div>
+                    <label className="text-[10px] text-white/40 block mb-1">Icon</label>
+                    <input value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })} className="w-full px-2 py-2 rounded-lg bg-surface border hairline-border text-white text-center text-lg focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="🦸" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-white/40 block mb-1">Tagline</label>
+                    <input value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="Bold hero layout with oversized metrics" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] text-white/40 block mb-1">Accent colour</label>
+                  <div className="flex items-center gap-3">
+                    <input type="color" value={form.accentColor} onChange={(e) => setForm({ ...form, accentColor: e.target.value })} className="w-10 h-9 rounded-lg border hairline-border cursor-pointer bg-surface" />
+                    <input value={form.accentColor} onChange={(e) => setForm({ ...form, accentColor: e.target.value })} className="flex-1 px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ember/50" />
                   </div>
                 </div>
               </div>
-              {/* Badge */}
-              <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1" style={{ backgroundColor: form.accentColor + "22", color: form.accentColor, backdropFilter: "blur(8px)" }}>
-                <span>{form.icon || "◻️"}</span>
-                <span>{form.name || "Template"}</span>
+
+              {/* ── Stat design ── */}
+              <div className="p-4 rounded-xl bg-surface-raised border hairline-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-white/60 uppercase tracking-wider">Stat design</span>
+                  <span className="text-[10px] text-white/30">{configuredCount} of {SLOT_IDS.length} stats shown</span>
+                </div>
+
+                {/* Which stats this template shows at all. */}
+                <div className="flex flex-wrap gap-1.5">
+                  {SLOT_IDS.map((slot) => {
+                    const on = !!design.slots[slot];
+                    return (
+                      <button key={slot} type="button" onClick={() => toggleSlot(slot)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${
+                          on ? "bg-ember/15 text-ember border border-ember/30" : "bg-surface border hairline-border text-white/30 hover:text-white/60"
+                        }`}>
+                        {on ? "✓ " : "+ "}{slot}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {configuredCount === 0 && (
+                  <p className="text-[11px] text-white/30 py-2">
+                    Add a stat above to design it. A template with no stats falls back to the built-in layout.
+                  </p>
+                )}
+
+                {configuredCount > 0 && (
+                  <>
+                    {/* Which one you're styling. */}
+                    <div className="flex flex-wrap gap-1.5 pt-1 border-t hairline-border">
+                      {SLOT_IDS.filter((s) => design.slots[s]).map((slot) => (
+                        <button key={slot} type="button" onClick={() => setSelectedSlot(slot)}
+                          className={`px-3 py-1 rounded-md text-[11px] font-medium uppercase tracking-wider transition-colors ${
+                            selectedSlot === slot ? "bg-ember text-ink" : "bg-surface text-white/50 hover:text-white"
+                          }`}>
+                          {slot}
+                        </button>
+                      ))}
+                    </div>
+
+                    {currentStyle ? (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] text-white/40 block mb-1">Value shown</label>
+                            <select value={currentStyle.textFormatter} onChange={(e) => updateSlot(selectedSlot, { textFormatter: e.target.value })} className="w-full px-2 py-1.5 rounded-lg bg-surface border hairline-border text-white text-xs">
+                              {FORMATTER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-white/40 block mb-1">Font</label>
+                            <select value={currentStyle.fontFamily} onChange={(e) => updateSlot(selectedSlot, { fontFamily: e.target.value })} className="w-full px-2 py-1.5 rounded-lg bg-surface border hairline-border text-white text-xs">
+                              {[...new Set([currentStyle.fontFamily, ...fontFamilies])].map((f) => (
+                                <option key={f} value={f}>{f.split(",")[0].replace(/['"]/g, "")}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <label className="text-[10px] text-white/40 block mb-1">Size</label>
+                            <input type="number" value={currentStyle.fontSize} onChange={(e) => updateSlot(selectedSlot, { fontSize: Number(e.target.value) })} className="w-full px-2 py-1.5 rounded-lg bg-surface border hairline-border text-white text-xs" min={8} max={80} />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-white/40 block mb-1">Weight</label>
+                            <select value={currentStyle.fontWeight} onChange={(e) => updateSlot(selectedSlot, { fontWeight: Number(e.target.value) })} className="w-full px-2 py-1.5 rounded-lg bg-surface border hairline-border text-white text-xs">
+                              {FONT_WEIGHTS.map((w) => <option key={w} value={w}>{w}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-white/40 block mb-1">Tracking</label>
+                            <input type="number" value={currentStyle.letterSpacing ?? 0} onChange={(e) => updateSlot(selectedSlot, { letterSpacing: Number(e.target.value) })} className="w-full px-2 py-1.5 rounded-lg bg-surface border hairline-border text-white text-xs" min={-3} max={10} step={0.5} />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] text-white/40 block mb-1">Colour</label>
+                          <div className="flex gap-1.5 flex-wrap items-center">
+                            {FONT_COLORS.map((c) => (
+                              <button key={c} type="button" onClick={() => updateSlot(selectedSlot, { color: c })}
+                                className={`w-6 h-6 rounded-full border-2 transition-transform ${currentStyle.color === c ? "border-white scale-110" : "border-transparent"}`}
+                                style={{ backgroundColor: c }} />
+                            ))}
+                            <button type="button" onClick={() => updateSlot(selectedSlot, { color: form.accentColor })}
+                              className="px-2 py-1 rounded text-[10px] bg-surface border hairline-border text-white/50 hover:text-white">
+                              Use accent
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] text-white/40 block mb-1">Position X %</label>
+                            <input type="number" value={(design.defaultLayout[selectedSlot] ?? FALLBACK_POS[selectedSlot]).x}
+                              onChange={(e) => moveSlot(selectedSlot, "x", Number(e.target.value))}
+                              className="w-full px-2 py-1.5 rounded-lg bg-surface border hairline-border text-white text-xs" min={0} max={100} />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-white/40 block mb-1">Position Y %</label>
+                            <input type="number" value={(design.defaultLayout[selectedSlot] ?? FALLBACK_POS[selectedSlot]).y}
+                              onChange={(e) => moveSlot(selectedSlot, "y", Number(e.target.value))}
+                              className="w-full px-2 py-1.5 rounded-lg bg-surface border hairline-border text-white text-xs" min={0} max={100} />
+                          </div>
+                        </div>
+
+                        <div className="flex gap-4">
+                          <label className="flex items-center gap-2 text-xs text-white/60 cursor-pointer">
+                            <input type="checkbox" checked={currentStyle.italic ?? false} onChange={(e) => updateSlot(selectedSlot, { italic: e.target.checked })} className="rounded border-white/20 bg-surface" />
+                            Italic
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-white/60 cursor-pointer">
+                            <input type="checkbox" checked={currentStyle.uppercase ?? false} onChange={(e) => updateSlot(selectedSlot, { uppercase: e.target.checked })} className="rounded border-white/20 bg-surface" />
+                            Uppercase
+                          </label>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div>
+                      <label className="text-[10px] text-white/40 block mb-1">Accent decoration</label>
+                      <select value={design.accentType} onChange={(e) => setDesign({ ...design, accentType: e.target.value })} className="w-full px-2 py-1.5 rounded-lg bg-surface border hairline-border text-white text-xs">
+                        {ACCENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Preview */}
+            <div className="w-full lg:w-[300px] flex-shrink-0 lg:sticky lg:top-4">
+              <div className="p-3 rounded-xl bg-surface-raised border hairline-border">
+                <div className="flex items-center gap-1.5 mb-2 text-[10px] text-white/40">
+                  <Eye className="w-3 h-3" /> Live preview — same renderer as the app
+                </div>
+                <div ref={previewRef} className="relative w-full aspect-[9/16] rounded-xl overflow-hidden bg-ink">
+                  <img
+                    src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=600&auto=format&fit=crop"
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/50" />
+
+                  <StatLayer
+                    templateId={editingId ?? "preview"}
+                    data={SAMPLE}
+                    layout={design.defaultLayout}
+                    design={previewDesign}
+                    onLayoutChange={(next) => setDesign((p) => ({ ...p, defaultLayout: next }))}
+                    constraintsRef={previewRef}
+                    interactive={false}
+                  />
+
+                  <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1"
+                    style={{ backgroundColor: form.accentColor + "22", color: form.accentColor, backdropFilter: "blur(8px)" }}>
+                    <span>{form.icon || "◻️"}</span>
+                    <span>{form.name || "Template"}</span>
+                  </div>
+                </div>
+                {configuredCount === 0 && (
+                  <p className="text-[10px] text-white/30 mt-2 text-center">No stats configured yet.</p>
+                )}
               </div>
             </div>
           </div>
-
-          <button type="submit" className="flex items-center gap-2 px-4 py-2 rounded-lg bg-ember text-ink text-sm font-bold hover:brightness-110 transition-all">
-            <Save className="w-4 h-4" /> {editing ? "Update" : "Create"}
-          </button>
         </form>
       )}
 
       {/* List */}
       <div className="space-y-2">
-        {families.map((tf) => (
-          <ContentListCard
-            key={tf.id}
-            title={`${tf.icon} ${tf.name}`}
-            subtitle={`${tf.category} · ${tf.tagline}`}
-            isActive
-            onEdit={() => startEdit(tf)}
-            onToggleActive={() => {}}
-            onDelete={() => setDeleteTarget(tf.id)}
-            preview={
-              <div className="w-full h-full relative flex items-center justify-center overflow-hidden" style={{ backgroundColor: "#0a0a0a" }}>
-                <div className="absolute inset-0 opacity-20" style={{ background: `linear-gradient(135deg, ${tf.accentColor}88, transparent 60%)` }} />
-                <div className="relative flex flex-col items-center gap-0.5">
-                  <span className="text-lg">{tf.icon}</span>
-                  <span className="text-[7px] font-black uppercase tracking-wider" style={{ color: tf.accentColor }}>STATS</span>
-                  <div className="flex gap-1">
-                    <span className="text-[5px] font-bold" style={{ color: tf.accentColor + "99" }}>8.4</span>
-                    <span className="text-[5px] font-bold text-white/50">6:12</span>
+        {families.map((tf) => {
+          const slotCount = Object.keys(designs[tf.id]?.slots ?? {}).length;
+          return (
+            <ContentListCard
+              key={tf.id}
+              title={`${tf.icon} ${tf.name}`}
+              subtitle={`${tf.category} · ${slotCount > 0 ? `${slotCount} stats designed` : "no stat design"}`}
+              isActive
+              onEdit={() => startEdit(tf)}
+              onToggleActive={() => {}}
+              onDelete={() => setDeleteTarget(tf.id)}
+              preview={
+                <div className="w-full h-full relative flex items-center justify-center overflow-hidden" style={{ backgroundColor: "#0a0a0a" }}>
+                  <div className="absolute inset-0 opacity-20" style={{ background: `linear-gradient(135deg, ${tf.accentColor}88, transparent 60%)` }} />
+                  <div className="relative flex flex-col items-center gap-0.5">
+                    <span className="text-lg">{tf.icon}</span>
+                    <span className="text-[7px] font-black uppercase tracking-wider" style={{ color: tf.accentColor }}>STATS</span>
+                    <div className="flex gap-1">
+                      <span className="text-[5px] font-bold" style={{ color: tf.accentColor + "99" }}>8.4</span>
+                      <span className="text-[5px] font-bold text-white/50">6:12</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            }
-          />
-        ))}
+              }
+            />
+          );
+        })}
         {families.length === 0 && <p className="text-sm text-white/30 text-center py-8">No template families defined.</p>}
       </div>
 

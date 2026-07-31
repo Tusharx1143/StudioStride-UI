@@ -3,7 +3,9 @@ import type { FirestoreFont, FirestoreColorPalette, FontFormData, ColorPaletteFo
 import type { PhotoSource } from "../../types";
 import { getFonts, createFont, updateFont, deleteFont } from "../../services/contentService";
 import { getColorPalettes, createColorPalette, updateColorPalette, deleteColorPalette } from "../../services/contentService";
-import { getStockPhotos, deleteStockPhoto } from "../../services/contentService";
+import { getStockPhotos, createStockPhoto, deleteStockPhoto } from "../../services/contentService";
+import type { StockPhotoFormData } from "../../types/content";
+import { isAllowedFontUrl, normalizeFontUrl, familyFromFontUrl } from "../../services/fontLoader";
 import ConfirmDialog from "./shared/ConfirmDialog";
 import { Plus, Save, X, Type, Palette, Image as ImageIcon } from "lucide-react";
 
@@ -11,7 +13,10 @@ type Tab = "fonts" | "colors" | "photos";
 
 const FONT_CATEGORIES = ["sans-serif", "serif", "display", "handwriting", "monospace"];
 const COMMON_WEIGHTS = ["100","200","300","400","500","600","700","800","900"];
-const COLOR_CATEGORIES = ["Neon", "Earth", "Ocean", "Forest", "Sunset", "Brand", "Minimal", "Vintage", "Cyberpunk", "Custom"];
+const COLOR_CATEGORIES = ["Neon", "Earth", "Ocean", "Forest", "Sunset", "Brand", "Minimal", "Vintage", "Cyberpunk", "Pastel", "Custom"];
+const PHOTO_CATEGORIES = ["Stock Running", "Cycling & Trails", "Track & Night", "Preset Gradients", "Minimal"];
+
+const emptyPhoto = (): StockPhotoFormData => ({ name: "", category: "Stock Running", url: "" });
 
 const emptyFont = (): FontFormData => ({
   name: "", fontFamily: "", category: "sans-serif", weights: ["400","700"], googleFontUrl: "", fallback: "sans-serif",
@@ -38,6 +43,13 @@ export default function Library() {
   const [editingPalette, setEditingPalette] = useState<string | null>(null);
   const [showPaletteForm, setShowPaletteForm] = useState(false);
 
+  // Photo adding
+  const [photoForm, setPhotoForm] = useState<StockPhotoFormData>(emptyPhoto());
+  const [showPhotoForm, setShowPhotoForm] = useState(false);
+  // null = untested, true/false = the browser managed to decode the URL or not
+  const [photoOk, setPhotoOk] = useState<boolean | null>(null);
+  const [photoSaving, setPhotoSaving] = useState(false);
+
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -59,10 +71,38 @@ export default function Library() {
 
   const toggleWeight = (w: string) => setFontForm((p) => ({ ...p, weights: p.weights.includes(w) ? p.weights.filter(x => x !== w) : [...p.weights, w] }));
 
+  /** Fill name, family, weights and category from a pasted Google Fonts URL. */
+  const parseFontUrl = () => {
+    if (!fontForm.googleFontUrl) return;
+    // Rewrite a specimen page to its stylesheet before parsing, so pasting the
+    // page you were just browsing works instead of silently loading nothing.
+    const url = normalizeFontUrl(fontForm.googleFontUrl);
+    const match = url.match(/family=([^:&]+)/);
+    if (!match) return;
+    const name = match[1].replace(/\+/g, " ");
+    const weightsMatch = url.match(/wght@([\d,;]+)/);
+    const weights = weightsMatch ? weightsMatch[1].split(/[;,]/).filter(Boolean) : ["400", "700"];
+    setFontForm((p) => ({
+      ...p,
+      name,
+      // Write the rewritten URL back so what saves is what actually loads.
+      googleFontUrl: url,
+      fontFamily: `'${name}', ${p.fallback || "sans-serif"}`,
+      weights: weights.slice(0, 6),
+      category: name.toLowerCase().includes("serif") && !name.toLowerCase().includes("sans") ? "serif" : "sans-serif",
+    }));
+  };
+
   const saveFont = async (e: FormEvent) => {
     e.preventDefault(); if (!fontForm.name || !fontForm.fontFamily) return;
+    // Normalise on the way out too — Parse URL is optional, and a pasted
+    // specimen page must not reach Firestore as one.
+    const payload = {
+      ...fontForm,
+      googleFontUrl: fontForm.googleFontUrl ? normalizeFontUrl(fontForm.googleFontUrl) : undefined,
+    };
     try {
-      if (editingFont) { await updateFont(editingFont, fontForm); } else { await createFont(fontForm); }
+      if (editingFont) { await updateFont(editingFont, payload); } else { await createFont(payload); }
       await load(); setShowFontForm(false); setEditingFont(null);
     } catch (err) { console.error(err); }
   };
@@ -83,6 +123,21 @@ export default function Library() {
       if (editingPalette) { await updateColorPalette(editingPalette, paletteForm); } else { await createColorPalette(paletteForm); }
       await load(); setShowPaletteForm(false); setEditingPalette(null);
     } catch (err) { console.error(err); }
+  };
+
+  // Photo handlers
+  const savePhoto = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!photoForm.name || !photoForm.url) return;
+    setPhotoSaving(true);
+    try {
+      await createStockPhoto(photoForm);
+      await load();
+      setShowPhotoForm(false);
+      setPhotoForm(emptyPhoto());
+      setPhotoOk(null);
+    } catch (err) { console.error("Failed to save photo", err); }
+    setPhotoSaving(false);
   };
 
   const handleDelete = async () => {
@@ -149,7 +204,56 @@ export default function Library() {
               <div>
                 <label className="text-[10px] text-white/40">CSS font-family</label>
                 <input value={fontForm.fontFamily} onChange={(e) => setFontForm({ ...fontForm, fontFamily: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="'Inter', sans-serif" />
+                {/* The stylesheet registers exactly one family name. If this
+                    field doesn't name it, the face loads but never applies. */}
+                {(() => {
+                  const declared = familyFromFontUrl(fontForm.googleFontUrl);
+                  if (!declared || !fontForm.fontFamily) return null;
+                  if (fontForm.fontFamily.toLowerCase().includes(declared.toLowerCase())) return null;
+                  const suggestion = `'${declared}', ${fontForm.fallback || "sans-serif"}`;
+                  return (
+                    <div className="mt-1 flex items-start gap-2">
+                      <p className="text-[10px] text-rose-400 flex-1">
+                        The stylesheet registers <span className="font-mono">{declared}</span>, which this doesn't reference — the font will silently fall back.
+                      </p>
+                      <button type="button" onClick={() => setFontForm((p) => ({ ...p, fontFamily: suggestion }))}
+                        className="text-[10px] px-2 py-0.5 rounded bg-ember/20 text-ember font-bold border border-ember/30 hover:bg-ember/30 whitespace-nowrap flex-shrink-0">
+                        Use {declared}
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
+
+              {/* Without a stylesheet URL the font has nothing to load and will
+                  render as its fallback everywhere. */}
+              <div>
+                <label className="text-[10px] text-white/40">Google Fonts URL</label>
+                <div className="flex gap-2">
+                  <input value={fontForm.googleFontUrl ?? ""} onChange={(e) => setFontForm({ ...fontForm, googleFontUrl: e.target.value || undefined })} className="flex-1 px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="https://fonts.googleapis.com/css2?family=Inter:wght@400;700" />
+                  <button type="button" onClick={parseFontUrl} className="px-3 py-2 rounded-lg bg-ember/20 text-ember text-xs font-bold hover:bg-ember/30 border border-ember/30 transition-all whitespace-nowrap">Parse URL</button>
+                </div>
+                {fontForm.googleFontUrl && !isAllowedFontUrl(normalizeFontUrl(fontForm.googleFontUrl)) && (
+                  <p className="text-[10px] text-rose-400 mt-1">
+                    Must be an https URL on a supported font CDN (fonts.googleapis.com, fonts.bunny.net, use.typekit.net) — this one will be ignored at load time.
+                  </p>
+                )}
+                {fontForm.googleFontUrl && normalizeFontUrl(fontForm.googleFontUrl) !== fontForm.googleFontUrl.trim() && (
+                  <p className="text-[10px] text-amber-400/80 mt-1">
+                    That's the Google Fonts preview page, not a stylesheet. Saving as{" "}
+                    <span className="font-mono">{normalizeFontUrl(fontForm.googleFontUrl)}</span>
+                  </p>
+                )}
+                {!fontForm.googleFontUrl && (
+                  <p className="text-[10px] text-amber-400/80 mt-1">No URL — this font will fall back to {fontForm.fallback || "sans-serif"} in the app.</p>
+                )}
+              </div>
+
+              <div>
+                <label className="text-[10px] text-white/40">Fallback</label>
+                <input value={fontForm.fallback} onChange={(e) => setFontForm({ ...fontForm, fallback: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="sans-serif" />
+              </div>
+
               <div>
                 <label className="text-[10px] text-white/40">Weights</label>
                 <div className="flex flex-wrap gap-1 mt-1">
@@ -266,7 +370,58 @@ export default function Library() {
       {/* ─── PHOTOS TAB ─── */}
       {tab === "photos" && (
         <div className="space-y-4">
-          <p className="text-sm text-white/40">Background photos for designs. Upload in the Stock Photos section.</p>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-white/40">Background photos for designs. Paste a direct image URL — Unsplash, Pexels, or any public host.</p>
+            <button onClick={() => { setPhotoForm(emptyPhoto()); setPhotoOk(null); setShowPhotoForm(true); }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-ember text-ink text-sm font-bold uppercase tracking-wider hover:brightness-110 transition-all flex-shrink-0">
+              <Plus className="w-4 h-4" /> Add Photo
+            </button>
+          </div>
+
+          {showPhotoForm && (
+            <form onSubmit={savePhoto} className="p-4 rounded-xl bg-surface-raised border hairline-border space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white">Add Photo</h3>
+                <button type="button" onClick={() => setShowPhotoForm(false)} className="p-1 rounded-lg hover:bg-surface-overlay"><X className="w-4 h-4 text-white/40" /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-white/40">Name</label>
+                  <input value={photoForm.name} onChange={(e) => setPhotoForm({ ...photoForm, name: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="Golden Hour Trail" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-white/40">Category</label>
+                  <select value={photoForm.category} onChange={(e) => setPhotoForm({ ...photoForm, category: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm focus:outline-none focus:ring-2 focus:ring-ember/50">
+                    {PHOTO_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] text-white/40">Image URL</label>
+                <input value={photoForm.url} onChange={(e) => { setPhotoForm({ ...photoForm, url: e.target.value }); setPhotoOk(null); }} className="w-full px-3 py-2 rounded-lg bg-surface border hairline-border text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ember/50" placeholder="https://images.unsplash.com/photo-…" />
+              </div>
+
+              {/* Loading the URL here is the validation — a link that won't
+                  render in the admin won't render in the app either. */}
+              {photoForm.url && (
+                <div className="flex items-center gap-3">
+                  <div className="w-28 h-20 rounded-lg overflow-hidden bg-ink border hairline-border flex-shrink-0">
+                    <img src={photoForm.url} alt="" className="w-full h-full object-cover"
+                      onLoad={() => setPhotoOk(true)} onError={() => setPhotoOk(false)} />
+                  </div>
+                  <span className={`text-xs ${photoOk === false ? "text-danger" : photoOk ? "text-success" : "text-white/30"}`}>
+                    {photoOk === false ? "Could not load that URL" : photoOk ? "Image loads correctly" : "Checking…"}
+                  </span>
+                </div>
+              )}
+
+              <button type="submit" disabled={!photoForm.name || !photoOk || photoSaving}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-ember text-ink text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed">
+                <Save className="w-4 h-4" /> {photoSaving ? "Saving…" : "Add Photo"}
+              </button>
+            </form>
+          )}
+
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {photos.map((ph) => (
               <div key={ph.id} className="rounded-xl overflow-hidden bg-surface-raised border hairline-border group">

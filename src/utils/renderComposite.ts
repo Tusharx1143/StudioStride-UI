@@ -2,6 +2,7 @@ import type {
   CommittedCrop,
   RouteOverlay,
   StatData,
+  StatSlotOverrides,
   StickerOverlay,
   TemplateLayout,
   TemplateStatDesign,
@@ -52,6 +53,8 @@ export interface CompositeParams {
    * hardcoded table, so the export matches whatever the canvas showed.
    */
   statDesign?: TemplateStatDesign;
+  /** Per-slot font/colour tweaks, so the export matches the preview. */
+  statSlotOverrides?: StatSlotOverrides;
   mimeType: string;
   quality: number;
 }
@@ -130,6 +133,17 @@ export async function renderComposite(p: CompositeParams): Promise<string> {
 
   if (!ctx) return p.capturedImage;
 
+  // Same hazard drawStatLayer guards against: ctx.font falls back silently to
+  // a system face when the webfont has not finished loading. Text overlays can
+  // now carry an admin typeface fetched at runtime, so waiting matters here too.
+  if (typeof document !== "undefined" && document.fonts?.ready) {
+    try {
+      await document.fonts.ready;
+    } catch {
+      // proceed with whatever is available
+    }
+  }
+
   if (p.background) {
     ctx.fillStyle = p.background;
     ctx.fillRect(0, 0, width, height);
@@ -192,7 +206,7 @@ export async function renderComposite(p: CompositeParams): Promise<string> {
   // With the base image hidden there is no image pass to follow, so the
   // stats still need to land underneath everything else.
   if (p.isBaseImageHidden) {
-    await drawStatLayer(ctx, { width, height }, p.templateId, p.statLayout, p.statData, p.statDesign);
+    await drawStatLayer(ctx, { width, height }, p.templateId, p.statLayout, p.statData, p.statDesign, p.statSlotOverrides);
   }
 
   // Draw all layers sequentially
@@ -201,7 +215,7 @@ export async function renderComposite(p: CompositeParams): Promise<string> {
       await drawImageLayer();
       // Template stats sit directly on the photo, beneath anything the user
       // added afterwards.
-      await drawStatLayer(ctx, { width, height }, p.templateId, p.statLayout, p.statData, p.statDesign);
+      await drawStatLayer(ctx, { width, height }, p.templateId, p.statLayout, p.statData, p.statDesign, p.statSlotOverrides);
     } else if (layer.type === "draw" && p.drawingCanvas) {
       ctx.save();
       ctx.drawImage(p.drawingCanvas, 0, 0, width, height);
@@ -227,6 +241,10 @@ export async function renderComposite(p: CompositeParams): Promise<string> {
       if (t.fontStyle === "Neon") fontFamily = '"Inter", sans-serif';
       if (t.fontStyle === "Serif") fontFamily = "serif";
       if (t.fontStyle === "Typewriter") fontFamily = "monospace";
+      // A typeface picked from the admin font library overrides the preset's
+      // family, exactly as the inline style does on canvas — otherwise the
+      // export silently reverts to Inter/Archivo.
+      if (t.fontFamily) fontFamily = t.fontFamily;
 
       ctx.font = `bold ${fontSizePx}px ${fontFamily}`;
       ctx.textAlign = t.align;
@@ -300,9 +318,13 @@ export async function renderComposite(p: CompositeParams): Promise<string> {
       }
 
       const stickerSize = 48 * s.scale * scaleX;
+      // Emoji stickers are glyphs, not text in a typeface — leave their family
+      // alone so the fallback chain still resolves the emoji font.
+      const stickerFamily =
+        s.type !== "emoji" && s.fontFamily ? s.fontFamily : "sans-serif";
 
       if (s.type === "badge" || s.type === "metric") {
-        ctx.font = `bold ${Math.max(14, stickerSize * 0.4)}px sans-serif`;
+        ctx.font = `bold ${Math.max(14, stickerSize * 0.4)}px ${stickerFamily}`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
 
@@ -321,13 +343,16 @@ export async function renderComposite(p: CompositeParams): Promise<string> {
         ctx.roundRect(-textW / 2 - padX, -padY * 1.5, textW + padX * 2, padY * 3, 12 * scaleX);
         ctx.fill();
 
-        ctx.fillStyle = "#0B0C10";
+        // A chosen colour overrides the default ink-on-gradient.
+        ctx.fillStyle = s.color ?? "#0B0C10";
         ctx.fillText(s.content, 0, 0);
       } else {
         // Emoji / Location sticker
-        ctx.font = `${stickerSize}px sans-serif`;
+        ctx.font = `${stickerSize}px ${stickerFamily}`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
+        // Setting fillStyle for an emoji is harmless — colour glyphs ignore it.
+        if (s.color) ctx.fillStyle = s.color;
         ctx.fillText(s.content, 0, 0);
       }
 

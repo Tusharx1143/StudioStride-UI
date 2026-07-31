@@ -10,17 +10,11 @@ import { useAdminAuth } from "../../../contexts/AdminAuthContext";
 import {
   LayoutTemplate,
   Sticker,
-  Image,
   Filter,
-  Camera,
-  PenTool,
   LogOut,
   Shield,
-  Type,
-  Palette,
   WandSparkles,
   Library,
-  BookOpen,
   ChevronDown,
   Globe,
 } from "lucide-react";
@@ -41,10 +35,7 @@ const PRIMARY: NavItem[] = [
 
 const ADVANCED: NavItem[] = [
   { path: "/admin/templates", label: "Templates", icon: LayoutTemplate },
-  { path: "/admin/stat-designs", label: "Stat Designs", icon: PenTool },
-  { path: "/admin/lenses", label: "Lenses", icon: Camera },
   { path: "/admin/stickers", label: "Stickers", icon: Sticker },
-  { path: "/admin/stock-photos", label: "Stock Photos", icon: Image },
   { path: "/admin/filters", label: "Filters", icon: Filter },
 ];
 

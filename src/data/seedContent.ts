@@ -26,9 +26,11 @@ import type {
   FirestoreSticker,
   FirestoreStockPhoto,
   FirestoreLensFilter,
+  FirestoreFont,
   StorableSlotStyle,
   StorableTemplateStatDesign,
 } from "../types/content";
+import { BUILT_IN_FONTS } from "./builtInFonts";
 import type { SlotStyle, TemplateStatDesign, TextSlotId, StatData } from "../types";
 import { ContentRepository } from "../services/contentRepository";
 import { isFirebaseAvailable } from "../services/firebase";
@@ -44,6 +46,7 @@ const lensTemplateRepo = new ContentRepository<FirestoreLensTemplate>("lensTempl
 const stickerRepo = new ContentRepository<FirestoreSticker>("stickers");
 const stockPhotoRepo = new ContentRepository<FirestoreStockPhoto>("stockPhotos");
 const lensFilterRepo = new ContentRepository<FirestoreLensFilter>("lensFilters");
+const fontRepo = new ContentRepository<FirestoreFont>("fonts");
 
 // ====================================================================
 // Formatter name → function (reverse of formatterRegistry)
@@ -257,6 +260,34 @@ async function seedLensFilters(): Promise<void> {
   console.log(`✅ Seeded ${Object.keys(LENS_FILTER_MAP).length} lens filters`);
 }
 
+/**
+ * Push the curated typefaces into the `fonts` collection.
+ *
+ * The built-ins work in the app without this — they're bundled — but until
+ * they exist as documents they can't be seen or edited in the Content Manager.
+ * Seeding makes them real records an admin can retire or restyle.
+ *
+ * Ids are `builtin_*`, so this never overwrites a font added by hand.
+ */
+async function seedFonts(): Promise<void> {
+  const now = new Date().toISOString();
+  for (const f of BUILT_IN_FONTS) {
+    await fontRepo.create(f.id, {
+      name: f.name,
+      fontFamily: f.fontFamily,
+      category: f.category,
+      weights: f.weights,
+      googleFontUrl: f.googleFontUrl,
+      fallback: f.fallback,
+      createdAt: now,
+      updatedAt: now,
+      isActive: true,
+      createdBy: "seed",
+    });
+  }
+  console.log(`✅ Seeded ${BUILT_IN_FONTS.length} fonts`);
+}
+
 // ====================================================================
 // Main entry point
 // ====================================================================
@@ -290,6 +321,7 @@ export async function seedAllContentToFirebase(): Promise<SeedResult> {
     seedStickers(),
     seedStockPhotos(),
     seedLensFilters(),
+    seedFonts(),
   ]);
 
   // Invalidate all caches so the content service re-fetches from Firestore
@@ -304,6 +336,7 @@ export async function seedAllContentToFirebase(): Promise<SeedResult> {
       stickers: 24, // hardcoded count from seedStickers
       stockPhotos: STOCK_PHOTOS.length,
       lensFilters: Object.keys(LENS_FILTER_MAP).length,
+      fonts: BUILT_IN_FONTS.length,
     },
   };
 

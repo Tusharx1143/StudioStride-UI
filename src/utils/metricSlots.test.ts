@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  applySlotOverride,
   availableMetrics,
   isMetricSlot,
   metricForSlot,
@@ -150,6 +151,46 @@ describe("resolveSlotStyle", () => {
   test("is null when the template authored no text slots to borrow from", () => {
     const design: TemplateStatDesign = { slots: {}, defaultLayout: {} };
     expect(resolveSlotStyle(design, metricSlot("avg_hr"), DATA)).toBeNull();
+  });
+});
+
+describe("applySlotOverride", () => {
+  const base: SlotStyle = {
+    text: () => "5.24",
+    fontFamily: "'Archivo', sans-serif",
+    fontSize: 36,
+    fontWeight: 900,
+    color: "#FFFFFF",
+  };
+
+  test("returns the same object when there is nothing to override", () => {
+    expect(applySlotOverride(base, undefined)).toBe(base);
+    expect(applySlotOverride(base, {})).toBe(base);
+  });
+
+  test("applies font and colour independently", () => {
+    expect(applySlotOverride(base, { fontFamily: "'Anton', sans-serif" })).toMatchObject({
+      fontFamily: "'Anton', sans-serif",
+      color: "#FFFFFF",
+    });
+    expect(applySlotOverride(base, { color: "#FF2A6D" })).toMatchObject({
+      fontFamily: "'Archivo', sans-serif",
+      color: "#FF2A6D",
+    });
+  });
+
+  test("keeps everything the template authored that wasn't overridden", () => {
+    const out = applySlotOverride(base, { color: "#000000" });
+    expect(out.fontSize).toBe(36);
+    expect(out.fontWeight).toBe(900);
+    expect(out.text({} as StatData)).toBe("5.24");
+  });
+
+  test("carries colour to the suffix only when the design left it unset", () => {
+    expect(applySlotOverride(base, { color: "#FF2A6D" }).suffixColor).toBe("#FF2A6D");
+
+    const tinted: SlotStyle = { ...base, suffixColor: "#00FF00" };
+    expect(applySlotOverride(tinted, { color: "#FF2A6D" }).suffixColor).toBe("#00FF00");
   });
 });
 

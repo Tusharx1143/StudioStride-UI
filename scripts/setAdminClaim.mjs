@@ -21,7 +21,7 @@ const email = process.argv[2];
 const password = process.argv[3];
 
 if (!email || !password) {
-  console.error("Usage: node scripts/setAdminClaim.mjs shubhamtaral007@gmail.com Stride@143");
+  console.error("Usage: node scripts/setAdminClaim.mjs <email> <password>");
   process.exit(1);
 }
 

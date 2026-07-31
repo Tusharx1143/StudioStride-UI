@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { resolveBundle } from "./ContentContext";
-import type { ContentBundle } from "../types/content";
+import { resolveBundle, mergeFonts } from "./ContentContext";
+import type { ContentBundle, FirestoreFont } from "../types/content";
 
 /**
  * The rules that decide whether the app shows Firestore content or the
@@ -13,6 +13,24 @@ const lens = (id: string) => ({ id, name: id }) as ContentBundle["lensTemplates"
 const photo = (id: string) => ({ id, url: `${id}.jpg` }) as ContentBundle["stockPhotos"][number];
 const sticker = (id: string) =>
   ({ id, content: id, label: id, category: "Badges", type: "badge" }) as ContentBundle["stickers"][number];
+/** `family` is the name the stylesheet registers; `fontFamily` may disagree. */
+const fnt = (name: string, fontFamily: string, urlFamily?: string): FirestoreFont =>
+  ({
+    id: `f_${name}`,
+    name,
+    fontFamily,
+    category: "display",
+    weights: ["400"],
+    fallback: "sans-serif",
+    googleFontUrl: urlFamily
+      ? `https://fonts.googleapis.com/css2?family=${urlFamily.replace(/\s+/g, "+")}&display=swap`
+      : undefined,
+    createdAt: "",
+    updatedAt: "",
+    isActive: true,
+    createdBy: "test",
+  }) as FirestoreFont;
+
 const design = (name: string) =>
   ({ defaultLayout: { distance: { x: 1, y: 1 } }, name }) as unknown as ContentBundle["statDesigns"][string];
 
@@ -67,6 +85,12 @@ describe("resolveBundle", () => {
     expect(out.statDesigns.glass).toEqual(mock.statDesigns.glass); // untouched survives
   });
 
+  it("keeps built-in fonts when Firestore publishes none", () => {
+    const builtIn = [fnt("Anton", "'Anton', sans-serif", "Anton")];
+    const out = resolveBundle({ ...empty }, { ...mock, fonts: builtIn });
+    expect(out.fonts.map((f) => f.name)).toEqual(["Anton"]);
+  });
+
   it("lets an admin filter override a built-in and add new ones", () => {
     const out = resolveBundle(
       { ...empty, lensFilters: { vintage: "sepia(0.9)", cyber: "hue-rotate(90deg)" } },
@@ -78,5 +102,53 @@ describe("resolveBundle", () => {
       mono: "grayscale(1)",
       cyber: "hue-rotate(90deg)",
     });
+  });
+});
+
+describe("mergeFonts", () => {
+  const builtInRockSalt = fnt("Rock Salt", "'Rock Salt', cursive", "Rock Salt");
+
+  it("adds published fonts alongside the built-ins", () => {
+    const out = mergeFonts([fnt("Silkscreen", "'Silkscreen', monospace", "Silkscreen")], [builtInRockSalt]);
+    expect(out.map((f) => f.name).sort()).toEqual(["Rock Salt", "Silkscreen"]);
+  });
+
+  it("lets a usable published font override a built-in of the same name", () => {
+    const published = fnt("Rock Salt", "'Rock Salt', fantasy", "Rock Salt");
+    const out = mergeFonts([published], [builtInRockSalt]);
+    expect(out).toHaveLength(1);
+    expect(out[0].fontFamily).toBe("'Rock Salt', fantasy");
+  });
+
+  it("keeps the built-in when the published record cannot render", () => {
+    // The real case: fontFamily "RockSalt" never matches the registered
+    // "Rock Salt", so the published record would load nothing.
+    const broken = fnt("Rock Salt", "RockSalt", "Rock Salt");
+    const out = mergeFonts([broken], [builtInRockSalt]);
+    expect(out).toHaveLength(1);
+    expect(out[0].fontFamily).toBe("'Rock Salt', cursive");
+  });
+
+  it("still takes a published font with no built-in counterpart, broken or not", () => {
+    const broken = fnt("Weird", "Weird", "Weird Face");
+    expect(mergeFonts([broken], [builtInRockSalt]).map((f) => f.name).sort()).toEqual(["Rock Salt", "Weird"]);
+  });
+
+  it("retires a built-in when its seeded document is unpublished", () => {
+    // Without this the Published toggle silently does nothing for a bundled
+    // font — the built-in copy just comes straight back.
+    const retired = { ...fnt("Rock Salt", "'Rock Salt', cursive", "Rock Salt"), isActive: false };
+    expect(mergeFonts([retired], [builtInRockSalt])).toEqual([]);
+  });
+
+  it("keeps other built-ins when one is retired", () => {
+    const retired = { ...fnt("Rock Salt", "'Rock Salt', cursive", "Rock Salt"), isActive: false };
+    const anton = fnt("Anton", "'Anton', sans-serif", "Anton");
+    expect(mergeFonts([retired], [builtInRockSalt, anton]).map((f) => f.name)).toEqual(["Anton"]);
+  });
+
+  it("matches names case- and whitespace-insensitively", () => {
+    const out = mergeFonts([fnt("  rock salt ", "'Rock Salt', fantasy", "Rock Salt")], [builtInRockSalt]);
+    expect(out).toHaveLength(1);
   });
 });

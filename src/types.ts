@@ -231,7 +231,14 @@ export interface TextOverlay {
   x: number;
   y: number;
   color: string;
+  /** Preset look: weight, tracking, casing and effects. */
   fontStyle: "Classic" | "Modern" | "Bold" | "Neon" | "Serif" | "Typewriter";
+  /**
+   * CSS font-family overriding the one implied by `fontStyle`, chosen from the
+   * font library managed in /admin. Undefined means "whatever the preset uses",
+   * which is what every overlay created before this field existed means too.
+   */
+  fontFamily?: string;
   bgStyle: "none" | "solid" | "semi" | "outline";
   align: "left" | "center" | "right";
   fontSize: number;
@@ -243,12 +250,38 @@ export interface TextOverlay {
   zIndex?: number;
 }
 
+/**
+ * A creator's style tweaks to one template stat slot.
+ *
+ * The template's design supplies the whole look; these are the parts the
+ * editor lets you change afterwards without abandoning the template. Absent
+ * fields mean "keep whatever the design said".
+ */
+export interface StatSlotOverride {
+  /** CSS font-family from the typeface library. */
+  fontFamily?: string;
+  color?: string;
+}
+
+/** Per-slot overrides for the current project, keyed by slot id. */
+export type StatSlotOverrides = Partial<Record<StatSlotId, StatSlotOverride>>;
+
 /** An emoji, badge, metric chip, or location tag placed on the canvas. */
 export interface StickerOverlay {
   id: string;
   /** Emoji, SVG badge text, or image URL. */
   content: string;
   type: "emoji" | "badge" | "metric" | "location";
+  /**
+   * CSS font-family from the admin font library. Undefined keeps the built-in
+   * badge face. Ignored for `emoji` stickers, which carry no text of their own.
+   */
+  fontFamily?: string;
+  /**
+   * Text colour. Undefined keeps the built-in white-on-gradient look, which is
+   * how every sticker placed before this field existed rendered.
+   */
+  color?: string;
   scale: number;
   rotation: number;
   x: number;
@@ -279,6 +312,8 @@ export interface EditorSnapshot {
   stickerOverlays: StickerOverlay[];
   templateId: string;
   statLayout: TemplateLayout;
+  /** Font/colour tweaks per stat slot, on top of the template's own design. */
+  statSlotOverrides: StatSlotOverrides;
   capturedImage: string;
   /** Serialised as an array so the snapshot stays a plain JSON value. */
   hiddenSlots: StatSlotId[];

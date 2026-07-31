@@ -235,10 +235,12 @@ export interface StickerFormData {
 export interface StockPhotoFormData {
   name: string;
   category: string;
-  /** Blob / File object before upload. Not stored in Firestore directly. */
-  file?: File;
-  /** Existing URL for edit mode. */
-  existingUrl?: string;
+  /**
+   * Direct URL to the image. Stock photos are hosted externally (Unsplash and
+   * friends) rather than uploaded — see `storagePath` on FirestoreStockPhoto,
+   * which holds this same URL.
+   */
+  url: string;
 }
 
 export interface LensFilterFormData {

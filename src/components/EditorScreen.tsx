@@ -57,6 +57,7 @@ import type {
   EditorSnapshot,
   StatData,
   StatSlotId,
+  StatSlotOverrides,
   StickerOverlay,
   TemplateFamily,
   TemplateLayout,
@@ -174,6 +175,7 @@ export default function EditorScreen() {
     stockPhotos,
     stickers: stickerLibrary,
     colorPalettes,
+    fonts,
   } = useContent();
 
   // Admin palettes extend the built-in swatches rather than replacing them —
@@ -193,6 +195,25 @@ export default function EditorScreen() {
       }),
     ];
   }, [colorPalettes]);
+
+  // Typefaces published from /admin, offered alongside the six built-in style
+  // presets. "Preset" leaves the family to whichever FONT_STYLES entry is
+  // active, which is how every overlay behaved before fonts were selectable.
+  const typefaces = React.useMemo(() => {
+    const seen = new Set<string>();
+    return [
+      { id: "", label: "Preset", fontFamily: undefined as string | undefined },
+      ...fonts
+        .filter((f) => {
+          const key = f.fontFamily.trim().toLowerCase();
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .map((f) => ({ id: f.id, label: f.name, fontFamily: f.fontFamily })),
+    ];
+  }, [fonts]);
+
   // Router state is read once — later navigations never re-enter this screen
   // without a remount, and re-reading it would clobber edits in progress.
   const routeState = useRef<Record<string, unknown>>(
@@ -291,6 +312,11 @@ export default function EditorScreen() {
   // Which stat carries the selection outline. Templates are switched from the
   // lens strip, so tapping a stat only selects it.
   const [selectedStatSlot, setSelectedStatSlot] = useState<StatSlotId | null>(null);
+  /**
+   * Font/colour tweaks per stat slot. Empty means every slot renders exactly
+   * as its template designed it, which is how the editor behaved before this.
+   */
+  const [statSlotOverrides, setStatSlotOverrides] = useState<StatSlotOverrides>({});
 
   // Alignment guides shown only while a drag is snapped.
   const [snapGuides, setSnapGuides] = useState<SnapLine[]>([]);
@@ -465,6 +491,10 @@ export default function EditorScreen() {
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [currentText, setCurrentText] = useState<string>("");
   const [selectedFont, setSelectedFont] = useState<TextOverlay["fontStyle"]>("Bold");
+  /** undefined = inherit the family implied by `selectedFont`'s preset. */
+  const [selectedFontFamily, setSelectedFontFamily] = useState<string | undefined>(undefined);
+  /** Id of the sticker whose typeface popover is open, if any. */
+  const [stickerFontPickerId, setStickerFontPickerId] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState<string>("#FFFFFF");
   const [selectedBgStyle, setSelectedBgStyle] = useState<TextOverlay["bgStyle"]>("solid");
   const [selectedAlign, setSelectedAlign] = useState<TextOverlay["align"]>("center");
@@ -508,6 +538,7 @@ export default function EditorScreen() {
       stickerOverlays: JSON.parse(JSON.stringify(stickerOverlays)),
       templateId,
       statLayout: JSON.parse(JSON.stringify(statLayout)),
+      statSlotOverrides: JSON.parse(JSON.stringify(statSlotOverrides)),
       capturedImage,
       hiddenSlots: [...hiddenSlots],
       committedCrop: { ...committedCrop },
@@ -544,6 +575,7 @@ export default function EditorScreen() {
     // Snapshots taken before stats were tracked carry neither field.
     if (snapshot.templateId) setTemplateId(snapshot.templateId);
     if (snapshot.statLayout) setStatLayout(snapshot.statLayout);
+    setStatSlotOverrides(snapshot.statSlotOverrides ?? {});
     if (snapshot.capturedImage) setCapturedImage(snapshot.capturedImage);
     if (snapshot.hiddenSlots) setHiddenSlots(new Set(snapshot.hiddenSlots));
     setCommittedCrop(snapshot.committedCrop);
@@ -801,6 +833,7 @@ export default function EditorScreen() {
       statLayout: doc.statLayout,
       statData: doc.statData,
       statDesign: statDesigns[doc.templateId],
+      statSlotOverrides: doc.statSlotOverrides,
       mimeType: "image/jpeg",
       quality: 0.7,
     });
@@ -1355,6 +1388,7 @@ export default function EditorScreen() {
       setEditingTextId(existingOverlay.id);
       setCurrentText(existingOverlay.text);
       setSelectedFont(existingOverlay.fontStyle);
+      setSelectedFontFamily(existingOverlay.fontFamily);
       setSelectedColor(existingOverlay.color);
       setSelectedBgStyle(existingOverlay.bgStyle);
       setSelectedAlign(existingOverlay.align);
@@ -1363,6 +1397,7 @@ export default function EditorScreen() {
       setEditingTextId(null);
       setCurrentText("");
       setSelectedFont("Bold");
+      setSelectedFontFamily(undefined);
       setSelectedColor("#FFFFFF");
       setSelectedBgStyle("solid");
       setSelectedAlign("center");
@@ -1394,6 +1429,7 @@ export default function EditorScreen() {
                 ...item,
                 text: currentText,
                 fontStyle: selectedFont,
+                fontFamily: selectedFontFamily,
                 color: selectedColor,
                 bgStyle: selectedBgStyle,
                 align: selectedAlign,
@@ -1412,6 +1448,7 @@ export default function EditorScreen() {
         y: 0,
         color: selectedColor,
         fontStyle: selectedFont,
+        fontFamily: selectedFontFamily,
         bgStyle: selectedBgStyle,
         align: selectedAlign,
         fontSize: selectedFontSize,
@@ -1707,6 +1744,7 @@ export default function EditorScreen() {
           onLayoutChange={handleStatLayoutChange}
           constraintsRef={canvasRef}
           selectedSlot={selectedStatSlot}
+          overrides={statSlotOverrides}
           onSelectSlot={(slot) => {
             setSelectedStatSlot(slot);
             setSelectedTextId(null);
@@ -1806,6 +1844,10 @@ export default function EditorScreen() {
                     : "transparent",
                   fontSize: `${overlay.fontSize}px`,
                   textAlign: overlay.align,
+                  // Inline wins over the preset class's font-family, so an
+                  // admin typeface overrides it while weight/tracking/casing
+                  // from the preset still apply.
+                  fontFamily: overlay.fontFamily,
                 }}
                 className={`max-w-[85vw] whitespace-pre-wrap break-words transition-all ${
                   fontConfig.className
@@ -2016,6 +2058,7 @@ export default function EditorScreen() {
               )}
 
               <div
+                style={{ fontFamily: sticker.fontFamily, color: sticker.color }}
                 className={`px-4 py-2 rounded-2xl bg-gradient-to-r ${
                   sticker.bgGradient || "from-amber-500 to-yellow-400"
                 } text-white font-extrabold text-lg tracking-wider uppercase shadow-2xl border border-white/30 flex items-center gap-2 select-none`}
@@ -2031,6 +2074,74 @@ export default function EditorScreen() {
                   className="absolute -top-12 left-1/2 -translate-x-1/2 bg-blue-600/95 backdrop-blur-md text-white border border-blue-400/50 rounded-full px-2 py-1 flex items-center gap-1.5 shadow-2xl z-40 whitespace-nowrap"
                   onClick={(e) => e.stopPropagation()}
                 >
+                  {/* Typeface picker — only for stickers that render text, and
+                      only once the admin has published a font to choose. */}
+                  {sticker.type !== "emoji" && typefaces.length > 1 && (
+                    <div className="relative">
+                      <button
+                        onClick={() =>
+                          setStickerFontPickerId((id) => (id === sticker.id ? null : sticker.id))
+                        }
+                        className="p-1 hover:bg-white/20 rounded-full text-white transition-colors"
+                        title="Typeface"
+                      >
+                        <Type className="w-3.5 h-3.5" />
+                      </button>
+                      {stickerFontPickerId === sticker.id && (
+                        <div className="absolute top-9 left-1/2 -translate-x-1/2 bg-black/90 backdrop-blur-md border border-white/15 rounded-2xl p-1.5 flex flex-col gap-1 max-h-64 overflow-y-auto no-scrollbar shadow-2xl">
+                          {typefaces.map((tf) => (
+                            <button
+                              key={tf.id || "preset"}
+                              onClick={() => {
+                                pushHistorySnapshot();
+                                setStickerOverlays((prev) =>
+                                  prev.map((s) =>
+                                    s.id === sticker.id ? { ...s, fontFamily: tf.fontFamily } : s
+                                  )
+                                );
+                                setStickerFontPickerId(null);
+                              }}
+                              style={{ fontFamily: tf.fontFamily }}
+                              className={`px-3 py-1.5 rounded-xl text-xs whitespace-nowrap transition-colors ${
+                                (sticker.fontFamily ?? "") === (tf.fontFamily ?? "")
+                                  ? "bg-white text-ink font-bold"
+                                  : "text-white/70 hover:bg-white/10 hover:text-white"
+                              }`}
+                            >
+                              {tf.label}
+                            </button>
+                          ))}
+
+                          {/* Text colour, in the same popover — the gradient
+                              behind it stays the sticker's own. */}
+                          <div className="mt-1 pt-1.5 border-t border-white/10 grid grid-cols-5 gap-1 w-[9.5rem]">
+                            {colorPalette.slice(0, 15).map((c) => (
+                              <button
+                                key={`${c.hex}-${c.name}`}
+                                onClick={() => {
+                                  pushHistorySnapshot();
+                                  setStickerOverlays((prev) =>
+                                    prev.map((s) =>
+                                      s.id === sticker.id ? { ...s, color: c.hex } : s
+                                    )
+                                  );
+                                  setStickerFontPickerId(null);
+                                }}
+                                aria-label={`Sticker colour: ${c.name}`}
+                                className={`w-6 h-6 rounded-full border-2 transition-transform ${
+                                  sticker.color?.toLowerCase() === c.hex.toLowerCase()
+                                    ? "border-white scale-110"
+                                    : "border-white/20"
+                                }`}
+                                style={{ backgroundColor: c.hex }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <button
                     onClick={() => {
                       pushHistorySnapshot();
@@ -2347,6 +2458,97 @@ export default function EditorScreen() {
           </motion.div>
         )}
 
+      {/* 3b. STAT SLOT STYLING BAR — restyle one of the template's stats
+             without leaving the template. Typeface list is the same one the
+             text tool offers; colours are the same swatches. */}
+      <AnimatePresence>
+        {selectedStatSlot && !isEditingText && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="absolute bottom-24 left-2 right-2 z-40 bg-black/80 backdrop-blur-xl border border-white/15 rounded-2xl p-2.5 flex flex-col gap-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-white/50">
+                Styling {selectedStatSlot.replace(/_/g, " ")}
+              </span>
+              {statSlotOverrides[selectedStatSlot] && (
+                <button
+                  onClick={() => {
+                    pushHistorySnapshot();
+                    setStatSlotOverrides((prev) => {
+                      const next = { ...prev };
+                      delete next[selectedStatSlot];
+                      return next;
+                    });
+                  }}
+                  className="text-[10px] text-white/50 hover:text-white underline"
+                >
+                  Reset to template
+                </button>
+              )}
+            </div>
+
+            {typefaces.length > 1 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                {typefaces.map((tf) => {
+                  const active =
+                    (statSlotOverrides[selectedStatSlot]?.fontFamily ?? "") === (tf.fontFamily ?? "");
+                  return (
+                    <button
+                      key={tf.id || "preset"}
+                      onClick={() => {
+                        pushHistorySnapshot();
+                        setStatSlotOverrides((prev) => ({
+                          ...prev,
+                          [selectedStatSlot]: { ...prev[selectedStatSlot], fontFamily: tf.fontFamily },
+                        }));
+                      }}
+                      aria-pressed={active}
+                      aria-label={`Stat typeface: ${tf.label}`}
+                      style={{ fontFamily: tf.fontFamily }}
+                      className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition-all flex-shrink-0 ${
+                        active
+                          ? "bg-white text-ink border-white"
+                          : "bg-white/10 text-white/70 border-white/10 hover:text-white"
+                      }`}
+                    >
+                      {tf.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar px-0.5">
+              {colorPalette.map((c) => {
+                const active = statSlotOverrides[selectedStatSlot]?.color?.toLowerCase() === c.hex.toLowerCase();
+                return (
+                  <button
+                    key={`${c.hex}-${c.name}`}
+                    onClick={() => {
+                      pushHistorySnapshot();
+                      setStatSlotOverrides((prev) => ({
+                        ...prev,
+                        [selectedStatSlot]: { ...prev[selectedStatSlot], color: c.hex },
+                      }));
+                    }}
+                    aria-pressed={active}
+                    aria-label={`Stat colour: ${c.name}`}
+                    className={`w-7 h-7 rounded-full flex-shrink-0 border-2 transition-transform ${
+                      active ? "border-white scale-110" : "border-white/20"
+                    }`}
+                    style={{ backgroundColor: c.hex }}
+                  />
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* 4. FULL-SCREEN TEXT EDITOR OVERLAY MODAL */}
       <AnimatePresence>
         {isEditingText && (
@@ -2410,6 +2612,7 @@ export default function EditorScreen() {
                         : "transparent",
                     fontSize: `${selectedFontSize}px`,
                     textAlign: selectedAlign,
+                    fontFamily: selectedFontFamily,
                   }}
                   className={`w-full bg-transparent resize-none outline-none border-none p-3 rounded-2xl transition-all ${
                     FONT_STYLES.find((f) => f.id === selectedFont)?.className || ""
@@ -2513,6 +2716,33 @@ export default function EditorScreen() {
                   )}
                 />
               </div>
+
+              {/* TYPEFACE ROW: fonts published from /admin. Hidden entirely
+                  when the library is empty, so the default install is
+                  unchanged. */}
+              {typefaces.length > 1 && (
+                <div className="w-full flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 px-1">
+                  {typefaces.map((tf) => {
+                    const isSelected = (selectedFontFamily ?? "") === (tf.fontFamily ?? "");
+                    return (
+                      <button
+                        key={tf.id || "preset"}
+                        onClick={() => setSelectedFontFamily(tf.fontFamily)}
+                        aria-pressed={isSelected}
+                        aria-label={`Typeface: ${tf.label}`}
+                        style={{ fontFamily: tf.fontFamily }}
+                        className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition-all flex-shrink-0 ${
+                          isSelected
+                            ? "bg-white text-ink border-white shadow-lg"
+                            : "bg-white/10 text-white/70 border-white/10 hover:text-white"
+                        }`}
+                      >
+                        {tf.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* BOTTOM ROW: Color Palette Swatches */}
               <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1 px-1 justify-between">
@@ -3415,6 +3645,7 @@ export default function EditorScreen() {
         showToast={showToast}
         templateId={templateId}
         statLayout={statLayout}
+        statSlotOverrides={statSlotOverrides}
         statData={statData}
       />
 

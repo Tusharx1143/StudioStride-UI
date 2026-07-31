@@ -97,6 +97,26 @@ const fontRepo = new ContentRepository<FirestoreFont>("fonts");
 const colorPaletteRepo = new ContentRepository<FirestoreColorPalette>("colorPalettes");
 
 // ====================================================================
+// Document IDs
+// ====================================================================
+
+/**
+ * Turn a user-supplied name into a Firestore-safe document id.
+ *
+ * The old inline version only collapsed whitespace, so "Trail / Road" kept its
+ * slash — an illegal character in a document id — and accents survived into
+ * ids that no longer round-tripped. Everything outside [a-z0-9] becomes an
+ * underscore.
+ */
+export function slugify(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return slug || "item";
+}
+
+// ====================================================================
 // Stat design resolution helpers
 // ====================================================================
 
@@ -193,8 +213,7 @@ export async function createTemplateFamily(
     isActive: true,
     createdBy: "admin",
   };
-  const id = data.name.toLowerCase().replace(/\s+/g, "_");
-  const created = await templateFamilyRepo.create(id, doc);
+  const created = await templateFamilyRepo.createUnique(slugify(data.name), doc);
   cache.invalidate("template_family");
   return { ...data, id: created.id };
 }
@@ -247,6 +266,36 @@ export async function getStatDesign(
 ): Promise<TemplateStatDesign | null> {
   const all = await getStatDesigns();
   return all[templateFamilyId] ?? null;
+}
+
+/**
+ * Raw design documents, keyed by template family.
+ *
+ * `getStatDesigns` resolves formatter names into functions, which is what the
+ * renderers want but throws away the very fields an editor has to load back —
+ * the admin could only ever create a design from scratch, so re-saving an
+ * existing one silently wiped it.
+ */
+export async function getStatDesignDocs(): Promise<
+  Record<string, StorableTemplateStatDesign>
+> {
+  const cached = cache.get<Record<string, StorableTemplateStatDesign>>(
+    "template_stat_design_raw"
+  );
+  if (cached) return cached;
+
+  const raw = await statDesignRepo.getActive();
+  const result: Record<string, StorableTemplateStatDesign> = {};
+  for (const doc of raw) {
+    result[doc.templateFamilyId] = {
+      templateFamilyId: doc.templateFamilyId,
+      slots: doc.slots ?? {},
+      defaultLayout: doc.defaultLayout ?? {},
+      accentType: doc.accentType ?? "none",
+    };
+  }
+  cache.set("template_stat_design_raw", result);
+  return result;
 }
 
 export async function createStatDesign(
@@ -311,10 +360,9 @@ export async function createLensTemplate(
     isActive: true,
     createdBy: "admin",
   };
-  const id = data.name.toLowerCase().replace(/\s+/g, "_");
-  await lensTemplateRepo.create(id, doc);
+  const created = await lensTemplateRepo.createUnique(slugify(data.name), doc);
   cache.invalidate("lens_template");
-  return { ...data, id, overlayType: data.overlayType as import("../types").LensTemplate["overlayType"] };
+  return { ...data, id: created.id, overlayType: data.overlayType as import("../types").LensTemplate["overlayType"] };
 }
 
 export async function updateLensTemplate(
@@ -368,10 +416,9 @@ export async function createSticker(
     isActive: true,
     createdBy: "admin",
   };
-  const id = data.label.toLowerCase().replace(/\s+/g, "_");
-  await stickerRepo.create(id, doc);
+  const created = await stickerRepo.createUnique(slugify(data.label), doc);
   cache.invalidate("sticker");
-  return { ...data, id, type: data.type as StickerItem["type"] };
+  return { ...data, id: created.id, type: data.type as StickerItem["type"] };
 }
 
 export async function updateSticker(
@@ -413,26 +460,27 @@ export async function getStockPhotos(): Promise<
 }
 
 export async function createStockPhoto(
-  data: StockPhotoFormData & { storagePath: string }
+  data: StockPhotoFormData
 ): Promise<import("../types").PhotoSource> {
   const now = new Date().toISOString();
   const doc: Omit<FirestoreStockPhoto, "id"> = {
     name: data.name,
     category: data.category,
-    storagePath: data.storagePath,
+    // `storagePath` predates the decision to host stock photos externally; it
+    // holds the image URL verbatim, exactly as the seeded documents do.
+    storagePath: data.url,
     createdAt: now,
     updatedAt: now,
     isActive: true,
     createdBy: "admin",
   };
-  const id = data.name.toLowerCase().replace(/\s+/g, "_");
-  await stockPhotoRepo.create(id, doc);
+  const created = await stockPhotoRepo.createUnique(slugify(data.name), doc);
   cache.invalidate("stock_photo");
   return {
-    id,
+    id: created.id,
     name: data.name,
     category: data.category as import("../types").PhotoSource["category"],
-    url: data.storagePath,
+    url: data.url,
   };
 }
 
@@ -501,11 +549,25 @@ export async function getFonts(): Promise<FirestoreFont[]> {
   return data;
 }
 
+/**
+ * Every font document, retired ones included.
+ *
+ * The app needs the inactive records too: a bundled typeface is only really
+ * gone once something says so, and `getActive()` can't distinguish "never
+ * seeded" from "deliberately unpublished". See `mergeFonts`.
+ */
+export async function getAllFonts(): Promise<FirestoreFont[]> {
+  const cached = cache.get<FirestoreFont[]>("font_all");
+  if (cached) return cached;
+  const data = await fontRepo.getAll();
+  cache.set("font_all", data);
+  return data;
+}
+
 export async function createFont(data: FontFormData): Promise<void> {
   const now = new Date().toISOString();
   const doc: Omit<FirestoreFont, "id"> = { ...data, createdAt: now, updatedAt: now, isActive: true, createdBy: "admin" };
-  const id = data.name.toLowerCase().replace(/\s+/g, "_");
-  await fontRepo.create(id, doc);
+  await fontRepo.createUnique(slugify(data.name), doc);
   cache.invalidate("font");
 }
 
@@ -534,8 +596,7 @@ export async function getColorPalettes(): Promise<FirestoreColorPalette[]> {
 export async function createColorPalette(data: ColorPaletteFormData): Promise<void> {
   const now = new Date().toISOString();
   const doc: Omit<FirestoreColorPalette, "id"> = { ...data, createdAt: now, updatedAt: now, isActive: true, createdBy: "admin" };
-  const id = data.name.toLowerCase().replace(/\s+/g, "_");
-  await colorPaletteRepo.create(id, doc);
+  await colorPaletteRepo.createUnique(slugify(data.name), doc);
   cache.invalidate("colorPalette");
 }
 
@@ -547,6 +608,89 @@ export async function updateColorPalette(id: string, data: Partial<ColorPaletteF
 export async function deleteColorPalette(id: string): Promise<void> {
   await colorPaletteRepo.softDelete(id);
   cache.invalidate("colorPalette");
+}
+
+// ====================================================================
+// Admin: publish state across every content type
+// ====================================================================
+
+/**
+ * Every content repository, keyed by the group names the Published screen uses.
+ *
+ * The typed getters above all filter to `isActive === true`, which is right for
+ * the app but leaves the admin unable to see — let alone restore — anything it
+ * has unpublished. These three functions are the admin's view over the same
+ * collections, inactive documents included.
+ */
+const GROUP_REPOS = {
+  lenses: lensTemplateRepo,
+  templates: templateFamilyRepo,
+  stickers: stickerRepo,
+  fonts: fontRepo,
+  colors: colorPaletteRepo,
+  photos: stockPhotoRepo,
+  filters: lensFilterRepo,
+  statDesigns: statDesignRepo,
+} as const;
+
+export type ContentGroup = keyof typeof GROUP_REPOS;
+
+/** A content document as the Published screen needs it — identity plus state. */
+export interface AdminContentItem {
+  id: string;
+  /** Best available human label; falls back to the id. */
+  label: string;
+  isActive: boolean;
+}
+
+function labelOf(doc: Record<string, unknown>): string {
+  for (const key of ["name", "label", "title", "overlayType"]) {
+    const v = doc[key];
+    if (typeof v === "string" && v) return v;
+  }
+  return String(doc.id ?? "");
+}
+
+/** Every document in a group, published or not. */
+export async function getGroupItems(
+  group: ContentGroup
+): Promise<AdminContentItem[]> {
+  const raw = (await GROUP_REPOS[group].getAll()) as unknown as Record<
+    string,
+    unknown
+  >[];
+  return raw
+    .map((doc) => ({
+      id: String(doc.id),
+      label: labelOf(doc),
+      // Documents seeded before isActive existed should read as published
+      // rather than silently vanishing from the admin's list.
+      isActive: doc.isActive !== false,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** Publish or unpublish a document without deleting it. */
+export async function setGroupItemActive(
+  group: ContentGroup,
+  id: string,
+  isActive: boolean
+): Promise<void> {
+  await GROUP_REPOS[group].update(id, {
+    isActive,
+    updatedAt: new Date().toISOString(),
+  } as never);
+  // Cheaper to re-read one collection than to keep eight cache keys in sync.
+  cache.invalidate();
+}
+
+/** Permanently remove a document. Unpublishing is `setGroupItemActive`. */
+export async function deleteGroupItem(
+  group: ContentGroup,
+  id: string
+): Promise<void> {
+  await GROUP_REPOS[group].delete(id);
+  cache.invalidate();
 }
 
 // ====================================================================
