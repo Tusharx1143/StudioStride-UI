@@ -120,7 +120,7 @@ function AnimatedRoutes() {
           }
         />
         <Route
-          path="/camera"
+          path="/editor"
           element={
             <ErrorBoundary>
               <RequireAnyAuth>

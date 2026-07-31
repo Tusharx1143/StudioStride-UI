@@ -7,12 +7,26 @@ import type {
   StatData,
   StatSlotId,
   TemplateLayout,
-  TextSlotId,
 } from "../types";
 import { getStatDesign } from "../data/templateStatDesigns";
+import { metricForSlot, resolveSlotStyle } from "../utils/metricSlots";
 import { commitDrag } from "../utils/statLayouts";
 import { computeSnap, type SnapLine } from "../utils/snapping";
 import { SNAP_TARGET_ATTR, collectSnapLines, localRect } from "../utils/snapTargets";
+
+const CORE_SLOT_LABELS: Record<string, string> = {
+  distance: "Distance",
+  pace: "Pace",
+  time: "Time",
+  title: "Activity title",
+};
+
+/** Spoken name for a slot, so a screen reader announces more than "button". */
+function slotLabel(slot: StatSlotId, data: StatData): string {
+  const metric = metricForSlot(slot, data);
+  if (metric) return metric.label;
+  return CORE_SLOT_LABELS[slot] ?? slot;
+}
 
 /** How close an edge must come, in px, before it snaps. */
 const SNAP_THRESHOLD = 8;
@@ -69,6 +83,7 @@ export default function StatLayer({
             <StatChip
               key={slot}
               slot={slot}
+              label="Accent decoration"
               pos={pos}
               layout={layout}
               onLayoutChange={onLayoutChange}
@@ -85,13 +100,17 @@ export default function StatLayer({
           );
         }
 
-        const style = design.slots[slot as TextSlotId];
+        // Shared with drawStatLayer: a metric slot borrows the template's own
+        // secondary-stat styling, and resolves to null when this activity does
+        // not carry that metric — so no blank chip is ever rendered.
+        const style = resolveSlotStyle(design, slot, data);
         if (!style) return null;
 
         return (
           <StatChip
             key={slot}
             slot={slot}
+            label={slotLabel(slot, data)}
             pos={pos}
             layout={layout}
             onLayoutChange={onLayoutChange}
@@ -123,6 +142,8 @@ interface StatChipProps {
   onDragStart?: () => void;
   onGuidesChange?: (guides: SnapLine[]) => void;
   onSnap?: () => void;
+  /** Spoken name for the chip, e.g. "Distance". */
+  label: string;
   children: React.ReactNode;
 }
 
@@ -138,6 +159,7 @@ function StatChip({
   onDragStart,
   onGuidesChange,
   onSnap,
+  label,
   children,
 }: StatChipProps) {
   const chipRef = useRef<HTMLDivElement>(null);
@@ -204,9 +226,46 @@ function StatChip({
         e.stopPropagation();
         onSelectSlot?.(slot);
       }}
-      className={`absolute touch-none select-none origin-top-left ${
+      // Positioning was drag-only, which left the editor unusable without a
+      // touchscreen or a mouse. Arrows nudge by 1% of the canvas, Shift by 10%.
+      tabIndex={interactive ? 0 : -1}
+      role={interactive ? "button" : undefined}
+      aria-label={interactive ? `${label}. Use arrow keys to move.` : undefined}
+      onKeyDown={(e) => {
+        if (!interactive) return;
+
+        const step = e.shiftKey ? 10 : 1;
+        let dx = 0;
+        let dy = 0;
+
+        switch (e.key) {
+          case "ArrowLeft": dx = -step; break;
+          case "ArrowRight": dx = step; break;
+          case "ArrowUp": dy = -step; break;
+          case "ArrowDown": dy = step; break;
+          case "Enter":
+          case " ":
+            e.preventDefault();
+            onSelectSlot?.(slot);
+            return;
+          default:
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+        onSelectSlot?.(slot);
+        onLayoutChange({
+          ...layout,
+          [slot]: {
+            x: Math.max(0, Math.min(100, pos.x + dx)),
+            y: Math.max(0, Math.min(100, pos.y + dy)),
+          },
+        });
+      }}
+      className={`absolute touch-none select-none origin-top-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-selection focus-visible:outline-offset-4 rounded-lg ${
         interactive ? "pointer-events-auto cursor-grab active:cursor-grabbing" : "pointer-events-none"
-      } ${isSelected ? "outline outline-2 outline-blue-500 outline-offset-4 rounded-lg" : ""}`}
+      } ${isSelected ? "outline outline-2 outline-selection outline-offset-4" : ""}`}
     >
       {children}
     </motion.div>

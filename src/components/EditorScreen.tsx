@@ -1,18 +1,20 @@
 import React, { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence, useMotionValue } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   X,
   Type,
   PenTool,
   StickyNote,
   Download,
-  Send,
+  Camera,
   Undo,
   Redo,
   Sparkles,
   Crop,
   Info,
   Check,
+  Save,
+  Loader2,
   Trash2,
   AlignLeft,
   AlignCenter,
@@ -39,165 +41,249 @@ import {
   ArrowDown,
   Copy,
   Plus,
-  LayoutTemplate,
+  Route as RouteIcon,
   Image as ImageIcon
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useContent } from "../contexts/ContentContext";
-import type { EditableLensElement, StatData, StatSlotId, TemplateFamily, TemplateLayout, LensTemplate } from "../types";
+import { LENS_TEMPLATES_EXPANDED, LENS_FILTER_MAP, STOCK_PHOTOS } from "../data/mockData";
+import type {
+  CommittedCrop,
+  CustomLayouts,
+  EditorDoc,
+  EditorDraft,
+  EditorSnapshot,
+  StatData,
+  StatSlotId,
+  StickerOverlay,
+  TemplateFamily,
+  TemplateLayout,
+  TextOverlay,
+} from "../types";
+import {
+  buildDoc,
+  docFingerprint,
+  formatRelativeTime,
+  isDocDirty,
+  newProjectId,
+  normalizeDoc,
+  projectTitle,
+  thumbnailSize,
+} from "../utils/projectDoc";
+import {
+  clearDraft,
+  getProject,
+  loadDraft,
+  saveDraft,
+  saveProject,
+} from "../utils/projectStore";
+import { renderComposite } from "../utils/renderComposite";
+import { scaleFilter } from "../utils/filterScale";
+import { isMetricSlot, pruneUnavailableMetricSlots } from "../utils/metricSlots";
+import {
+  addCustomColor,
+  addPreset,
+  loadBrandKit,
+  newPresetId,
+  pushRecentTemplate,
+  removePreset,
+  saveBrandKit,
+  toggleFavouriteTemplate,
+  type BrandKit,
+  type StylePreset,
+} from "../utils/brandKit";
+import { getDistanceUnit } from "../utils/unitPreference";
 import GestureSwipeCarousel from "./GestureSwipeCarousel";
 import ExportModal from "./ExportModal";
 import StatLayer from "./StatLayer";
-import StatToolbar from "./StatToolbar";
 import DraggableLayer from "./DraggableLayer";
 import SnapGuides from "./SnapGuides";
-import TemplateCarousel from "./TemplateCarousel";
 import type { SnapLine } from "../utils/snapping";
 import { triggerHaptic } from "../utils/haptics";
+import { TEMPLATE_FAMILIES } from "../data/mockData";
 import {
+  clearCustomLayout,
+  hasCustomLayout,
   loadCustomLayouts,
   resolveLayout,
   saveCustomLayouts,
   storeCustomLayout,
 } from "../utils/statLayouts";
-import { markStripSeen, shouldAutoOpenStrip } from "../utils/statStrip";
-import { FONT_STYLES, COLOR_PALETTE, BG_STYLES } from "../data/editorConstants";
-import type { StickerItem } from "../types/content";
-import { resolveStickerContent } from "../data/resolveStickerContent";
+import BackgroundSheet from "./editor/BackgroundSheet";
+import CameraCaptureOverlay from "./editor/CameraCaptureOverlay";
+import LensStrip from "./editor/LensStrip";
+import StatChipsBar from "./editor/StatChipsBar";
+import ToolRail, { type RailTool } from "./editor/ToolRail";
+import { RouteLayer } from "./editor/RouteLayer";
+import RouteLayerControls from "./editor/RouteLayerControls";
+import type { RouteGeometry, RouteOverlay } from "../types";
 
-// Text Overlay item model
-interface TextOverlay {
-  id: string;
-  text: string;
-  x: number; // relative position in px or offset
-  y: number;
-  color: string;
-  fontStyle: "Classic" | "Modern" | "Bold" | "Neon" | "Serif" | "Typewriter";
-  bgStyle: "none" | "solid" | "semi" | "outline";
-  align: "left" | "center" | "right";
-  fontSize: number; // in px
-  rotation?: number; // in degrees
-  scale?: number; // scale multiplier
-  hidden?: boolean;
-  locked?: boolean;
-  zIndex?: number;
-}
+// TextOverlay, StickerOverlay, CommittedCrop and EditorSnapshot now live in
+// src/types.ts — the exporter and the saved-project document need the same
+// definitions, and three hand-maintained copies is exactly the drift that let
+// saved projects fall out of step with the canvas in the first place.
 
-// Sticker Overlay item model
-interface StickerOverlay {
+// Pre-defined Sticker Item interface
+interface StickerItem {
   id: string;
-  content: string; // Emoji, SVG badge text, or image URL
-  type: "emoji" | "badge" | "metric" | "location";
-  scale: number;
-  rotation: number;
-  x: number;
-  y: number;
+  content: string;
+  label: string;
+  category: "Badges" | "Stats" | "Locations";
+  type: "badge" | "metric" | "location";
   bgGradient?: string;
-  /** When true, render without background — just text/emoji over the photo. */
-  transparent?: boolean;
-  hidden?: boolean;
-  locked?: boolean;
-  zIndex?: number;
+  /** If set, replaces content with the stat value from statData on add. */
+  statKey?: string;
 }
 
-//
-// Inline constants — extracted to src/data/editorConstants.ts
-// StickerItem lives in src/types/content.ts
-//
+const STICKER_LIBRARY: StickerItem[] = [
+  // Activity Stats — dynamic values from the current activity
+  { id: "st_s1", content: "DISTANCE", label: "Distance", category: "Stats", type: "metric", bgGradient: "from-ember to-ember-lift text-ink", statKey: "distance" },
+  { id: "st_s2", content: "PACE", label: "Pace", category: "Stats", type: "metric", bgGradient: "from-sky-500 to-blue-600", statKey: "pace" },
+  { id: "st_s3", content: "TIME", label: "Time", category: "Stats", type: "metric", bgGradient: "from-rose-500 to-pink-600", statKey: "time" },
+  { id: "st_s4", content: "TITLE", label: "Activity Title", category: "Stats", type: "metric", bgGradient: "from-amber-500 to-orange-600", statKey: "title" },
 
-// ---------------------------------------------------------------------------
-// Embedded props — when EditorScreen is rendered inline inside SnapCamera
-// instead of as a standalone route, all data comes through this interface.
-// ---------------------------------------------------------------------------
-export interface EditorEmbeddedProps {
-  capturedImage: string;
-  selectedTemplateFamily: TemplateFamily | null;
-  selectedLensId: string | undefined;
-  lensFilter: string;
-  statData: StatData;
-  statLayout: TemplateLayout;
-  appliedMusic: string | null;
-  aspectRatio: string;
-  onExit: () => void;
-}
+  // Badges & Milestones
+  { id: "st_2", content: "BEAST MODE 🔥", label: "Beast Mode", category: "Badges", type: "badge", bgGradient: "from-orange-600 to-red-500" },
+  { id: "st_5", content: "RUNNER'S HIGH ⚡", label: "Runner's High", category: "Badges", type: "badge", bgGradient: "from-cyan-500 to-blue-600" },
+  { id: "st_7", content: "FINISHER", label: "Finisher", category: "Badges", type: "badge", bgGradient: "from-yellow-400 to-amber-600" },
 
-interface EditorScreenProps {
-  embeddedProps?: EditorEmbeddedProps;
-}
+  // Locations — without trailing emojis
+  { id: "st_l1", content: "CENTRAL PARK", label: "Central Park", category: "Locations", type: "location", bgGradient: "from-emerald-600 to-green-500" },
+  { id: "st_l2", content: "SEA OCEAN TRAIL", label: "Sea Trail", category: "Locations", type: "location", bgGradient: "from-indigo-600 to-blue-500" },
+  { id: "st_l4", content: "GOLDEN GATE", label: "Golden Gate", category: "Locations", type: "location", bgGradient: "from-rose-600 to-orange-500" },
+];
 
-export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
+// Available Fonts
+const FONT_STYLES: { id: TextOverlay["fontStyle"]; label: string; className: string }[] = [
+  { id: "Classic", label: "Classic", className: "font-sans font-semibold tracking-normal" },
+  { id: "Modern", label: "Modern", className: "font-mono tracking-wider text-transform uppercase" },
+  { id: "Bold", label: "Bold", className: "font-black tracking-tighter uppercase font-display" },
+  { id: "Neon", label: "Neon", className: "font-sans font-extrabold tracking-wide drop-shadow-[0_0_12px_rgba(255,255,255,0.9)]" },
+  { id: "Serif", label: "Serif", className: "font-serif italic font-medium" },
+  { id: "Typewriter", label: "Typewriter", className: "font-mono font-medium tracking-tight" },
+];
+
+// Vibrant Snapchat style color palette
+const COLOR_PALETTE = [
+  { hex: "#FFFFFF", name: "White" },
+  { hex: "#F4E409", name: "Yellow" },
+  { hex: "#FF2A6D", name: "Hot Pink" },
+  { hex: "#05D9E8", name: "Cyan" },
+  { hex: "#FF7A1A", name: "Ember" },
+  { hex: "#2EC4B6", name: "Mint" },
+  { hex: "#9B5DE5", name: "Purple" },
+  { hex: "#FF4D3D", name: "Red" },
+  { hex: "#000000", name: "Black" },
+];
+
+// Background Styles
+const BG_STYLES: { id: TextOverlay["bgStyle"]; label: string }[] = [
+  { id: "none", label: "Transparent" },
+  { id: "solid", label: "Solid" },
+  { id: "semi", label: "Translucent" },
+  { id: "outline", label: "Outline" },
+];
+
+export default function EditorScreen() {
   const navigate = useNavigate();
-  const location = useLocation();
   const canvasRef = useRef<HTMLDivElement>(null);
-  const { templateFamilies, lensTemplates, lensFilters, stockPhotos, stickers } = useContent();
-  const [showTemplateCarousel, setShowTemplateCarousel] = useState(false);
-  const [showStatSelector, setShowStatSelector] = useState(false);
-  const [showPhotoPicker, setShowPhotoPicker] = useState(false);
-  const [hiddenSlots, setHiddenSlots] = useState<Set<StatSlotId>>(new Set());
-  const [customPhoto, setCustomPhoto] = useState<string | null>(null);
-  const [lensPositions, setLensPositions] = useState<Record<string, { x: number; y: number }>>({});
-  const [hiddenLensElements, setHiddenLensElements] = useState<Set<string>>(new Set());
-  const [isGrouped, setIsGrouped] = useState(false);
-  const [groupOffset, setGroupOffset] = useState({ x: 0, y: 0 });
+  const location = useLocation();
+  // Router state is read once — later navigations never re-enter this screen
+  // without a remount, and re-reading it would clobber edits in progress.
+  const routeState = useRef<Record<string, unknown>>(
+    (location.state as Record<string, unknown> | null) ?? {}
+  ).current;
 
-  // Image source captured from camera or gallery.
-  // When embedded, use embeddedProps; otherwise fall back to sessionStorage
-  // + router state + stock default.
-  const capturedImage =
-    customPhoto ??
-    embeddedProps?.capturedImage ??
-    sessionStorage.getItem("temp_captured_image") ??
-    (location.state?.capturedImage as string | undefined) ??
-    stockPhotos[0]?.url ?? "";
+  // Background photo. An explicit image on the route always wins — that's how a
+  // saved project opens on its own artwork.
+  const [capturedImage, setCapturedImage] = useState<string>(() => {
+    const fromRoute = routeState.capturedImage as string | undefined;
+    if (fromRoute) return fromRoute;
 
-  // Selected template family, carried over from the camera
-  const selectedTemplateFamily: TemplateFamily | null =
-    embeddedProps?.selectedTemplateFamily ??
-    (location.state?.selectedTemplateFamily as TemplateFamily | null) ??
-    null;
-  // Selected lens, carried over from the camera viewfinder
-  const selectedLensId: string | undefined =
-    embeddedProps?.selectedLensId ??
-    (location.state?.selectedLensId as string | undefined);
+    // Arriving from an activity starts on a clean canvas. Only a bare entry
+    // (the Create button) resumes whatever photo this tab last captured, so
+    // picking a second activity never inherits the first one's photo.
+    const isActivityEntry = Boolean(routeState.title ?? routeState.activityTitle);
+    if (!isActivityEntry) {
+      const stored = sessionStorage.getItem("temp_captured_image");
+      if (stored) return stored;
+    }
+    return STOCK_PHOTOS[0].url;
+  });
 
-  // Lens filter (CSS filter string) carried over from the camera — the base
-  // image shows this filter so lens effects are editable in the editor.
-  const cameraLensFilter: string =
-    embeddedProps?.lensFilter ??
-    (location.state?.lensFilter as string) ??
-    "";
-  const [lensFilter, setLensFilter] = useState<string>(cameraLensFilter);
-  const [activeLens, setActiveLens] = useState<LensTemplate | null>(null);
+  const [lensFilter, setLensFilter] = useState<string>(
+    (routeState.lensFilter as string | undefined) ?? ""
+  );
 
   // Filter picker
   const [isFilterPickerOpen, setIsFilterPickerOpen] = useState<boolean>(false);
   const [filterIntensity, setFilterIntensity] = useState<number>(85);
+
+  // `lensFilter` holds the lens as designed; intensity is applied here rather
+  // than baked into it, so the slider works for every named lens and "None"
+  // keeps meaning none.
+  const composedFilter = scaleFilter(lensFilter, filterIntensity / 100);
   // Editor state, not a derived constant: undo has to be able to restore it.
   const [templateId, setTemplateId] = useState<string>(
-    selectedTemplateFamily?.id ?? "default"
+    (routeState.templateId as string | undefined) ?? TEMPLATE_FAMILIES[0].id
   );
 
-  // Stat data — from embedded props (camera), route state (home screen), or defaults
-  const routeStatData = {
-    distance: parseFloat((location.state?.distance as string) ?? "") || parseFloat((location.state?.activityDistance as string) ?? "") || 8.4,
-    distanceUnit: "km",
-    pace: ((location.state?.pace as string) ?? (location.state?.activityPace as string) ?? "6:12 /km").replace(" /km", ""),
-    time: (location.state?.time as string) ?? (location.state?.activityTime as string) ?? "52:18",
-    title: (location.state?.title as string) ?? (location.state?.activityTitle as string) ?? "Morning Run",
-  };
-  const statData: StatData = embeddedProps?.statData ?? routeStatData;
+  // Activity stats carried in on the route. Both the short keys used by the
+  // activity screens and the `activity*` keys used by saved projects resolve.
+  //
+  // State rather than a derived constant: opening a saved project restores the
+  // numbers frozen into its document, which may no longer match any activity
+  // the app can still fetch.
+  const [statData, setStatData] = useState<StatData>(() => ({
+    distance:
+      parseFloat((routeState.distance as string) ?? "") ||
+      parseFloat((routeState.activityDistance as string) ?? "") ||
+      8.4,
+    distanceUnit: getDistanceUnit(),
+    // Strip whatever unit suffix the caller attached, rather than assuming km.
+    pace: (
+      (routeState.pace as string) ??
+      (routeState.activityPace as string) ??
+      "6:12"
+    ).replace(/\s*\/\s*\w+$/, ""),
+    time: (routeState.time as string) ?? (routeState.activityTime as string) ?? "52:18",
+    title: (routeState.title as string) ?? (routeState.activityTitle as string) ?? "Morning Run",
+    metrics: (routeState.metrics as StatData["metrics"]) ?? undefined,
+  }));
 
-  const [statLayout, setStatLayout] = useState<TemplateLayout>(
-    () =>
-      embeddedProps?.statLayout ??
-      (location.state?.statLayout as TemplateLayout | undefined) ??
-      resolveLayout(templateId, loadCustomLayouts())
+  // Slot positions the user has dragged, remembered per template.
+  const [customLayouts, setCustomLayouts] = useState<CustomLayouts>(() =>
+    loadCustomLayouts()
   );
-  // Auto-opens once so the strip teaches that stats are tappable, then never
-  // again. Any later tap on a stat brings it back.
-  const [selectedStatSlot, setSelectedStatSlot] = useState<StatSlotId | null>(() =>
-    shouldAutoOpenStrip(Boolean(selectedTemplateFamily ?? null)) ? "distance" : null
+  const [statLayout, setStatLayout] = useState<TemplateLayout>(() =>
+    resolveLayout(
+      (routeState.templateId as string | undefined) ?? TEMPLATE_FAMILIES[0].id,
+      loadCustomLayouts()
+    )
   );
+
+  // Stat slots the user has switched off, and whether dragging one stat drags
+  // them all. Both act on the template's stats as a set.
+  const [hiddenSlots, setHiddenSlots] = useState<Set<StatSlotId>>(new Set());
+  const [isGrouped, setIsGrouped] = useState<boolean>(false);
+
+  // Background sources
+  const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
+  const [isBackgroundSheetOpen, setIsBackgroundSheetOpen] = useState<boolean>(false);
+
+  // A layout is remembered per template and reused across activities, so a
+  // cycling layout carrying metric:power must not leave a blank chip behind on
+  // a treadmill run.
+  const resolvedStatLayout = pruneUnavailableMetricSlots(statLayout, statData) as TemplateLayout;
+
+  const placedMetricSlots = (Object.keys(resolvedStatLayout) as StatSlotId[]).filter(isMetricSlot);
+
+  const visibleStatLayout: TemplateLayout = Object.fromEntries(
+    Object.entries(resolvedStatLayout).filter(([slot]) => !hiddenSlots.has(slot as StatSlotId))
+  ) as TemplateLayout;
+
+  // Which stat carries the selection outline. Templates are switched from the
+  // lens strip, so tapping a stat only selects it.
+  const [selectedStatSlot, setSelectedStatSlot] = useState<StatSlotId | null>(null);
 
   // Alignment guides shown only while a drag is snapped.
   const [snapGuides, setSnapGuides] = useState<SnapLine[]>([]);
@@ -208,24 +294,107 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     if (rect) setCanvasSize({ width: rect.width, height: rect.height });
   };
 
-  useEffect(() => {
-    if (selectedStatSlot) markStripSeen();
-  }, [selectedStatSlot]);
-
   // Switching template re-skins the stats and restores whatever arrangement
-  // that template was last given, matching the camera.
+  // that template was last given.
   const handleSelectTemplate = (template: TemplateFamily) => {
     if (template.id === templateId) return;
     pushHistorySnapshot();
     setTemplateId(template.id);
-    setStatLayout(resolveLayout(template.id, loadCustomLayouts()));
+    updateKit(pushRecentTemplate(brandKit, template.id));
+    setStatLayout(resolveLayout(template.id, customLayouts));
+    setHiddenSlots(new Set());
     setSelectedStatSlot((prev) => (prev && prev !== "accent" ? prev : "distance"));
   };
 
   const handleStatLayoutChange = (next: TemplateLayout) => {
-    setStatLayout(next);
-    const updated = storeCustomLayout(loadCustomLayouts(), templateId, next);
+    // `next` carries only the visible slots, so fold it onto the full layout —
+    // otherwise dragging one stat would drop every hidden one.
+    const resolved: TemplateLayout = { ...statLayout, ...next };
+
+    // Grouped: the delta applied to the dragged stat applies to all of them.
+    if (isGrouped) {
+      const changedSlot = (Object.keys(next) as StatSlotId[]).find(
+        (slot) =>
+          next[slot]?.x !== statLayout[slot]?.x || next[slot]?.y !== statLayout[slot]?.y
+      );
+      const oldPos = changedSlot ? statLayout[changedSlot] : undefined;
+      const newPos = changedSlot ? next[changedSlot] : undefined;
+      if (changedSlot && oldPos && newPos) {
+        const dx = newPos.x - oldPos.x;
+        const dy = newPos.y - oldPos.y;
+        for (const slot of Object.keys(statLayout) as StatSlotId[]) {
+          if (slot === changedSlot) continue;
+          const pos = statLayout[slot];
+          if (!pos) continue;
+          resolved[slot] = {
+            x: Math.max(0, Math.min(100, pos.x + dx)),
+            y: Math.max(0, Math.min(100, pos.y + dy)),
+          };
+        }
+      }
+    }
+
+    setStatLayout(resolved);
+    const updated = storeCustomLayout(customLayouts, templateId, resolved);
     saveCustomLayouts(updated);
+    setCustomLayouts(updated);
+  };
+
+  /** Drops the user's drags for this template, back to its designed layout. */
+  const handleResetStatLayout = () => {
+    pushHistorySnapshot();
+    const updated = clearCustomLayout(customLayouts, templateId);
+    saveCustomLayouts(updated);
+    setCustomLayouts(updated);
+    setStatLayout(resolveLayout(templateId, updated));
+  };
+
+  /**
+   * Adds or removes a metric chip.
+   *
+   * New chips land just below centre rather than at the template's origin, so
+   * two metrics added in a row don't stack invisibly on top of each other.
+   */
+  const handleToggleMetric = (slot: StatSlotId) => {
+    pushHistorySnapshot();
+
+    setStatLayout((prev) => {
+      if (prev[slot]) {
+        const next = { ...prev };
+        delete next[slot];
+        return next;
+      }
+
+      const placedMetrics = (Object.keys(prev) as StatSlotId[]).filter(isMetricSlot).length;
+      return {
+        ...prev,
+        [slot]: { x: 12, y: Math.min(88, 58 + placedMetrics * 8) },
+      };
+    });
+
+    setSelectedStatSlot(slot);
+  };
+
+  const handleToggleSlot = (slot: StatSlotId) => {
+    setHiddenSlots((prev) => {
+      const nextSlots = new Set(prev);
+      if (nextSlots.has(slot)) nextSlots.delete(slot);
+      else nextSlots.add(slot);
+      return nextSlots;
+    });
+  };
+
+  /** Swaps the background photo from the camera or the background sheet. */
+  const applyBackground = (url: string) => {
+    pushHistorySnapshot();
+    setCapturedImage(url);
+    setIsCameraOpen(false);
+    setIsBackgroundSheetOpen(false);
+    try {
+      sessionStorage.setItem("temp_captured_image", url);
+    } catch {
+      // Quota exceeded — the image still lives in state for this session.
+    }
   };
 
   const [activeTool, setActiveTool] = useState<string | null>(null);
@@ -238,6 +407,19 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
   // Sticker Overlays state
   const [stickerOverlays, setStickerOverlays] = useState<StickerOverlay[]>([]);
   const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
+
+  // Route layer state. The geometry arrives with the activity — absent for
+  // treadmill runs, gym sessions, and every Health Connect activity, which is
+  // what gates the Route tool out of the rail entirely.
+  // State, not a derived constant: a reopened project restores its geometry
+  // from the document so the Route tool stays available.
+  const [routeGeometry, setRouteGeometry] = useState<RouteGeometry | undefined>(
+    (routeState.route as RouteGeometry | undefined) ?? undefined
+  );
+  const [routeOverlay, setRouteOverlay] = useState<RouteOverlay | null>(
+    (routeState.routeOverlay as RouteOverlay | undefined) ?? null
+  );
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
 
   // Sticker Picker Modal state
   const [isStickerModalOpen, setIsStickerModalOpen] = useState<boolean>(false);
@@ -266,32 +448,9 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
   const [selectedAlign, setSelectedAlign] = useState<TextOverlay["align"]>("center");
   const [selectedFontSize, setSelectedFontSize] = useState<number>(32);
 
-  // Unified Editor Snapshot interface for full Undo/Redo history
-  interface EditorSnapshot {
-    textOverlays: TextOverlay[];
-    stickerOverlays: StickerOverlay[];
-    templateId: string;
-    statLayout: TemplateLayout;
-    committedCrop: {
-      ratio: string;
-      rotation: number;
-      flipH: boolean;
-      flipV: boolean;
-    };
-    isBaseImageHidden: boolean;
-    isBaseImageLocked: boolean;
-    baseImageZIndex: number;
-    imagePerspectiveX: number;
-    imagePerspectiveY: number;
-    imageShadowBlur: number;
-    imageShadowOffsetY: number;
-    imageShadowColor: string;
-    isDrawingHidden: boolean;
-    isDrawingLocked: boolean;
-    drawingZIndex: number;
-    drawingCanvasDataUrl?: string | null;
-    hasDrawnStrokes: boolean;
-  }
+  // EditorSnapshot is imported from src/types.ts — a saved project extends it
+  // rather than redefining it, so undo and "reopen a project" restore exactly
+  // the same set of fields.
 
   // Drawing Tool State
   const drawingCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -306,10 +465,15 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
 
   // Helper to snapshot current canvas & editor state
   // Uses compressed data URL instead of raw ImageData (~8MB → ~200KB per snapshot)
-  const getCurrentSnapshot = (): EditorSnapshot => {
+  //
+  // `includeDrawing` exists because encoding the drawing canvas is by far the
+  // most expensive part of a snapshot, and the dirty check runs on every
+  // render. Undo, redo, and saving need the pixels; asking "has anything
+  // changed?" does not — that is what `hasDrawnStrokes` is for.
+  const getCurrentSnapshot = (includeDrawing: boolean = true): EditorSnapshot => {
     let drawingDataUrl: string | null = null;
     const canvas = drawingCanvasRef.current;
-    if (canvas && canvas.width > 0 && canvas.height > 0 && hasDrawnStrokes) {
+    if (includeDrawing && canvas && canvas.width > 0 && canvas.height > 0 && hasDrawnStrokes) {
       try {
         drawingDataUrl = canvas.toDataURL("image/png");
       } catch {
@@ -322,6 +486,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
       stickerOverlays: JSON.parse(JSON.stringify(stickerOverlays)),
       templateId,
       statLayout: JSON.parse(JSON.stringify(statLayout)),
+      capturedImage,
+      hiddenSlots: [...hiddenSlots],
       committedCrop: { ...committedCrop },
       isBaseImageHidden,
       isBaseImageLocked,
@@ -336,6 +502,9 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
       drawingZIndex,
       drawingCanvasDataUrl: drawingDataUrl,
       hasDrawnStrokes,
+      // Part of the snapshot so undo restores the route. Before this field
+      // existed, undoing past a route edit silently dropped the whole layer.
+      routeOverlay: routeOverlay ? JSON.parse(JSON.stringify(routeOverlay)) : null,
     };
   };
 
@@ -353,6 +522,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     // Snapshots taken before stats were tracked carry neither field.
     if (snapshot.templateId) setTemplateId(snapshot.templateId);
     if (snapshot.statLayout) setStatLayout(snapshot.statLayout);
+    if (snapshot.capturedImage) setCapturedImage(snapshot.capturedImage);
+    if (snapshot.hiddenSlots) setHiddenSlots(new Set(snapshot.hiddenSlots));
     setCommittedCrop(snapshot.committedCrop);
     setIsBaseImageHidden(snapshot.isBaseImageHidden);
     setIsBaseImageLocked(snapshot.isBaseImageLocked);
@@ -366,6 +537,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     setIsDrawingLocked(snapshot.isDrawingLocked);
     setDrawingZIndex(snapshot.drawingZIndex);
     setHasDrawnStrokes(snapshot.hasDrawnStrokes);
+    setRouteOverlay(snapshot.routeOverlay ?? null);
 
     // Restore drawing canvas from compressed data URL
     const canvas = drawingCanvasRef.current;
@@ -411,18 +583,68 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     showToast("Redo applied");
   };
 
+  // ── Brand kit ─────────────────────────────────────────────────────────
+  //
+  // Every session used to start from scratch: pick template, recolour,
+  // reposition. LensTemplate.isFavorite was declared and never used, and the
+  // nine hardcoded swatches were a ceiling rather than a starting point.
+
+  const [brandKit, setBrandKit] = useState<BrandKit>(() => loadBrandKit());
+
+  const updateKit = (next: BrandKit) => {
+    setBrandKit(next);
+    saveBrandKit(next);
+  };
+
+  const handleToggleFavouriteTemplate = (id: string) => {
+    updateKit(toggleFavouriteTemplate(brandKit, id));
+    triggerHaptic("light");
+  };
+
+  const handleAddCustomColor = (hex: string) => {
+    updateKit(addCustomColor(brandKit, hex));
+  };
+
+  /** Captures the current look — template, layout, filter, colour — as a preset. */
+  const handleSaveStylePreset = () => {
+    const preset: StylePreset = {
+      id: newPresetId(),
+      name: `Style ${brandKit.presets.length + 1}`,
+      createdAt: new Date().toISOString(),
+      templateId,
+      statLayout: JSON.parse(JSON.stringify(statLayout)),
+      hiddenSlots: [...hiddenSlots],
+      lensFilter,
+      filterIntensity,
+      textColor: selectedColor,
+    };
+
+    updateKit(addPreset(brandKit, preset));
+    showToast("Style saved");
+  };
+
+  const handleApplyStylePreset = (preset: StylePreset) => {
+    pushHistorySnapshot();
+    setTemplateId(preset.templateId);
+    setStatLayout(preset.statLayout);
+    setHiddenSlots(new Set(preset.hiddenSlots));
+    setLensFilter(preset.lensFilter);
+    setFilterIntensity(preset.filterIntensity);
+    setSelectedColor(preset.textColor);
+    showToast(`Applied ${preset.name}`);
+  };
+
+  const handleRemoveStylePreset = (presetId: string) => {
+    updateKit(removePreset(brandKit, presetId));
+  };
+
   // Crop & Orientation Tool State
   const [cropRatio, setCropRatio] = useState<string>("free"); // "free", "9:16", "1:1", "4:5", "16:9"
   const [cropRotation, setCropRotation] = useState<number>(0);
   const [cropFlipH, setCropFlipH] = useState<boolean>(false);
   const [cropFlipV, setCropFlipV] = useState<boolean>(false);
 
-  const [committedCrop, setCommittedCrop] = useState<{
-    ratio: string;
-    rotation: number;
-    flipH: boolean;
-    flipV: boolean;
-  }>({
+  const [committedCrop, setCommittedCrop] = useState<CommittedCrop>({
     ratio: "free",
     rotation: 0,
     flipH: false,
@@ -437,6 +659,226 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
   const [isDrawingHidden, setIsDrawingHidden] = useState<boolean>(false);
   const [isDrawingLocked, setIsDrawingLocked] = useState<boolean>(false);
   const [drawingZIndex, setDrawingZIndex] = useState<number>(15);
+
+  // ── Saved projects, drafts, and the exit guard ────────────────────────────
+  //
+  // A project is a document, not a flattened PNG. The document is the same
+  // EditorSnapshot undo uses, plus the four things that live outside it.
+
+  /** Set once this canvas belongs to a saved project, so Save updates in place. */
+  const [projectId, setProjectId] = useState<string | null>(
+    (routeState.projectId as string | undefined) ?? null
+  );
+  /** The document as last written to disk — the reference the dirty bit uses. */
+  const [savedDoc, setSavedDoc] = useState<EditorDoc | null>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isLoadingProject, setIsLoadingProject] = useState<boolean>(
+    Boolean(routeState.projectId)
+  );
+  const [pendingExit, setPendingExit] = useState<boolean>(false);
+  const [restorableDraft, setRestorableDraft] = useState<EditorDraft | null>(null);
+
+  const buildCurrentDoc = (includeDrawing: boolean = true): EditorDoc => {
+    const snapshot = getCurrentSnapshot(includeDrawing);
+    return buildDoc({
+      ...snapshot,
+      routeGeometry: routeGeometry ?? null,
+      lensFilter,
+      filterIntensity,
+      statData,
+    });
+  };
+
+  /** Restores a whole canvas from a document. */
+  const applyDoc = (doc: EditorDoc) => {
+    applySnapshot(doc);
+    setRouteGeometry(doc.routeGeometry ?? undefined);
+    setLensFilter(doc.lensFilter);
+    setFilterIntensity(doc.filterIntensity);
+    setStatData(doc.statData);
+  };
+
+  // Open a saved project. Only its id travels through router state; the
+  // document is loaded here so a page reload still resolves it.
+  useEffect(() => {
+    const id = routeState.projectId as string | undefined;
+    if (!id) return;
+
+    let cancelled = false;
+
+    getProject(id).then((project) => {
+      if (cancelled) return;
+
+      const doc = normalizeDoc(project?.doc);
+      if (!doc) {
+        setIsLoadingProject(false);
+        showToast("That project could not be opened");
+        return;
+      }
+
+      applyDoc(doc);
+      setSavedDoc(doc);
+      setIsLoadingProject(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // Router state is read once; re-running this would clobber edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Offer the last session back, but only on a genuinely blank entry. Arriving
+  // with an activity or a project is an explicit intent that shouldn't be
+  // second-guessed.
+  useEffect(() => {
+    const isBlankEntry =
+      !routeState.projectId && !routeState.title && !routeState.activityTitle;
+    if (!isBlankEntry) return;
+
+    let cancelled = false;
+
+    loadDraft().then((draft) => {
+      if (cancelled || !draft) return;
+      if (!normalizeDoc(draft.doc)) return;
+      setRestorableDraft(draft);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Runs every render, so it deliberately skips encoding the drawing canvas —
+  // docFingerprint ignores those pixels anyway.
+  const currentDoc = buildCurrentDoc(false);
+  const isDirty = !isLoadingProject && isDocDirty(currentDoc, savedDoc);
+
+  /** Renders the small JPEG the Projects grid shows for this canvas. */
+  const renderThumbnail = async (doc: EditorDoc): Promise<string> => {
+    const { width, height } = thumbnailSize(doc.committedCrop.ratio);
+    return renderComposite({
+      width,
+      height,
+      containerWidth: canvasRef.current?.clientWidth || 360,
+      containerHeight: canvasRef.current?.clientHeight || 640,
+      background: "#000000",
+      capturedImage: doc.capturedImage,
+      imageFilter: scaleFilter(doc.lensFilter, doc.filterIntensity / 100),
+      textOverlays: doc.textOverlays,
+      stickerOverlays: doc.stickerOverlays,
+      routeOverlay: doc.routeOverlay,
+      drawingCanvas: doc.isDrawingHidden ? null : drawingCanvasRef.current,
+      committedCrop: doc.committedCrop,
+      isBaseImageHidden: doc.isBaseImageHidden,
+      isDrawingHidden: doc.isDrawingHidden,
+      baseImageZIndex: doc.baseImageZIndex,
+      drawingZIndex: doc.drawingZIndex,
+      templateId: doc.templateId,
+      statLayout: doc.statLayout,
+      statData: doc.statData,
+      mimeType: "image/jpeg",
+      quality: 0.7,
+    });
+  };
+
+  /** Save keeps your layers editable. Export flattens. They are not the same. */
+  const handleSaveProject = async (): Promise<boolean> => {
+    if (isSaving) return false;
+    setIsSaving(true);
+
+    const doc = buildCurrentDoc();
+    const id = projectId ?? newProjectId();
+
+    try {
+      const thumbnail = await renderThumbnail(doc);
+      const ok = await saveProject({
+        id,
+        title: projectTitle(doc.statData),
+        updatedAt: new Date().toISOString(),
+        doc,
+        thumbnail,
+      });
+
+      if (!ok) {
+        showToast("Could not save — storage unavailable");
+        return false;
+      }
+
+      setProjectId(id);
+      setSavedDoc(doc);
+      await clearDraft();
+      showToast("Saved to Projects");
+      return true;
+    } catch {
+      showToast("Could not save this project");
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Autosave the in-progress canvas. Debounced on idle rather than run on an
+  // interval, so dragging a layer doesn't hammer IndexedDB.
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftFingerprint = isLoadingProject ? "" : docFingerprint(currentDoc);
+
+  useEffect(() => {
+    if (isLoadingProject || !isDirty) return;
+
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => {
+      const doc = buildCurrentDoc();
+      saveDraft({
+        projectId,
+        title: projectTitle(doc.statData),
+        savedAt: new Date().toISOString(),
+        doc,
+      });
+    }, 2000);
+
+    return () => {
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftFingerprint, isDirty, isLoadingProject]);
+
+  /** The X button. Ten minutes of layering used to end here with no warning. */
+  const handleRequestExit = () => {
+    if (isDirty) {
+      setPendingExit(true);
+      return;
+    }
+    navigate("/home");
+  };
+
+  const handleSaveAndExit = async () => {
+    const ok = await handleSaveProject();
+    if (ok) navigate("/home");
+  };
+
+  const handleDiscardAndExit = async () => {
+    await clearDraft();
+    navigate("/home");
+  };
+
+  const handleRestoreDraft = () => {
+    if (!restorableDraft) return;
+    const doc = normalizeDoc(restorableDraft.doc);
+    if (doc) {
+      applyDoc(doc);
+      setProjectId(restorableDraft.projectId);
+      showToast("Last session restored");
+    }
+    setRestorableDraft(null);
+  };
+
+  const handleDismissDraft = async () => {
+    setRestorableDraft(null);
+    await clearDraft();
+  };
+
 
   // Global Keyboard Shortcuts for Undo/Redo
   useEffect(() => {
@@ -463,7 +905,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [historyStack, redoHistoryStack, textOverlays, stickerOverlays, committedCrop, isBaseImageHidden, isBaseImageLocked, baseImageZIndex, isDrawingHidden, isDrawingLocked, drawingZIndex, hasDrawnStrokes]);
+  }, [historyStack, redoHistoryStack, textOverlays, stickerOverlays, committedCrop, isBaseImageHidden, isBaseImageLocked, baseImageZIndex, isDrawingHidden, isDrawingLocked, drawingZIndex, hasDrawnStrokes, templateId, statLayout, capturedImage, hiddenSlots]);
 
   // Get list of all active layers sorted by zIndex descending (topmost first)
   const getAllLayers = () => {
@@ -508,6 +950,19 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         locked: !!s.locked,
         zIndex: s.zIndex ?? (30 + idx),
       })),
+      ...(routeOverlay
+        ? [
+            {
+              id: routeOverlay.id,
+              type: "route" as const,
+              name: "Route",
+              subtext: `GPS path • ${routeOverlay.strokeWidth}px`,
+              hidden: !!routeOverlay.hidden,
+              locked: !!routeOverlay.locked,
+              zIndex: routeOverlay.zIndex ?? 40,
+            },
+          ]
+        : []),
     ];
 
     return items.sort((a, b) => b.zIndex - a.zIndex);
@@ -528,6 +983,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
       setStickerOverlays((prev) =>
         prev.map((s) => (s.id === id ? { ...s, hidden: !s.hidden } : s))
       );
+    } else if (type === "route") {
+      setRouteOverlay((prev) => (prev ? { ...prev, hidden: !prev.hidden } : prev));
     }
   };
 
@@ -546,6 +1003,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
       setStickerOverlays((prev) =>
         prev.map((s) => (s.id === id ? { ...s, locked: !s.locked } : s))
       );
+    } else if (type === "route") {
+      setRouteOverlay((prev) => (prev ? { ...prev, locked: !prev.locked } : prev));
     }
   };
 
@@ -578,6 +1037,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         setStickerOverlays((prev) =>
           prev.map((s) => (s.id === layerId ? { ...s, zIndex: newZ } : s))
         );
+      } else if (layerType === "route") {
+        setRouteOverlay((prev) => (prev ? { ...prev, zIndex: newZ } : prev));
       }
     };
 
@@ -624,6 +1085,11 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
       handleDeleteText(id);
     } else if (type === "sticker") {
       handleDeleteSticker(id);
+    } else if (type === "route") {
+      pushHistorySnapshot();
+      setRouteOverlay(null);
+      setSelectedRouteId(null);
+      showToast("Route removed");
     } else if (type === "draw") {
       handleClearDraw();
       showToast("Drawing layer cleared");
@@ -637,9 +1103,16 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     if (type === "text") {
       setSelectedTextId(id);
       setSelectedStickerId(null);
+      setSelectedRouteId(null);
     } else if (type === "sticker") {
       setSelectedStickerId(id);
       setSelectedTextId(null);
+      setSelectedRouteId(null);
+    } else if (type === "route") {
+      setSelectedRouteId(id);
+      setSelectedTextId(null);
+      setSelectedStickerId(null);
+      setActiveTool("route");
     } else if (type === "draw") {
       setActiveTool("draw");
     } else if (type === "image") {
@@ -806,15 +1279,17 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
   // Add Sticker to canvas
   const handleAddSticker = (item: StickerItem) => {
     pushHistorySnapshot();
-    // Build a unified stats record from available data.
-    // Extended metrics (HR, elevation, etc.) resolve to "--" until richer data flows through.
-    const stats: Record<string, string | number | undefined> = {
-      distance: statData.distance,
-      pace: statData.pace,
-      time: statData.time,
-      title: statData.title,
-    };
-    const stickerContent = resolveStickerContent(item.content, item.format, item.statKey, stats);
+    // Interpolate stat data if this sticker references a stat
+    let stickerContent = item.content;
+    if (item.statKey) {
+      const statValue = statData[item.statKey as keyof StatData];
+      if (statValue !== undefined && statValue !== null) {
+        stickerContent = String(statValue).toUpperCase();
+        if (item.statKey === "distance") stickerContent += " KM";
+        if (item.statKey === "pace") stickerContent += " /KM";
+        if (item.statKey === "time") stickerContent += "";
+      }
+    }
     const newSticker: StickerOverlay = {
       id: `sticker_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       content: stickerContent,
@@ -824,11 +1299,11 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
       x: 0,
       y: 0,
       bgGradient: item.bgGradient,
-      transparent: item.transparent,
     };
     setStickerOverlays((prev) => [...prev, newSticker]);
     setSelectedStickerId(newSticker.id);
     setSelectedTextId(null);
+    setSelectedRouteId(null);
     setIsStickerModalOpen(false);
     showToast(`Added ${item.label}`);
   };
@@ -931,30 +1406,89 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     showToast("Text deleted");
   };
 
-  // Floating toolbar tools list (only implemented features)
-  const tools = [
-    { id: "group", label: "Group", icon: Layers },
+  /**
+   * Add the activity's route to the canvas, or reopen its controls if it's
+   * already there — a second copy of the same run isn't something anyone
+   * wants. Deliberately does not select the layer: the selection box belongs
+   * to tapping the route itself, not to adding or restyling it.
+   */
+  const addOrEditRoute = () => {
+    if (!routeGeometry) return;
+
+    setSelectedTextId(null);
+    setSelectedStickerId(null);
+    setIsImageSelected(false);
+    setSelectedStatSlot(null);
+    setActiveTool("route");
+
+    if (routeOverlay) return;
+
+    pushHistorySnapshot();
+    const created: RouteOverlay = {
+      id: `route_${Date.now()}`,
+      geometry: routeGeometry,
+      x: 0,
+      y: 0,
+      // Sized off the shorter canvas edge: 40% of the width alone would
+      // overflow a portrait canvas vertically and dominate a landscape one.
+      size: Math.round(
+        Math.min(canvasRef.current?.clientWidth ?? 360, canvasRef.current?.clientHeight ?? 640) * 0.4
+      ),
+      color: "#FFFFFF",
+      strokeWidth: 3,
+      opacity: 1,
+      scale: 1,
+      rotation: 0,
+      zIndex: 40,
+    };
+    setRouteOverlay(created);
+    showToast("Route added");
+  };
+
+  // Tool rail contents (only implemented features)
+  const tools: RailTool[] = [
     { id: "layers", label: "Layers", icon: Layers },
     { id: "text", label: "Text", icon: Type },
     { id: "draw", label: "Draw", icon: PenTool },
     { id: "stickers", label: "Stickers", icon: StickyNote },
     { id: "crop", label: "Crop", icon: Crop },
     { id: "filters", label: "Filter", icon: Sparkles },
-    { id: "photo", label: "Photo", icon: ImageIcon },
-    { id: "stats", label: "Stats", icon: Eye },
-    { id: "template", label: "Layout", icon: LayoutTemplate },
   ];
 
+  /** A tool lights up while its panel is open or its effect is on the canvas. */
+  const isToolActive = (toolId: string): boolean => {
+    if (activeTool === toolId) return true;
+    switch (toolId) {
+      case "text":
+        return textOverlays.length > 0;
+      case "route":
+        return routeOverlay !== null;
+      case "draw":
+        return hasDrawnStrokes;
+      case "stickers":
+        return stickerOverlays.length > 0 || isStickerModalOpen;
+      case "crop":
+        return (
+          committedCrop.ratio !== "free" ||
+          committedCrop.rotation !== 0 ||
+          committedCrop.flipH ||
+          committedCrop.flipV
+        );
+      case "filters":
+        return lensFilter !== "" || isFilterPickerOpen;
+      default:
+        return false;
+    }
+  };
+
   const handleToolClick = (toolId: string) => {
-    if (toolId === "group") {
-      setIsGrouped((g) => !g);
-      setGroupOffset({ x: 0, y: 0 });
-      showToast(isGrouped ? "Ungrouped" : "Grouped — drag any element to move all");
-    } else if (toolId === "layers") {
+    if (toolId === "layers") {
       setActiveTool(activeTool === "layers" ? null : "layers");
       showToast(activeTool === "layers" ? "Layers closed" : "Layer Manager opened");
     } else if (toolId === "text") {
       openTextEditor();
+    } else if (toolId === "route") {
+      addOrEditRoute();
     } else if (toolId === "stickers") {
       setIsStickerModalOpen(true);
       setActiveTool("stickers");
@@ -971,33 +1505,17 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     } else if (toolId === "filters") {
       setIsFilterPickerOpen(true);
       setActiveTool("filters");
-    } else if (toolId === "photo") {
-      setShowPhotoPicker(true);
-      setActiveTool("photo");
-    } else if (toolId === "stats") {
-      setShowStatSelector(true);
-      setActiveTool("stats");
-    } else if (toolId === "template") {
-      setShowTemplateCarousel(true);
-      setActiveTool("template");
     }
   };
 
-  // Live stats for sticker resolution in the picker + search
-  const liveStats: Record<string, string | number | undefined> = {
-    distance: statData.distance, pace: statData.pace,
-    time: statData.time, title: statData.title,
-  };
-
   // Filtered stickers for the picker modal
-  const filteredStickers = stickers.filter((item) => {
+  const filteredStickers = STICKER_LIBRARY.filter((item) => {
     const matchesCategory =
       selectedStickerCategory === "All" || item.category === selectedStickerCategory;
-    const resolved = resolveStickerContent(item.content, item.format, item.statKey, liveStats);
     const matchesSearch =
       !stickerSearch.trim() ||
       item.label.toLowerCase().includes(stickerSearch.toLowerCase()) ||
-      resolved.toLowerCase().includes(stickerSearch.toLowerCase());
+      item.content.toLowerCase().includes(stickerSearch.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
@@ -1051,60 +1569,6 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
     }
   };
 
-  // ── Draggable lens element wrapper ──
-  function LensDragElement({ el, idx, pos }: { el: EditableLensElement; idx: number; pos: { x: number; y: number } }) {
-    const dx = useMotionValue(0);
-    const dy = useMotionValue(0);
-
-    return (
-      <motion.div
-        drag
-        dragConstraints={canvasRef}
-        dragElastic={0.05}
-        dragMomentum={false}
-        style={{
-          left: `${pos.x}%`, top: `${pos.y}%`, x: dx, y: dy,
-          fontSize: `${Math.round(el.fontSize * 0.45)}px`,
-          fontFamily: el.fontFamily, fontWeight: el.fontWeight,
-          fontStyle: el.fontStyle, color: el.color,
-          textAlign: el.textAlign, opacity: el.opacity ?? 1,
-          textShadow: "0 2px 10px rgba(0,0,0,0.8)",
-          transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
-          maxWidth: "70%", lineHeight: 1.2, whiteSpace: "pre-wrap",
-          overflow: "hidden", textOverflow: "ellipsis",
-          zIndex: 10 + idx,
-        }}
-        onDragEnd={(_, info) => {
-          const canvas = canvasRef.current?.getBoundingClientRect();
-          if (!canvas) return;
-          setLensPositions((prev) => ({
-            ...prev,
-            [el.id]: {
-              x: pos.x + (info.offset.x / canvas.width) * 100,
-              y: pos.y + (info.offset.y / canvas.height) * 100,
-            },
-          }));
-          dx.set(0); dy.set(0);
-        }}
-        className="absolute touch-none select-none cursor-grab active:cursor-grabbing group"
-      >
-        {/* Delete button — visible on hover */}
-        <button onClick={(e) => {
-          e.stopPropagation();
-          setHiddenLensElements((prev) => new Set(prev).add(el.id));
-        }}
-          className="absolute -top-2.5 -right-2.5 w-5 h-5 rounded-full bg-rose-600/90 border border-white/30 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity z-50 hover:scale-110"
-          title="Remove element"
-        >
-          <X className="w-3 h-3" />
-        </button>
-        {el.type === "metric" && el.metricId
-          ? resolveStickerContent(el.content, el.content, el.metricId, statData as unknown as Record<string, string | number | undefined>)
-          : el.content}
-      </motion.div>
-    );
-  }
-
   return (
     <div className="relative w-full h-screen bg-black text-white overflow-hidden flex flex-col justify-between select-none">
       {/* 1. FULL-SCREEN CANVAS DISPLAYING CAPTURED IMAGE & OVERLAYS */}
@@ -1113,6 +1577,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         onClick={() => {
           setSelectedTextId(null);
           setSelectedStickerId(null);
+          setSelectedRouteId(null);
           setIsImageSelected(false);
           setSelectedStatSlot(null);
         }}
@@ -1129,12 +1594,13 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
             setIsImageSelected(true);
             setSelectedTextId(null);
             setSelectedStickerId(null);
+            setSelectedRouteId(null);
             setSelectedStatSlot(null);
           }}
           className={`relative transition-all duration-300 flex items-center justify-center ${
             currentRatio !== "free" ? "rounded-2xl shadow-2xl border border-white/20 overflow-hidden" : "w-full h-full"
           } ${isBaseImageHidden ? "opacity-0 pointer-events-none" : "opacity-100"} ${
-            isImageSelected ? "ring-2 ring-blue-500 ring-offset-4 ring-offset-black/90 shadow-[0_0_20px_rgba(59,130,246,0.6)]" : ""
+            isImageSelected ? "ring-2 ring-selection ring-offset-4 ring-offset-black/90 shadow-[0_0_20px_rgba(59,130,246,0.6)]" : ""
           }`}
           style={{
             ...getAspectRatioContainerStyle(currentRatio),
@@ -1160,7 +1626,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
               transform: `rotate(${currentRotation}deg) scaleX(${currentFlipH ? -1 : 1}) scaleY(${
                 currentFlipV ? -1 : 1
               })`,
-              filter: lensFilter || undefined,
+              filter: composedFilter || undefined,
               transition: "transform 0.3s ease, filter 0.4s ease",
             }}
             className="w-full h-full object-cover select-none pointer-events-none"
@@ -1192,12 +1658,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         </div>
 
         {/* DRAGGABLE TEMPLATE STATS — sit under user-added text overlays */}
-        {(() => {
-          const visibleStatLayout: TemplateLayout = Object.fromEntries(
-            Object.entries(statLayout).filter(([slot]) => !hiddenSlots.has(slot as StatSlotId))
-          ) as TemplateLayout;
-          return (
-          <StatLayer
+        <StatLayer
           templateId={templateId}
           data={statData}
           layout={visibleStatLayout}
@@ -1208,6 +1669,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
             setSelectedStatSlot(slot);
             setSelectedTextId(null);
             setSelectedStickerId(null);
+            setSelectedRouteId(null);
             setIsImageSelected(false);
           }}
           onDragStart={() => {
@@ -1217,43 +1679,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
           onGuidesChange={setSnapGuides}
           onSnap={() => triggerHaptic("snap")}
         />
-        );
-        })()}
 
         <SnapGuides guides={snapGuides} canvas={canvasSize} />
-
-        {/* GROUP DRAG PLANE — intercepts drags when grouped */}
-        {isGrouped && (
-          <motion.div
-            drag dragConstraints={canvasRef} dragElastic={0.05} dragMomentum={false}
-            onDragEnd={(_, info) => setGroupOffset((p) => ({ x: p.x + info.offset.x, y: p.y + info.offset.y }))}
-            className="absolute inset-0 z-45 cursor-grab active:cursor-grabbing"
-            style={{ pointerEvents: "auto" }}
-          />
-        )}
-
-        {/* GROUP WRAPPER — all groupable elements move together when grouped */}
-        <div style={{ transform: isGrouped ? `translate(${groupOffset.x}px,${groupOffset.y}px)` : undefined }}>
-
-        {/* LENS TEMPLATE ELEMENTS — draggable overlays from the active lens design */}
-        {activeLens?.defaultElements.filter((el) => !hiddenLensElements.has(el.id)).map((el, idx) => {
-          const pos = lensPositions[el.id] ?? { x: el.x, y: el.y };
-          return <LensDragElement key={`${activeLens.id}_${el.id}`} el={el} idx={idx} pos={pos} />;
-        })}
-
-        {/* CONTEXTUAL STAT TOOLBAR — template switching for the tapped stat */}
-        <AnimatePresence>
-          {selectedStatSlot && statLayout[selectedStatSlot] && (
-            <StatToolbar
-              templates={templateFamilies}
-              selectedTemplateId={templateId}
-              onSelectTemplate={handleSelectTemplate}
-              slotY={statLayout[selectedStatSlot]!.y}
-              selectedSlot={selectedStatSlot}
-              onClose={() => setSelectedStatSlot(null)}
-            />
-          )}
-        </AnimatePresence>
 
         {/* DRAGGABLE TEXT OVERLAYS ON CANVAS */}
         {textOverlays.map((overlay) => {
@@ -1285,6 +1712,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                 }
                 setSelectedTextId(overlay.id);
                 setSelectedStickerId(null);
+                setSelectedRouteId(null);
                 setIsImageSelected(false);
                 setSelectedStatSlot(null);
               }}
@@ -1308,7 +1736,9 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                 overlay.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
               } ${
                 isSelected
-                  ? "p-2 border-2 border-blue-500 rounded-2xl shadow-[0_0_15px_rgba(59,130,246,0.6)] relative z-30"
+                  ? // See the sticker layer: `relative` would override the
+                    // base `absolute` and pull this out of position.
+                    "p-2 border-2 border-blue-500 rounded-2xl shadow-[0_0_15px_rgba(59,130,246,0.6)] z-30"
                   : "p-1"
               }`}
             >
@@ -1427,6 +1857,65 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         })}
 
         {/* DRAGGABLE STICKER OVERLAYS ON CANVAS */}
+        {routeOverlay && !routeOverlay.hidden && (
+          <DraggableLayer
+            key={routeOverlay.id}
+            draggable={!routeOverlay.locked}
+            constraintsRef={canvasRef}
+            onDragStart={() => {
+              captureCanvasSize();
+              pushHistorySnapshot();
+            }}
+            onGuidesChange={setSnapGuides}
+            onSnap={() => triggerHaptic("snap")}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (routeOverlay.locked) {
+                showToast("Layer is locked");
+                return;
+              }
+              setSelectedRouteId(routeOverlay.id);
+              setSelectedTextId(null);
+              setSelectedStickerId(null);
+              setIsImageSelected(false);
+              setSelectedStatSlot(null);
+            }}
+            onCommit={(next) => {
+              setRouteOverlay((prev) => (prev ? { ...prev, ...next } : prev));
+            }}
+            x={routeOverlay.x}
+            y={routeOverlay.y}
+            rotate={routeOverlay.rotation}
+            scale={routeOverlay.scale}
+            zIndex={routeOverlay.zIndex ?? 40}
+            // Only the drawn path is tappable; the rest of the square box
+            // must stay transparent to taps meant for the photo.
+            hitArea="children"
+            className={`absolute touch-none flex items-center justify-center rounded-2xl transition-all ${
+              routeOverlay.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
+            } ${
+              selectedRouteId === routeOverlay.id
+                ? // No `relative` here, deliberately: Tailwind emits it after
+                  // `absolute`, so it would win and drop this layer back into
+                  // flex flow, displacing the photo. No fill or blur either —
+                  // a route's box is large, so a tint would darken a big
+                  // region of the photo rather than hint at a small element.
+                  "border border-dashed border-blue-400/70 z-30"
+                : ""
+            }`}
+          >
+            {selectedRouteId === routeOverlay.id && (
+              <>
+                <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full z-30" />
+                <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full z-30" />
+                <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full z-30" />
+                <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-blue-500 border-2 border-white rounded-full z-30" />
+              </>
+            )}
+            <RouteLayer overlay={routeOverlay} />
+          </DraggableLayer>
+        )}
+
         {stickerOverlays.map((sticker) => {
           if (sticker.hidden) return null;
           const isSelected = selectedStickerId === sticker.id;
@@ -1449,6 +1938,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                 }
                 setSelectedStickerId(sticker.id);
                 setSelectedTextId(null);
+                setSelectedRouteId(null);
                 setIsImageSelected(false);
                 setSelectedStatSlot(null);
               }}
@@ -1466,7 +1956,10 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                 sticker.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
               } ${
                 isSelected
-                  ? "border-2 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.6)] " + (sticker.transparent ? "" : "bg-black/30 backdrop-blur-xs ") + "relative z-30"
+                  ? // No `relative`: Tailwind emits it after `absolute`, so it
+                    // would win and drop this layer into flex flow, shifting
+                    // the photo. z-30 alone gives the stacking this needs.
+                    "border-2 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.6)] bg-black/30 backdrop-blur-xs z-30"
                   : ""
               }`}
             >
@@ -1480,22 +1973,13 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                 </>
               )}
 
-              {sticker.transparent ? (
-                <div
-                  className="px-2 py-1 text-white font-extrabold text-lg tracking-wider uppercase flex items-center gap-2 select-none"
-                  style={{ textShadow: "0 2px 8px rgba(0,0,0,0.7)" }}
-                >
-                  {sticker.content}
-                </div>
-              ) : (
-                <div
-                  className={`px-4 py-2 rounded-2xl bg-gradient-to-r ${
-                    sticker.bgGradient || "from-amber-500 to-yellow-400"
-                  } text-white font-extrabold text-lg tracking-wider uppercase shadow-2xl border border-white/30 flex items-center gap-2 select-none`}
-                >
-                  {sticker.content}
-                </div>
-              )}
+              <div
+                className={`px-4 py-2 rounded-2xl bg-gradient-to-r ${
+                  sticker.bgGradient || "from-amber-500 to-yellow-400"
+                } text-white font-extrabold text-lg tracking-wider uppercase shadow-2xl border border-white/30 flex items-center gap-2 select-none`}
+              >
+                {sticker.content}
+              </div>
 
               {/* Sticker Layer Floating Blue Action Toolbar */}
               {isSelected && (
@@ -1587,8 +2071,6 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
           );
         })}
 
-        </div>{/* end group wrapper */}
-
         {/* DRAWING CANVAS LAYER */}
         <canvas
           ref={drawingCanvasRef}
@@ -1610,90 +2092,49 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         {/* Subtle dark gradient overlay for top/bottom bars legibility */}
         <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/80 via-black/40 to-transparent pointer-events-none z-0" />
         <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none z-0" />
-
-        {/* TEMPLATE & LENS CAROUSEL — always-visible strip at bottom */}
-        <div className="absolute bottom-2 inset-x-2 z-10">
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 px-1" style={{ scrollbarWidth: "none" }}>
-            {templateFamilies.map((tmpl) => {
-              const isActive = tmpl.id === templateId;
-              return (
-                <button key={tmpl.id} onClick={() => handleSelectTemplate(tmpl)}
-                  className={`flex flex-col items-center gap-0.5 shrink-0 w-[52px] transition-all active:scale-90 ${
-                    isActive ? "scale-105" : "opacity-50 hover:opacity-85"
-                  }`}
-                >
-                  <div className={`w-[44px] h-[44px] rounded-full flex items-center justify-center text-base border-2 transition-all ${
-                    isActive ? "border-ember bg-ember/10 shadow-[0_0_10px_var(--color-ember-glow)]" : "border-white/15 bg-black/60 backdrop-blur-md"
-                  }`}>
-                    <span className="drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]">{tmpl.icon}</span>
-                  </div>
-                  <span className="text-[8px] font-semibold text-center leading-tight max-w-[52px] text-white/70 truncate">
-                    {tmpl.name}
-                  </span>
-                </button>
-              );
-            })}
-            {lensTemplates.length > 0 && (
-              <div className="w-px h-8 bg-white/10 mx-1 shrink-0" />
-            )}
-            {lensTemplates.map((lens) => {
-              const isActive = activeLens?.id === lens.id;
-              return (
-                <button key={lens.id} onClick={() => {
-                  setActiveLens(isActive ? null : lens);
-                  setLensFilter(isActive ? "" : (lensFilters[lens.overlayType] || ""));
-                }}
-                  className={`flex flex-col items-center gap-0.5 shrink-0 w-[52px] transition-all active:scale-90 ${
-                    isActive ? "scale-105" : "opacity-50 hover:opacity-85"
-                  }`}
-                >
-                  <div className={`w-[44px] h-[44px] rounded-full flex items-center justify-center text-base border-2 transition-all ${
-                    isActive ? "border-ember bg-ember/10 shadow-[0_0_10px_var(--color-ember-glow)]" : "border-white/15 bg-black/60 backdrop-blur-md"
-                  }`}>
-                    <span className="drop-shadow-[0_1px_4px_rgba(0,0,0,0.5)]">{lens.icon}</span>
-                  </div>
-                  <span className="text-[8px] font-semibold text-center leading-tight max-w-[52px] text-white/70 truncate">
-                    {lens.name}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
       </div>
 
-      {/* 2. TOP BAR */}
-      <div className="relative z-20 flex items-center justify-between px-4 pt-12 pb-3 w-full">
-        {/* Close / Back to Camera */}
+      {/* 2. TOP BAR — close, the Editor badge and stat chips, then history */}
+      <div className="relative z-20 flex items-center gap-2 px-4 pt-12 pb-3 w-full">
+        {/* Close */}
         <button
-          onClick={() => embeddedProps?.onExit ? embeddedProps.onExit() : navigate("/home")}
-          className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-95 transition-transform"
+          onClick={handleRequestExit}
+          className="shrink-0 w-10 h-10 rounded-full bg-black/50 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-95 transition-transform"
           aria-label="Close Editor"
         >
           <X className="w-5 h-5" />
         </button>
 
-        {/* Center — template name (tappable) + active lens filter */}
-        <div className="flex items-center gap-2">
-          <button onClick={() => setShowTemplateCarousel(true)}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-xs font-semibold text-white/90 hover:bg-black/60 transition-all active:scale-95">
-            <span className="text-sm">{templateFamilies.find(t => t.id === templateId)?.icon || "🏃"}</span>
-            <span>{templateFamilies.find(t => t.id === templateId)?.name || "Default"}</span>
-          </button>
-          {lensFilter && (
-            <span className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-xs font-semibold text-ember">
-              <Sparkles className="w-3 h-3" />
-              <span>
-                {lensTemplates.find(
-                  (l) => lensFilters[l.overlayType] === lensFilter
-                )?.name || "Filtered"}
-              </span>
+        {/* Badge + stat chips share the middle, scrolling on narrow screens */}
+        <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        {/* Active lens filter — only present once a filter is applied */}
+        {lensFilter && (
+          <div className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-xs font-semibold text-ember">
+            <Sparkles className="w-3 h-3" />
+            <span>
+              {LENS_TEMPLATES_EXPANDED.find(
+                (l) => LENS_FILTER_MAP[l.overlayType] === lensFilter
+              )?.name || "Filtered"}
             </span>
-          )}
+          </div>
+        )}
+
+          {/* Stat chips — act on the template's stats as a set */}
+          <StatChipsBar
+            statData={statData}
+            placedMetricSlots={placedMetricSlots}
+            onToggleMetric={handleToggleMetric}
+            hiddenSlots={hiddenSlots}
+            onToggleSlot={handleToggleSlot}
+            isGrouped={isGrouped}
+            onToggleGroup={() => setIsGrouped((prev) => !prev)}
+            isCustomized={hasCustomLayout(customLayouts, templateId)}
+            onReset={handleResetStatLayout}
+          />
         </div>
 
         {/* Right Actions: Undo, Redo, Save */}
-        <div className="flex items-center gap-2">
+        <div className="shrink-0 flex items-center gap-2">
           <button
             onClick={handleGlobalUndo}
             disabled={historyStack.length === 0}
@@ -1712,65 +2153,47 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
           >
             <Redo className="w-4 h-4" />
           </button>
+          {/* Save keeps your layers editable; Export flattens. Two actions,
+              because the single download icon used to do both jobs badly. */}
+          <button
+            onClick={handleSaveProject}
+            disabled={isSaving || !isDirty}
+            className={`h-9 px-3 rounded-full backdrop-blur-md border flex items-center justify-center gap-1.5 text-xs font-bold active:scale-95 transition-all disabled:opacity-40 ${
+              isDirty
+                ? "bg-ember text-ink border-ember"
+                : "bg-black/50 text-white/80 border-white/15"
+            }`}
+            aria-label={isDirty ? "Save project" : "Project saved"}
+            title="Save project (keeps layers editable)"
+          >
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : isDirty ? (
+              <Save className="w-4 h-4" />
+            ) : (
+              <Check className="w-4 h-4" />
+            )}
+            <span>{isSaving ? "Saving" : isDirty ? "Save" : "Saved"}</span>
+          </button>
+
           <button
             onClick={() => setIsExportModalOpen(true)}
             className="w-9 h-9 rounded-full bg-black/50 backdrop-blur-md border border-white/15 flex items-center justify-center text-white/80 hover:text-white active:scale-95 transition-transform"
-            aria-label="Export / Save"
-            title="Export / Save Creation"
+            aria-label="Export"
+            title="Export image"
           >
             <Download className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* 3. FLOATING TOOLBAR (RIGHT SIDE) */}
-      <div className="absolute right-4 top-28 z-20 flex flex-col gap-3.5">
-        {tools.map((tool) => {
-          const Icon = tool.icon;
-          const isActive =
-            activeTool === tool.id ||
-            (tool.id === "group" && isGrouped) ||
-            (tool.id === "layers" && activeTool === "layers") ||
-            (tool.id === "text" && textOverlays.length > 0) ||
-            (tool.id === "draw" && (hasDrawnStrokes || activeTool === "draw")) ||
-            (tool.id === "stickers" && (stickerOverlays.length > 0 || isStickerModalOpen)) ||
-            (tool.id === "crop" &&
-              (committedCrop.ratio !== "free" ||
-                committedCrop.rotation !== 0 ||
-                committedCrop.flipH ||
-                committedCrop.flipV ||
-                activeTool === "crop")) ||
-            (tool.id === "filters" && (lensFilter !== "" || isFilterPickerOpen)) ||
-            (tool.id === "photo" && showPhotoPicker) ||
-            (tool.id === "stats" && showStatSelector) ||
-            (tool.id === "template" && showTemplateCarousel);
-          return (
-            <button
-              key={tool.id}
-              onClick={() => handleToolClick(tool.id)}
-              className={`flex flex-col items-center gap-1 group relative transition-all duration-200 active:scale-90`}
-            >
-              <div
-                className={`w-11 h-11 rounded-full flex items-center justify-center backdrop-blur-md transition-all shadow-lg relative ${
-                  isActive
-                    ? "bg-ember text-ink border-2 border-ember shadow-[0_0_20px_var(--color-ember-glow)] scale-105"
-                    : "bg-black/60 text-white border border-white/20 hover:bg-black/80"
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                {tool.id === "layers" && getAllLayers().length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-ember text-ink text-[9px] font-black flex items-center justify-center border border-black shadow">
-                    {getAllLayers().length}
-                  </span>
-                )}
-              </div>
-              <span className="text-[10px] font-medium text-white/90 drop-shadow-md">
-                {tool.label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {/* 3. COLLAPSIBLE TOOL RAIL (RIGHT SIDE) */}
+      <ToolRail
+        tools={tools}
+        onToolClick={handleToolClick}
+        isToolActive={isToolActive}
+        layerCount={getAllLayers().length}
+      />
 
       {/* TOAST NOTIFICATION FOR TOOLS */}
       <AnimatePresence>
@@ -1779,6 +2202,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
+            role="status"
+            aria-live="polite"
             className="absolute top-24 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-full bg-black/80 backdrop-blur-md border border-white/20 text-xs text-white font-medium shadow-xl flex items-center gap-2"
           >
             <Info className="w-3.5 h-3.5 text-ember" />
@@ -1786,6 +2211,99 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* EXIT GUARD — the X button used to discard everything silently.
+          Rendered without AnimatePresence: an exit animation that stalls would
+          leave an invisible panel over the canvas still swallowing taps, and a
+          dialog that must disappear the instant it is dismissed is not worth
+          that risk for a fade-out. */}
+      {pendingExit && (
+          <motion.div
+            key="exit-guard"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="absolute inset-0 z-[60] bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="exit-guard-title"
+          >
+            <motion.div
+              initial={{ y: 40, scale: 0.96 }}
+              animate={{ y: 0, scale: 1 }}
+              className="w-full max-w-sm bg-neutral-900 border border-white/15 rounded-3xl p-5 text-white shadow-2xl"
+            >
+              <h3 id="exit-guard-title" className="text-base font-extrabold tracking-tight">
+                Keep your edits?
+              </h3>
+              <p className="text-xs text-white/60 mt-1.5">
+                You have unsaved changes on this canvas.
+              </p>
+
+              <div className="mt-5 space-y-2">
+                <button
+                  onClick={handleSaveAndExit}
+                  disabled={isSaving}
+                  className="w-full py-3 rounded-2xl bg-ember hover:bg-ember-press text-ink font-black text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  <span>{isSaving ? "Saving…" : "Save & exit"}</span>
+                </button>
+                <button
+                  onClick={handleDiscardAndExit}
+                  disabled={isSaving}
+                  className="w-full py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold text-xs active:scale-[0.98] transition-transform disabled:opacity-50"
+                >
+                  Discard changes
+                </button>
+                <button
+                  onClick={() => setPendingExit(false)}
+                  className="w-full py-2.5 rounded-2xl text-white/60 hover:text-white font-bold text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+      {/* RESTORE LAST SESSION — offered only on a genuinely blank entry.
+          Same reasoning as the exit guard: no exit animation, so dismissing it
+          cannot leave a transparent panel sitting over the lens strip. */}
+      {restorableDraft && (
+          <motion.div
+            key="restore-draft"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="absolute inset-x-4 bottom-28 z-[55] bg-neutral-900/95 backdrop-blur-md border border-white/15 rounded-2xl p-4 shadow-2xl"
+            role="status"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 shrink-0 rounded-full bg-ember/20 text-ember border border-ember/30 flex items-center justify-center">
+                <RotateCcw className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-white">Restore your last session?</p>
+                <p className="text-[11px] text-white/60 mt-0.5 truncate">
+                  {restorableDraft.title} · {formatRelativeTime(restorableDraft.savedAt)}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                onClick={handleDismissDraft}
+                className="py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold text-xs active:scale-95 transition-transform"
+              >
+                Start fresh
+              </button>
+              <button
+                onClick={handleRestoreDraft}
+                className="py-2.5 rounded-xl bg-ember hover:bg-ember-press text-ink font-black text-xs active:scale-95 transition-transform"
+              >
+                Restore
+              </button>
+            </div>
+          </motion.div>
+        )}
 
       {/* 4. FULL-SCREEN TEXT EDITOR OVERLAY MODAL */}
       <AnimatePresence>
@@ -1898,6 +2416,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                     <button
                       key={bg.id}
                       onClick={() => setSelectedBgStyle(bg.id)}
+                      aria-pressed={selectedBgStyle === bg.id}
+                      aria-label={`Text background: ${bg.label}`}
                       className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
                         selectedBgStyle === bg.id
                           ? "bg-ember text-ink shadow-md"
@@ -1966,10 +2486,47 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                           ? "ring-2 ring-ember ring-offset-2 ring-offset-black scale-110 border-white"
                           : "border-white/20"
                       }`}
-                      aria-label={`Select color ${c.name}`}
+                      aria-label={`Text colour ${c.name}`}
+                      aria-pressed={isSelected}
                     />
                   );
                 })}
+
+                {/* The nine built-ins are a starting point, not a ceiling. */}
+                {brandKit.customColors.map((hex) => {
+                  const isSelected = selectedColor.toLowerCase() === hex.toLowerCase();
+                  return (
+                    <button
+                      key={hex}
+                      onClick={() => setSelectedColor(hex)}
+                      style={{ backgroundColor: hex }}
+                      className={`w-8 h-8 rounded-full shrink-0 border-2 transition-transform active:scale-90 ${
+                        isSelected
+                          ? "ring-2 ring-ember ring-offset-2 ring-offset-black scale-110 border-white"
+                          : "border-white/20"
+                      }`}
+                      aria-label={`Saved colour ${hex}`}
+                      aria-pressed={isSelected}
+                    />
+                  );
+                })}
+
+                <label
+                  className="w-8 h-8 rounded-full shrink-0 border-2 border-dashed border-white/30 flex items-center justify-center text-white/60 hover:text-white cursor-pointer active:scale-90 transition-transform"
+                  title="Add a custom colour"
+                >
+                  <Plus className="w-4 h-4" />
+                  <input
+                    type="color"
+                    value={selectedColor}
+                    onChange={(e) => {
+                      setSelectedColor(e.target.value);
+                      handleAddCustomColor(e.target.value);
+                    }}
+                    className="sr-only"
+                    aria-label="Add a custom text colour"
+                  />
+                </label>
               </div>
             </div>
           </motion.div>
@@ -2026,10 +2583,10 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
               {/* CATEGORY TABS */}
               <div className="w-full">
                 <GestureSwipeCarousel
-                  items={["All", "Distance", "Pace", "Time", "Heart Rate", "Elevation", "Speed", "Cadence", "Energy", "Power", "Weather"]}
-                  selectedIndex={["All", "Distance", "Pace", "Time", "Heart Rate", "Elevation", "Speed", "Cadence", "Energy", "Power", "Weather"].indexOf(selectedStickerCategory)}
+                  items={["All", "Badges", "Stats", "Locations"]}
+                  selectedIndex={["All", "Badges", "Stats", "Locations"].indexOf(selectedStickerCategory)}
                   onSelectIndex={(index) => {
-                    const cats = ["All", "Distance", "Pace", "Time", "Heart Rate", "Elevation", "Speed", "Cadence", "Energy", "Power", "Weather"];
+                    const cats = ["All", "Badges", "Stats", "Locations"];
                     setSelectedStickerCategory(cats[index]);
                   }}
                   itemGap={8}
@@ -2063,21 +2620,12 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                     <button
                       key={item.id}
                       onClick={() => handleAddSticker(item)}
-                      className={`flex items-center justify-center p-3 rounded-2xl border transition-all active:scale-95 group relative min-h-[56px] ${
-                        item.transparent
-                          ? "bg-surface border-white/10 hover:border-white/30"
-                          : `bg-gradient-to-r ${item.bgGradient || "from-amber-500 to-yellow-400"} border-white/20 shadow-lg`
+                      className={`flex items-center justify-center p-3 rounded-2xl border transition-all active:scale-95 group relative ${
+                        `bg-gradient-to-r ${item.bgGradient || "from-amber-500 to-yellow-400"} border-white/20 shadow-lg min-h-[56px]`
                       }`}
                     >
-                      <span
-                        className={`text-xs font-extrabold uppercase text-center leading-tight ${
-                          item.transparent
-                            ? "text-white"
-                            : "text-white tracking-wider drop-shadow-md"
-                        }`}
-                        style={item.transparent ? { textShadow: "0 1px 4px rgba(0,0,0,0.6)" } : undefined}
-                      >
-                        {resolveStickerContent(item.content, item.format, item.statKey, liveStats)}
+                      <span className="text-xs font-extrabold text-white tracking-wider uppercase text-center drop-shadow-md leading-tight">
+                        {item.content}
                       </span>
                     </button>
                   ))}
@@ -2100,6 +2648,25 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
 
       {/* DRAWING TOOL FLOATING CONTROL PANEL */}
       <AnimatePresence>
+        {activeTool === "route" && routeOverlay && (
+          <RouteLayerControls
+            overlay={routeOverlay}
+            palette={COLOR_PALETTE}
+            onChange={(next) => {
+              pushHistorySnapshot();
+              setRouteOverlay((prev) => (prev ? { ...prev, ...next } : prev));
+            }}
+            onDelete={() => {
+              pushHistorySnapshot();
+              setRouteOverlay(null);
+              setSelectedRouteId(null);
+              setActiveTool(null);
+              showToast("Route removed");
+            }}
+            onClose={() => setActiveTool(null)}
+          />
+        )}
+
         {activeTool === "draw" && (
           <motion.div
             initial={{ y: 50, opacity: 0 }}
@@ -2174,6 +2741,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                             ? "ring-2 ring-ember ring-offset-2 ring-offset-black scale-110 border-white"
                             : "border-white/20"
                         }`}
+                        aria-label={`Brush colour ${c.name}`}
+                        aria-pressed={isSelected}
                       />
                     );
                   })}
@@ -2225,9 +2794,11 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         )}
       </AnimatePresence>
 
-      {/* IMAGE TOOL FLOATING CONTROL PANEL (Crop, Perspective, Shadow) */}
+      {/* IMAGE TOOL FLOATING CONTROL PANEL (Crop, Perspective, Shadow) —
+          opens only from the Crop tool. The base photo covers the canvas, so
+          keying this off image selection meant any tap anywhere opened it. */}
       <AnimatePresence>
-        {(activeTool === "crop" || isImageSelected) && (
+        {activeTool === "crop" && (
           <motion.div
             initial={{ y: 50, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -2412,6 +2983,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                     min={-45}
                     max={45}
                     value={imagePerspectiveX}
+                    aria-label="Tilt X"
+                    aria-valuetext={`${imagePerspectiveX} degrees`}
                     onChange={(e) => {
                       pushHistorySnapshot();
                       setImagePerspectiveX(Number(e.target.value));
@@ -2434,6 +3007,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                     min={-45}
                     max={45}
                     value={imagePerspectiveY}
+                    aria-label="Tilt Y"
+                    aria-valuetext={`${imagePerspectiveY} degrees`}
                     onChange={(e) => {
                       pushHistorySnapshot();
                       setImagePerspectiveY(Number(e.target.value));
@@ -2461,6 +3036,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                     min={0}
                     max={50}
                     value={imageShadowBlur}
+                    aria-label="Shadow blur"
+                    aria-valuetext={`${imageShadowBlur} pixels`}
                     onChange={(e) => {
                       pushHistorySnapshot();
                       setImageShadowBlur(Number(e.target.value));
@@ -2477,6 +3054,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                     min={0}
                     max={30}
                     value={imageShadowOffsetY}
+                    aria-label="Shadow offset"
+                    aria-valuetext={`${imageShadowOffsetY} pixels`}
                     onChange={(e) => {
                       pushHistorySnapshot();
                       setImageShadowOffsetY(Number(e.target.value));
@@ -2580,7 +3159,8 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                 const isBottom = index === getAllLayers().length - 1;
                 const isSelected =
                   (layer.type === "text" && selectedTextId === layer.id) ||
-                  (layer.type === "sticker" && selectedStickerId === layer.id);
+                  (layer.type === "sticker" && selectedStickerId === layer.id) ||
+                  (layer.type === "route" && selectedRouteId === layer.id);
 
                 return (
                   <div
@@ -2599,6 +3179,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                         {layer.type === "draw" && <PenTool className="w-4 h-4 text-emerald-400" />}
                         {layer.type === "text" && <Type className="w-4 h-4 text-ember" />}
                         {layer.type === "sticker" && <StickyNote className="w-4 h-4 text-violet-400" />}
+                        {layer.type === "route" && <RouteIcon className="w-4 h-4 text-sky-400" />}
                       </div>
 
                       <div className="min-w-0 flex-1">
@@ -2694,24 +3275,95 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
         )}
       </AnimatePresence>
 
-      {/* 5. BOTTOM CONTEXT BAR */}
-      <div className="relative z-20 px-4 pb-8 pt-2 w-full flex items-center justify-center">
-        <button
-          onClick={() => setIsExportModalOpen(true)}
-          className="w-full max-w-sm flex items-center justify-center gap-2 px-6 py-3.5 rounded-full bg-ember text-ink font-extrabold text-sm shadow-[0_0_20px_rgba(255,122,26,0.4)] active:scale-95 transition-transform"
+      {/* 5. BOTTOM STACK — lens strip over the capture row */}
+      <div className="relative z-20 w-full pb-safe pb-4 pt-2 flex flex-col items-center gap-1.5">
+        <LensStrip
+          templates={TEMPLATE_FAMILIES}
+          selectedId={templateId}
+          onSelect={handleSelectTemplate}
+          favouriteIds={brandKit.favouriteTemplates}
+          recentIds={brandKit.recentTemplates}
+          onToggleFavourite={handleToggleFavouriteTemplate}
+        />
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.2, ease: "easeOut" }}
+          className="w-full px-4 flex items-center justify-center gap-8 pt-1"
         >
-          <span>Export & Share Image</span>
-          <Send className="w-4 h-4 fill-ink" />
-        </button>
+          {/* Background — device import or the stock library */}
+          <button
+            onClick={() => setIsBackgroundSheetOpen(true)}
+            className="w-[44px] h-[44px] rounded-full bg-black/60 backdrop-blur-md border border-white/15 flex items-center justify-center text-white/60 hover:text-white active:scale-90 transition-all shrink-0"
+            title="Change background"
+            aria-label="Change background"
+          >
+            <ImageIcon className="w-4 h-4" />
+          </button>
+
+          {/* Shutter — opens the live viewfinder */}
+          <motion.button
+            onClick={() => setIsCameraOpen(true)}
+            whileTap={{ scale: 0.88 }}
+            className="relative w-[78px] h-[78px] rounded-full flex items-center justify-center shadow-2xl"
+            style={{
+              background:
+                "conic-gradient(from 0deg, rgba(255,255,255,0.3), rgba(255,255,255,0.05), rgba(255,255,255,0.3))",
+            }}
+            title="Take a photo"
+            aria-label="Take a photo"
+          >
+            <div className="w-[62px] h-[62px] rounded-full bg-white shadow-[0_0_12px_rgba(0,0,0,0.5)] flex items-center justify-center">
+              <Camera className="w-6 h-6 text-black/70" />
+            </div>
+          </motion.button>
+
+          {/* Route — mirrors the background button, and like the rail's Route
+              tool only exists when the activity carries GPS geometry. */}
+          {routeGeometry && (
+            <button
+              onClick={addOrEditRoute}
+              className={`w-[44px] h-[44px] rounded-full backdrop-blur-md border flex items-center justify-center active:scale-90 transition-all shrink-0 ${
+                routeOverlay
+                  ? "bg-ember text-ink border-ember"
+                  : "bg-black/60 text-white/60 hover:text-white border-white/15"
+              }`}
+              title="Add route"
+              aria-label="Add route"
+            >
+              <RouteIcon className="w-4 h-4" />
+            </button>
+          )}
+        </motion.div>
       </div>
+
+      {/* 5b. BACKGROUND SOURCES */}
+      <CameraCaptureOverlay
+        isOpen={isCameraOpen}
+        onCapture={applyBackground}
+        onClose={() => setIsCameraOpen(false)}
+        onFallbackToGallery={() => {
+          setIsCameraOpen(false);
+          setIsBackgroundSheetOpen(true);
+        }}
+      />
+
+      <BackgroundSheet
+        isOpen={isBackgroundSheetOpen}
+        onSelect={applyBackground}
+        onClose={() => setIsBackgroundSheetOpen(false)}
+      />
 
       {/* 6. EXPORT & SHARE MODAL */}
       <ExportModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
         capturedImage={capturedImage}
+        imageFilter={composedFilter}
         textOverlays={textOverlays}
         stickerOverlays={stickerOverlays}
+        routeOverlay={routeOverlay}
         drawingCanvas={drawingCanvasRef.current}
         committedCrop={committedCrop}
         isBaseImageHidden={isBaseImageHidden}
@@ -2770,7 +3422,7 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                 <div className="flex items-start gap-3 px-1 py-2 min-w-max">
                   {/* No filter */}
                   <button
-                    onClick={() => { setLensFilter(""); setActiveLens(null); }}
+                    onClick={() => setLensFilter("")}
                     className="flex flex-col items-center gap-1.5 shrink-0 w-[58px]"
                   >
                     <div
@@ -2786,13 +3438,13 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                   </button>
 
                   {/* Lens filters as circular carousel */}
-                  {lensTemplates.map((lens) => {
-                    const filterVal = lensFilters[lens.overlayType] || "";
+                  {LENS_TEMPLATES_EXPANDED.map((lens) => {
+                    const filterVal = LENS_FILTER_MAP[lens.overlayType] || "";
                     const isActive = lensFilter === filterVal;
                     return (
                       <button
                         key={lens.id}
-                        onClick={() => { setLensFilter(filterVal); setActiveLens(lens); }}
+                        onClick={() => setLensFilter(filterVal)}
                         className="flex flex-col items-center gap-1.5 shrink-0 w-[58px]"
                       >
                         <div className="relative">
@@ -2830,6 +3482,56 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                 </div>
               </div>
 
+              {/* Saved styles — template + layout + filter + colour, one tap
+                  to reapply. Creators post several times a week; every session
+                  used to start from scratch. */}
+              <div className="bg-white/5 rounded-2xl p-3.5 border border-white/5 space-y-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-white/80">Saved styles</p>
+                    <p className="text-[10px] text-text-secondary mt-0.5">
+                      Template, layout, filter and colour
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleSaveStylePreset}
+                    className="shrink-0 px-3 py-1.5 rounded-full bg-ember text-ink text-[11px] font-extrabold flex items-center gap-1 active:scale-95 transition-transform"
+                  >
+                    <Plus className="w-3 h-3 stroke-[3]" />
+                    <span>Save current</span>
+                  </button>
+                </div>
+
+                {brandKit.presets.length === 0 ? (
+                  <p className="text-[10px] text-text-secondary">
+                    No saved styles yet — build a look you like, then save it.
+                  </p>
+                ) : (
+                  <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                    {brandKit.presets.map((preset) => (
+                      <div
+                        key={preset.id}
+                        className="shrink-0 flex items-center gap-1 rounded-full bg-white/10 border border-white/10 pl-3 pr-1 py-1"
+                      >
+                        <button
+                          onClick={() => handleApplyStylePreset(preset)}
+                          className="text-[11px] font-bold text-white/80 hover:text-white"
+                        >
+                          {preset.name}
+                        </button>
+                        <button
+                          onClick={() => handleRemoveStylePreset(preset.id)}
+                          aria-label={`Delete ${preset.name}`}
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-white/40 hover:text-rose-400"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Intensity slider (for filter adjustment) */}
               <div className="bg-white/5 rounded-2xl p-3.5 border border-white/5 space-y-2">
                 <div className="flex justify-between text-xs px-1">
@@ -2841,230 +3543,18 @@ export default function EditorScreen({ embeddedProps }: EditorScreenProps) {
                   min={0}
                   max={100}
                   value={filterIntensity}
-                  onChange={(e) => {
-                    const val = Number(e.target.value);
-                    setFilterIntensity(val);
-                    // Dynamically adjust the filter strength if a custom filter is active
-                    if (/custom/i.test(lensFilter) || lensFilter === "") {
-                      setLensFilter(
-                        `contrast(${1 + val / 200}) saturate(${1 + val / 200})`
-                      );
-                    }
-                  }}
-                  className="w-full accent-ember cursor-pointer"
+                  disabled={!lensFilter}
+                  aria-label="Filter intensity"
+                  aria-valuetext={`${filterIntensity} percent`}
+                  onChange={(e) => setFilterIntensity(Number(e.target.value))}
+                  className="w-full accent-ember cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 />
                 <p className="text-[10px] text-text-secondary text-center">
-                  Adjust the overall intensity of the applied lens effect
+                  {lensFilter
+                    ? "Adjust the overall intensity of the applied lens effect"
+                    : "Pick a lens above to adjust its intensity"}
                 </p>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* STAT SELECTOR — show/hide individual stats */}
-      <AnimatePresence>
-        {showStatSelector && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex flex-col justify-end"
-          >
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", stiffness: 350, damping: 30 }}
-              className="bg-black/90 backdrop-blur-2xl rounded-t-3xl p-6 pt-6 space-y-4 border-t border-white/10"
-            >
-              <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                <div>
-                  <h3 className="text-sm font-bold text-white">Toggle Stats</h3>
-                  <p className="text-xs text-white/40 mt-0.5">Show or hide individual stats on your photo</p>
-                </div>
-                <button onClick={() => setShowStatSelector(false)}
-                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:text-white">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="space-y-2 pb-2">
-                {(["distance", "pace", "time", "title", "accent"] as StatSlotId[]).map((slot) => {
-                  const isVisible = !hiddenSlots.has(slot);
-                  const slotLabels: Record<StatSlotId, string> = {
-                    distance: "Distance", pace: "Pace", time: "Time",
-                    title: "Activity Title", accent: "Accent Decoration",
-                  };
-                  return (
-                    <button key={slot}
-                      onClick={() => {
-                        setHiddenSlots((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(slot)) next.delete(slot); else next.add(slot);
-                          return next;
-                        });
-                        triggerHaptic("light");
-                      }}
-                      className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl transition-all ${
-                        isVisible ? "bg-ember/10 border border-ember/30" : "bg-white/5 border border-white/10"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-extrabold ${
-                          isVisible ? "bg-ember text-ink" : "bg-white/10 text-white/40"
-                        }`}>
-                          {slot === "distance" ? "D" : slot === "pace" ? "P" : slot === "time" ? "T" : slot === "title" ? "A" : "✨"}
-                        </div>
-                        <span className={`text-sm font-bold ${isVisible ? "text-white" : "text-white/40"}`}>
-                          {slotLabels[slot]}
-                        </span>
-                      </div>
-                      {isVisible ? <Eye className="w-4 h-4 text-ember" /> : <EyeOff className="w-4 h-4 text-white/30" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* PHOTO PICKER — switch background image */}
-      <AnimatePresence>
-        {showPhotoPicker && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex flex-col justify-end"
-          >
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", stiffness: 350, damping: 30 }}
-              className="bg-black/90 backdrop-blur-2xl rounded-t-3xl p-6 pt-6 space-y-4 border-t border-white/10 max-h-[70vh]"
-            >
-              <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                <div>
-                  <h3 className="text-sm font-bold text-white">Background Photo</h3>
-                  <p className="text-xs text-white/40 mt-0.5">Choose a photo for your creation</p>
-                </div>
-                <button onClick={() => setShowPhotoPicker(false)}
-                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:text-white">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              {/* Gallery upload button */}
-              <button onClick={() => document.getElementById("editor-photo-input")?.click()}
-                className="flex items-center gap-2 w-full px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-dashed border-white/15 text-white/70 hover:text-white text-xs font-medium transition-all"
-              >
-                <ImageIcon className="w-4 h-4" />
-                Upload from Gallery
-              </button>
-              <input id="editor-photo-input" type="file" accept="image/*" className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                      setCustomPhoto(ev.target?.result as string);
-                      setShowPhotoPicker(false);
-                    };
-                    reader.readAsDataURL(file);
-                  }
-                }}
-              />
-              <div className="grid grid-cols-3 gap-2 overflow-y-auto max-h-[50vh] pb-2">
-                {stockPhotos.map((photo, idx) => (
-                  <button key={photo.id || idx}
-                    onClick={() => { setCustomPhoto(photo.url); setShowPhotoPicker(false); }}
-                    className={`relative aspect-[9/16] rounded-xl overflow-hidden border-2 transition-all hover:scale-[1.02] active:scale-95 ${
-                      (customPhoto ?? capturedImage) === photo.url ? "border-ember" : "border-white/10"
-                    }`}
-                  >
-                    <img src={photo.url} alt={photo.name} className="w-full h-full object-cover" />
-                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-1.5">
-                      <span className="text-[9px] font-semibold text-white truncate block">{photo.name}</span>
-                    </div>
-                  </button>
-                ))}
-                {stockPhotos.length === 0 && (
-                  <div className="col-span-3 text-center py-8 text-xs text-white/30">No stock photos available</div>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* TEMPLATE FAMILY CAROUSEL — pick stat layout style */}
-      <AnimatePresence>
-        {showTemplateCarousel && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex flex-col justify-end"
-          >
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", stiffness: 350, damping: 30 }}
-              className="bg-black/90 backdrop-blur-2xl rounded-t-3xl p-6 pt-6 space-y-4 border-t border-white/10"
-            >
-              <div className="flex justify-between items-center pb-2 border-b border-white/5">
-                <div>
-                  <h3 className="text-sm font-bold text-white">Template Style</h3>
-                  <p className="text-xs text-white/40 mt-0.5">Choose how your stats are displayed</p>
-                </div>
-                <button onClick={() => setShowTemplateCarousel(false)}
-                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/70 hover:text-white">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              {/* Template families (stat layouts) */}
-              <TemplateCarousel
-                templates={templateFamilies}
-                selectedId={templateId}
-                onSelect={(template) => {
-                  handleSelectTemplate(template);
-                  setShowTemplateCarousel(false);
-                }}
-              />
-              {/* Lens overlays (designed elements like "India") */}
-              {lensTemplates.length > 0 && (
-                <div className="pt-2 border-t border-white/5">
-                  <label className="text-[10px] text-white/40 uppercase tracking-wider font-bold block mb-2">Lens Overlays</label>
-                  <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
-                    {lensTemplates.map((lens) => {
-                      const isActive = activeLens?.id === lens.id;
-                      return (
-                        <button key={lens.id}
-                          onClick={() => {
-                            setActiveLens(isActive ? null : lens);
-                            setLensFilter(isActive ? "" : (lensFilters[lens.overlayType] || ""));
-                            setShowTemplateCarousel(false);
-                          }}
-                          className={`flex flex-col items-center gap-1.5 shrink-0 w-[60px] transition-all ${
-                            isActive ? "scale-105" : "opacity-60 hover:opacity-100"
-                          }`}
-                        >
-                          <div className={`w-[52px] h-[52px] rounded-full flex items-center justify-center text-xl border-2 transition-all ${
-                            isActive ? "border-ember bg-ember/10 shadow-[0_0_12px_var(--color-ember-glow)]" : "border-white/15 bg-white/5"
-                          }`}>
-                            <span className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">{lens.icon}</span>
-                          </div>
-                          <span className="text-[9px] font-semibold text-center leading-tight max-w-[60px] text-white/80">
-                            {lens.name}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
             </motion.div>
           </motion.div>
         )}

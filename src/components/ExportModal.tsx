@@ -9,56 +9,33 @@ import {
   Sparkles,
   Image as ImageIcon,
   CheckCircle2,
-  Bookmark,
   Zap,
   Sliders,
   FileCheck
 } from "lucide-react";
-import type { StatData, TemplateLayout } from "../types";
-import { drawStatLayer } from "../utils/drawStatLayer";
-
-interface TextOverlay {
-  id: string;
-  text: string;
-  x: number;
-  y: number;
-  color: string;
-  fontStyle: "Classic" | "Modern" | "Bold" | "Neon" | "Serif" | "Typewriter";
-  bgStyle: "none" | "solid" | "semi" | "outline";
-  align: "left" | "center" | "right";
-  fontSize: number;
-  hidden?: boolean;
-  locked?: boolean;
-  zIndex?: number;
-}
-
-interface StickerOverlay {
-  id: string;
-  content: string;
-  type: "emoji" | "badge" | "metric" | "location";
-  scale: number;
-  rotation: number;
-  x: number;
-  y: number;
-  bgGradient?: string;
-  hidden?: boolean;
-  locked?: boolean;
-  zIndex?: number;
-}
+import type {
+  CommittedCrop,
+  RouteOverlay,
+  StatData,
+  StickerOverlay,
+  TemplateLayout,
+  TextOverlay,
+} from "../types";
+import { renderComposite as composite } from "../utils/renderComposite";
+import { exportFileStem, projectTitle, shareCaption } from "../utils/projectDoc";
 
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
   capturedImage: string;
+  /** Lens filter for the photo, already composed with its intensity. */
+  imageFilter?: string;
   textOverlays: TextOverlay[];
   stickerOverlays: StickerOverlay[];
+  /** The activity's GPS path, when one was placed on the canvas. */
+  routeOverlay?: RouteOverlay | null;
   drawingCanvas: HTMLCanvasElement | null;
-  committedCrop: {
-    ratio: string;
-    rotation: number;
-    flipH: boolean;
-    flipV: boolean;
-  };
+  committedCrop: CommittedCrop;
   isBaseImageHidden: boolean;
   isDrawingHidden: boolean;
   baseImageZIndex: number;
@@ -77,8 +54,10 @@ export default function ExportModal({
   isOpen,
   onClose,
   capturedImage,
+  imageFilter,
   textOverlays,
   stickerOverlays,
+  routeOverlay,
   drawingCanvas,
   committedCrop,
   isBaseImageHidden,
@@ -97,7 +76,6 @@ export default function ExportModal({
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
   const [copiedSuccess, setCopiedSuccess] = useState<boolean>(false);
-  const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
 
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -127,241 +105,39 @@ export default function ExportModal({
     };
   };
 
-  // Render the full composite canvas image
+  // Render the full composite canvas image. The compositor itself lives in
+  // src/utils/renderComposite.ts so the editor's 320px project thumbnail comes
+  // from exactly the same code path as this full-resolution export.
   const renderComposite = async (): Promise<string> => {
     setIsGenerating(true);
     const { width, height } = getResolutionDimensions();
 
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-
-    if (!ctx) {
-      setIsGenerating(false);
-      return capturedImage;
-    }
-
-    // Fill background if format is JPEG or dark canvas
-    if (format === "jpeg") {
-      ctx.fillStyle = "#000000";
-      ctx.fillRect(0, 0, width, height);
-    } else {
-      ctx.clearRect(0, 0, width, height);
-    }
-
-    // Reference container size for relative positioning calculations
-    const containerWidth = containerRef.current?.clientWidth || 360;
-    const containerHeight = containerRef.current?.clientHeight || 640;
-    const scaleX = width / containerWidth;
-    const scaleY = height / containerHeight;
-
-    // Collect layers to render in order of zIndex
-    interface LayerToDraw {
-      type: "image" | "draw" | "text" | "sticker";
-      zIndex: number;
-      data?: any;
-    }
-
-    const layers: LayerToDraw[] = [];
-
-    if (!isBaseImageHidden) {
-      layers.push({ type: "image", zIndex: baseImageZIndex });
-    }
-
-    if (!isDrawingHidden && drawingCanvas) {
-      layers.push({ type: "draw", zIndex: drawingZIndex });
-    }
-
-    textOverlays.forEach((t) => {
-      if (!t.hidden) {
-        layers.push({ type: "text", zIndex: t.zIndex ?? 20, data: t });
-      }
+    const dataUrl = await composite({
+      width,
+      height,
+      containerWidth: containerRef.current?.clientWidth || 360,
+      containerHeight: containerRef.current?.clientHeight || 640,
+      // JPEG has no alpha channel, so it needs an explicit matte.
+      background: format === "jpeg" ? "#000000" : null,
+      capturedImage,
+      imageFilter,
+      textOverlays,
+      stickerOverlays,
+      routeOverlay: routeOverlay ?? null,
+      drawingCanvas,
+      committedCrop,
+      isBaseImageHidden,
+      isDrawingHidden,
+      baseImageZIndex,
+      drawingZIndex,
+      templateId,
+      statLayout,
+      statData,
+      mimeType:
+        format === "jpeg" ? "image/jpeg" : format === "webp" ? "image/webp" : "image/png",
+      quality,
     });
 
-    stickerOverlays.forEach((s) => {
-      if (!s.hidden) {
-        layers.push({ type: "sticker", zIndex: s.zIndex ?? 20, data: s });
-      }
-    });
-
-    layers.sort((a, b) => a.zIndex - b.zIndex);
-
-    // Render Base Image
-    const drawImageLayer = (): Promise<void> => {
-      return new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.src = capturedImage;
-        img.onload = () => {
-          ctx.save();
-
-          // Translate to canvas center for rotation/flipping
-          ctx.translate(width / 2, height / 2);
-
-          if (committedCrop.rotation !== 0) {
-            ctx.rotate((committedCrop.rotation * Math.PI) / 180);
-          }
-
-          const scaleH = committedCrop.flipH ? -1 : 1;
-          const scaleV = committedCrop.flipV ? -1 : 1;
-          ctx.scale(scaleH, scaleV);
-
-          // Calculate aspect cover drawing dimensions
-          const imgRatio = img.width / img.height;
-          const canvasRatio = width / height;
-
-          let drawWidth = width;
-          let drawHeight = height;
-
-          if (imgRatio > canvasRatio) {
-            drawHeight = height;
-            drawWidth = height * imgRatio;
-          } else {
-            drawWidth = width;
-            drawHeight = width / imgRatio;
-          }
-
-          ctx.drawImage(img, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
-          ctx.restore();
-          resolve();
-        };
-        img.onerror = () => resolve();
-      });
-    };
-
-    // With the base image hidden there is no image pass to follow, so the
-    // stats still need to land underneath everything else.
-    if (isBaseImageHidden) {
-      await drawStatLayer(ctx, { width, height }, templateId, statLayout, statData);
-    }
-
-    // Draw all layers sequentially
-    for (const layer of layers) {
-      if (layer.type === "image") {
-        await drawImageLayer();
-        // Template stats sit directly on the photo, beneath anything the user
-        // added afterwards.
-        await drawStatLayer(ctx, { width, height }, templateId, statLayout, statData);
-      } else if (layer.type === "draw" && drawingCanvas) {
-        ctx.save();
-        ctx.drawImage(drawingCanvas, 0, 0, width, height);
-        ctx.restore();
-      } else if (layer.type === "text" && layer.data) {
-        const t: TextOverlay = layer.data;
-        ctx.save();
-
-        const fontSizePx = Math.max(16, t.fontSize * scaleX);
-        // Map editor font styles to actual font families matching the in-app rendering
-        let fontFamily = '"Inter", sans-serif'; // Classic / Modern default
-        if (t.fontStyle === "Bold") fontFamily = '"Archivo", sans-serif';
-        if (t.fontStyle === "Modern") fontFamily = "monospace";
-        if (t.fontStyle === "Neon") fontFamily = '"Inter", sans-serif';
-        if (t.fontStyle === "Serif") fontFamily = "serif";
-        if (t.fontStyle === "Typewriter") fontFamily = "monospace";
-
-        ctx.font = `bold ${fontSizePx}px ${fontFamily}`;
-        ctx.textAlign = t.align;
-        ctx.textBaseline = "middle";
-
-        // Position mapping
-        const posX = (containerWidth / 2 + t.x) * scaleX;
-        const posY = (containerHeight / 2 + t.y) * scaleY;
-
-        // Background Pill
-        if (t.bgStyle !== "none") {
-          const metrics = ctx.measureText(t.text);
-          const textWidth = metrics.width;
-          const textHeight = fontSizePx * 1.2;
-
-          let bgFill = "#000000";
-          if (t.bgStyle === "solid" && t.color.toLowerCase() === "#ffffff") {
-            bgFill = "#ffffff";
-          } else if (t.bgStyle === "semi") {
-            bgFill = "rgba(0, 0, 0, 0.65)";
-          } else if (t.bgStyle === "outline") {
-            bgFill = "rgba(0, 0, 0, 0.4)";
-          }
-
-          ctx.fillStyle = bgFill;
-          const padX = fontSizePx * 0.4;
-          const padY = fontSizePx * 0.2;
-          const rectX = posX - (t.align === "center" ? textWidth / 2 : t.align === "right" ? textWidth : 0) - padX;
-          const rectY = posY - textHeight / 2 - padY;
-          const rectW = textWidth + padX * 2;
-          const rectH = textHeight + padY * 2;
-
-          ctx.beginPath();
-          ctx.roundRect(rectX, rectY, rectW, rectH, fontSizePx * 0.25);
-          ctx.fill();
-
-          if (t.bgStyle === "outline") {
-            ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-            ctx.lineWidth = Math.max(2, fontSizePx * 0.05);
-            ctx.stroke();
-          }
-        }
-
-        // Text fill
-        let textFill = t.color;
-        if (t.bgStyle === "solid" && t.color.toLowerCase() === "#ffffff") {
-          textFill = "#000000";
-        }
-
-        ctx.fillStyle = textFill;
-        ctx.fillText(t.text, posX, posY);
-
-        ctx.restore();
-      } else if (layer.type === "sticker" && layer.data) {
-        const s: StickerOverlay = layer.data;
-        ctx.save();
-
-        const posX = (containerWidth / 2 + s.x) * scaleX;
-        const posY = (containerHeight / 2 + s.y) * scaleY;
-
-        ctx.translate(posX, posY);
-        if (s.rotation) {
-          ctx.rotate((s.rotation * Math.PI) / 180);
-        }
-
-        const stickerSize = 48 * s.scale * scaleX;
-
-        if (s.type === "badge" || s.type === "metric") {
-          ctx.font = `bold ${Math.max(14, stickerSize * 0.4)}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-
-          const metrics = ctx.measureText(s.content);
-          const textW = metrics.width;
-          const padX = 16 * scaleX;
-          const padY = 8 * scaleY;
-
-          // Draw pill badge
-          const grad = ctx.createLinearGradient(-textW / 2, 0, textW / 2, 0);
-          grad.addColorStop(0, "#FF7A1A");
-          grad.addColorStop(1, "#FFB020");
-
-          ctx.fillStyle = grad;
-          ctx.beginPath();
-          ctx.roundRect(-textW / 2 - padX, -padY * 1.5, textW + padX * 2, padY * 3, 12 * scaleX);
-          ctx.fill();
-
-          ctx.fillStyle = "#0B0C10";
-          ctx.fillText(s.content, 0, 0);
-        } else {
-          // Emoji / Location sticker
-          ctx.font = `${stickerSize}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(s.content, 0, 0);
-        }
-
-        ctx.restore();
-      }
-    }
-
-    const mimeType = format === "jpeg" ? "image/jpeg" : format === "webp" ? "image/webp" : "image/png";
-    const dataUrl = canvas.toDataURL(mimeType, quality);
     setIsGenerating(false);
     return dataUrl;
   };
@@ -392,8 +168,9 @@ export default function ExportModal({
   const handleDownload = async () => {
     const url = previewDataUrl || (await renderComposite());
     const ext = format === "jpeg" ? "jpg" : format;
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const filename = `snap_export_${timestamp}.${ext}`;
+    const date = new Date().toISOString().slice(0, 10);
+    // Named after the activity, so a folder of exports is readable.
+    const filename = `${exportFileStem(statData)}-${date}.${ext}`;
 
     const link = document.createElement("a");
     link.href = url;
@@ -433,13 +210,15 @@ export default function ExportModal({
       const res = await fetch(url);
       const blob = await res.blob();
       const ext = format === "jpeg" ? "jpg" : format;
-      const file = new File([blob], `snap.${ext}`, { type: blob.type });
+      const file = new File([blob], `${exportFileStem(statData)}.${ext}`, { type: blob.type });
 
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        // The activity, not "Check out my snap!" — every fact we already hold
+        // was being thrown away here.
         await navigator.share({
           files: [file],
-          title: "Snap Creation",
-          text: "Check out my snap!",
+          title: projectTitle(statData),
+          text: shareCaption(statData),
         });
         showToast("Shared successfully!");
       } else {
@@ -454,31 +233,9 @@ export default function ExportModal({
     }
   };
 
-  // Handle Save to Projects / Memories
-  const handleSaveToProjects = async () => {
-    const url = previewDataUrl || (await renderComposite());
-    const existing = localStorage.getItem("stride_projects");
-    const projectsList = existing ? JSON.parse(existing) : [];
-
-    const newProject = {
-      id: `proj_${Date.now()}`,
-      title: `Snap ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
-      activityType: "Exported Snap",
-      date: "Just now",
-      bgImage: url,
-      lensId: "custom",
-      distance: "-",
-      pace: "-",
-      time: "-",
-      updatedAt: "Just now",
-      placedTextsCount: textOverlays.length,
-    };
-
-    localStorage.setItem("stride_projects", JSON.stringify([newProject, ...projectsList]));
-    setSavedSuccess(true);
-    showToast("Saved to Projects gallery!");
-    setTimeout(() => setSavedSuccess(false), 2000);
-  };
+  // Saving to Projects is deliberately NOT here. Export flattens; Save keeps
+  // your layers editable. They are different actions, and the editor's top bar
+  // owns the second one.
 
   return (
     <AnimatePresence>
@@ -602,32 +359,18 @@ export default function ExportModal({
               </button>
             </div>
 
-            {/* Secondary Row: Copy + Save */}
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={handleCopy}
-                className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-colors active:scale-95 ${
-                  copiedSuccess
-                    ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
-                    : "bg-white/10 text-white border-white/15 hover:bg-white/20"
-                }`}
-              >
-                {copiedSuccess ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedSuccess ? "Copied" : "Copy"}</span>
-              </button>
-
-              <button
-                onClick={handleSaveToProjects}
-                className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-colors active:scale-95 ${
-                  savedSuccess
-                    ? "bg-ember/20 text-ember border-ember/40"
-                    : "bg-white/10 text-white border-white/15 hover:bg-white/20"
-                }`}
-              >
-                {savedSuccess ? <Check className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5 text-ember" />}
-                <span>{savedSuccess ? "Saved" : "Save App"}</span>
-              </button>
-            </div>
+            {/* Secondary Row: Copy */}
+            <button
+              onClick={handleCopy}
+              className={`w-full py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-colors active:scale-95 ${
+                copiedSuccess
+                  ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                  : "bg-white/10 text-white border-white/15 hover:bg-white/20"
+              }`}
+            >
+              {copiedSuccess ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedSuccess ? "Copied" : "Copy"}</span>
+            </button>
           </div>
         </motion.div>
       </div>

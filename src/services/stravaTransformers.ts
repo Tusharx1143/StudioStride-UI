@@ -5,21 +5,30 @@
  * real data without structural changes.
  */
 
-import type { StatData, StravaActivity, StravaTotals } from "../types";
+import type { MetricValue, StatData, StravaActivity, StravaTotals } from "../types";
+import type { DistanceUnit } from "../utils/units";
+import {
+  distanceValue,
+  elevationSuffix,
+  formatDistance as formatDistanceInUnit,
+  formatElevation,
+  formatPace as formatPaceInUnit,
+  metersPerUnit,
+} from "../utils/units";
 
 // ---------------------------------------------------------------------------
 // Unit converters
 // ---------------------------------------------------------------------------
 
 /**
- * Convert meters/second to a pace string in MM:SS per kilometre.
+ * Convert meters/second to a pace string in MM:SS per unit of distance.
  * Returns "--:--" for stationary activities (speed ≈ 0).
  */
-export function formatPace(metersPerSecond: number): string {
+export function formatPace(metersPerSecond: number, unit: DistanceUnit = "km"): string {
   if (metersPerSecond <= 0) return "--:--";
-  const secondsPerKm = Math.round(1000 / metersPerSecond);
-  const min = Math.floor(secondsPerKm / 60);
-  const sec = secondsPerKm % 60;
+  const secondsPerUnit = Math.round(metersPerUnit(unit) / metersPerSecond);
+  const min = Math.floor(secondsPerUnit / 60);
+  const sec = secondsPerUnit % 60;
   return `${min}:${sec.toString().padStart(2, "0")}`;
 }
 
@@ -39,10 +48,10 @@ export function formatDuration(totalSeconds: number): string {
 }
 
 /**
- * Format a Strava distance (meters) to km with one decimal place.
+ * Format a Strava distance (meters) in the given unit, one decimal place.
  */
-export function formatDistance(meters: number): string {
-  return (meters / 1000).toFixed(1);
+export function formatDistance(meters: number, unit: DistanceUnit = "km"): string {
+  return formatDistanceInUnit(meters, unit);
 }
 
 /**
@@ -109,11 +118,180 @@ export function getActivitySubtitle(activity: StravaActivity): string {
  * Convert a StravaActivity into the app's core StatData shape (used by
  * templates, the camera overlay, and the export system).
  */
-export function activityToStatData(activity: StravaActivity): StatData {
+/**
+ * The metrics a Strava activity carries beyond the core four.
+ *
+ * Every field read here was already in the `/athlete/activities` payload and
+ * was being thrown away: `StatSlotId` had five values while the response had
+ * elevation, calories, heart rate, watts, suffer score, max speed, kudos, and
+ * achievement count.
+ *
+ * A metric is emitted only when the activity actually has it, so the picker
+ * never offers a stat that would render blank — a treadmill run has no
+ * elevation, and only cyclists with a power meter have watts.
+ */
+export function activityToMetrics(
+  activity: StravaActivity,
+  unit: DistanceUnit = "km"
+): Record<string, MetricValue> {
+  const metrics: Record<string, MetricValue> = {};
+
+  const add = (m: MetricValue) => {
+    metrics[m.id] = m;
+  };
+
+  const speedUnit = unit === "mi" ? "mph" : "km/h";
+  const toSpeed = (metersPerSecond: number) =>
+    (metersPerSecond * (unit === "mi" ? 2.23694 : 3.6)).toFixed(1);
+
+  if (activity.total_elevation_gain) {
+    add({
+      id: "elev_gain",
+      label: "Elevation Gain",
+      value: formatElevation(activity.total_elevation_gain, unit),
+      unit: elevationSuffix(unit),
+      category: "Elevation",
+      icon: "⛰️",
+    });
+  }
+
+  if (activity.elev_high != null) {
+    add({
+      id: "max_elev",
+      label: "Max Elevation",
+      value: formatElevation(activity.elev_high, unit),
+      unit: elevationSuffix(unit),
+      category: "Elevation",
+      icon: "🏔️",
+    });
+  }
+
+  if (activity.calories) {
+    add({
+      id: "calories",
+      label: "Calories",
+      value: Math.round(activity.calories).toLocaleString(),
+      unit: "kcal",
+      category: "Performance",
+      icon: "🔥",
+    });
+  }
+
+  if (activity.has_heartrate && activity.average_heartrate) {
+    add({
+      id: "avg_hr",
+      label: "Avg Heart Rate",
+      value: Math.round(activity.average_heartrate).toString(),
+      unit: "BPM",
+      category: "Performance",
+      icon: "❤️",
+    });
+  }
+
+  if (activity.has_heartrate && activity.max_heartrate) {
+    add({
+      id: "max_hr",
+      label: "Max Heart Rate",
+      value: Math.round(activity.max_heartrate).toString(),
+      unit: "BPM",
+      category: "Performance",
+      icon: "💥",
+    });
+  }
+
+  if (activity.average_watts) {
+    add({
+      id: "power",
+      label: "Avg Power",
+      value: Math.round(activity.average_watts).toString(),
+      unit: "W",
+      category: "Ride",
+      icon: "⚡",
+    });
+  }
+
+  if (activity.average_speed) {
+    add({
+      id: "speed",
+      label: "Avg Speed",
+      value: toSpeed(activity.average_speed),
+      unit: speedUnit,
+      category: "Ride",
+      icon: "🚴",
+    });
+  }
+
+  if (activity.max_speed) {
+    add({
+      id: "max_speed",
+      label: "Max Speed",
+      value: toSpeed(activity.max_speed),
+      unit: speedUnit,
+      category: "Ride",
+      icon: "🚀",
+    });
+  }
+
+  if (activity.suffer_score) {
+    add({
+      id: "suffer_score",
+      label: "Relative Effort",
+      value: Math.round(activity.suffer_score).toString(),
+      unit: "",
+      category: "Performance",
+      icon: "😤",
+    });
+  }
+
+  if (activity.kudos_count) {
+    add({
+      id: "kudos",
+      label: "Kudos",
+      value: activity.kudos_count.toLocaleString(),
+      unit: "👍",
+      category: "Achievements",
+      icon: "👏",
+    });
+  }
+
+  if (activity.achievement_count) {
+    add({
+      id: "achievements",
+      label: "Achievements",
+      value: activity.achievement_count.toLocaleString(),
+      unit: "🏅",
+      category: "Achievements",
+      icon: "🏆",
+    });
+  }
+
+  add({
+    id: "elapsed_time",
+    label: "Elapsed Time",
+    value: formatDuration(activity.elapsed_time || activity.moving_time),
+    unit: "",
+    category: "Running",
+    icon: "🕒",
+  });
+
+  return metrics;
+}
+
+export function activityToStatData(
+  activity: StravaActivity,
+  unit: DistanceUnit = "km"
+): StatData {
   return {
-    distance: activity.distance / 1000, // meters → km
-    distanceUnit: "km",
-    pace: formatPace(activity.average_speed),
+    metrics: activityToMetrics(activity, unit),
+    distance: distanceValue(activity.distance, unit),
+    distanceUnit: unit,
+    // Derived from distance and time rather than average_speed, so a pace of
+    // "--:--" and a distance of 0 can never disagree.
+    pace: formatPaceInUnit(
+      activity.distance,
+      activity.moving_time || activity.elapsed_time,
+      unit
+    ),
     time: formatDuration(activity.moving_time || activity.elapsed_time),
     title: activity.name,
   };
@@ -123,7 +301,8 @@ export function activityToStatData(activity: StravaActivity): StatData {
  * Convert a StravaActivity into the HomeScreen's ActivityData shape.
  */
 export function activityToActivityData(
-  activity: StravaActivity
+  activity: StravaActivity,
+  unit: DistanceUnit = "km"
 ): {
   id: string;
   title: string;
@@ -139,9 +318,13 @@ export function activityToActivityData(
     id: `strava_${activity.id}`,
     title: activity.name,
     subtitle: getActivitySubtitle(activity),
-    distance: formatDistance(activity.distance),
+    distance: formatDistance(activity.distance, unit),
     time: formatDuration(activity.moving_time || activity.elapsed_time),
-    pace: formatPace(activity.average_speed),
+    pace: formatPaceInUnit(
+      activity.distance,
+      activity.moving_time || activity.elapsed_time,
+      unit
+    ),
     timeAgo: getTimeAgo(activity.start_date_local),
     type: activity.type,
     iconType: getIconType(activity.type, activity.sport_type),

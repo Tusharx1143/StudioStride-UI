@@ -1,7 +1,32 @@
 import type { ReactNode } from "react";
+import type { RouteGeometry } from "./utils/routeGeometry";
+
+export type { RouteGeometry };
+
+/**
+ * The typeset stats every template authors by hand.
+ *
+ * Deliberately closed: a template's design table gives each of these an
+ * explicit SlotStyle.
+ */
+export type TextSlotId = "distance" | "pace" | "time" | "title";
+
+/** The pieces a template decomposes into before any metric is added. */
+export type CoreSlotId = TextSlotId | "accent";
+
+/**
+ * Any other metric the activity happens to carry — heart rate, elevation,
+ * watts, kudos.
+ *
+ * Open-ended because the set depends on the activity and the source, not on
+ * the template. Templates cannot author a style for a slot they have never
+ * heard of, so metric slots inherit one from the template's own secondary
+ * stat (see `resolveSlotStyle`).
+ */
+export type MetricSlotId = `metric:${string}`;
 
 /** The fixed set of draggable pieces every template decomposes into. */
-export type StatSlotId = "distance" | "pace" | "time" | "title" | "accent";
+export type StatSlotId = CoreSlotId | MetricSlotId;
 
 /** Position of a slot's top-left anchor, as a percentage of the canvas. */
 export interface SlotPosition {
@@ -15,12 +40,42 @@ export type TemplateLayout = Partial<Record<StatSlotId, SlotPosition>>;
 /** Custom layouts the user has dragged, keyed by template id. */
 export type CustomLayouts = Record<string, TemplateLayout>;
 
+export type MetricCategory =
+  | "Running"
+  | "Performance"
+  | "Elevation"
+  | "Ride"
+  | "Achievements";
+
+/**
+ * One resolved metric from an activity, ready to typeset.
+ *
+ * `value` and `unit` are already formatted — the sources know their own units,
+ * and a template should never be doing arithmetic.
+ */
+export interface MetricValue {
+  id: string;
+  label: string;
+  value: string;
+  unit: string;
+  category: MetricCategory;
+  icon: string;
+}
+
 export interface StatData {
   distance: number;
   distanceUnit: string;
   pace: string;
   time: string;
   title: string;
+  /**
+   * Everything beyond the core four, keyed by metric id.
+   *
+   * Populated only with what the activity actually has: a treadmill run has no
+   * elevation, a Health Connect walk has no watts. Absent keys are what gates
+   * the metric picker, so it never offers a stat that would render blank.
+   */
+  metrics?: Record<string, MetricValue>;
 }
 
 export interface SlotBackground {
@@ -69,9 +124,6 @@ export interface SlotBox {
   y: number;
   scale: number;
 }
-
-/** Every slot except `accent`, which is drawn rather than typeset. */
-export type TextSlotId = Exclude<StatSlotId, "accent">;
 
 export interface TemplateStatDesign {
   slots: Partial<Record<TextSlotId, SlotStyle>>;
@@ -135,19 +187,160 @@ export interface PhotoSource {
   thumbnailUrl?: string;
 }
 
+/**
+ * A route path placed on the canvas.
+ *
+ * Declared here rather than in the editor component so the preview, the
+ * export pass, and saved projects all share one definition — TextOverlay and
+ * StickerOverlay are currently duplicated across EditorScreen and ExportModal,
+ * and two copies of a shape that must agree is exactly the drift this feature
+ * is built to avoid.
+ */
+export interface RouteOverlay {
+  id: string;
+  /** Normalized geometry from the activity source. */
+  geometry: RouteGeometry;
+  /** Centre offset in preview px, matching every other overlay. */
+  x: number;
+  y: number;
+  /** Longest edge in preview px. */
+  size: number;
+  color: string;
+  /** Stroke width in preview px. */
+  strokeWidth: number;
+  opacity: number;
+  /** Applied by DraggableLayer as a CSS transform; export mirrors it. */
+  scale?: number;
+  rotation?: number;
+  zIndex?: number;
+  hidden?: boolean;
+  locked?: boolean;
+}
+
+/**
+ * A line of user text placed on the canvas.
+ *
+ * Lives here rather than in EditorScreen because the editor, the exporter, and
+ * the saved-project document all have to agree on it. Two hand-maintained
+ * copies is exactly the drift this file exists to prevent.
+ */
+export interface TextOverlay {
+  id: string;
+  text: string;
+  /** Centre offset in preview px, matching every other overlay. */
+  x: number;
+  y: number;
+  color: string;
+  fontStyle: "Classic" | "Modern" | "Bold" | "Neon" | "Serif" | "Typewriter";
+  bgStyle: "none" | "solid" | "semi" | "outline";
+  align: "left" | "center" | "right";
+  fontSize: number;
+  /** Set by the pinch/rotate gesture. */
+  rotation?: number;
+  scale?: number;
+  hidden?: boolean;
+  locked?: boolean;
+  zIndex?: number;
+}
+
+/** An emoji, badge, metric chip, or location tag placed on the canvas. */
+export interface StickerOverlay {
+  id: string;
+  /** Emoji, SVG badge text, or image URL. */
+  content: string;
+  type: "emoji" | "badge" | "metric" | "location";
+  scale: number;
+  rotation: number;
+  x: number;
+  y: number;
+  bgGradient?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  zIndex?: number;
+}
+
+/** Crop/orientation the user committed from the image tool. */
+export interface CommittedCrop {
+  ratio: string;
+  rotation: number;
+  flipH: boolean;
+  flipV: boolean;
+}
+
+/**
+ * A complete capture of the editor's canvas state.
+ *
+ * Drives undo/redo, and — extended by EditorDoc — is what a saved project
+ * stores. One shape for both, so a project can never drift from what undo
+ * already knows how to restore.
+ */
+export interface EditorSnapshot {
+  textOverlays: TextOverlay[];
+  stickerOverlays: StickerOverlay[];
+  templateId: string;
+  statLayout: TemplateLayout;
+  capturedImage: string;
+  /** Serialised as an array so the snapshot stays a plain JSON value. */
+  hiddenSlots: StatSlotId[];
+  committedCrop: CommittedCrop;
+  isBaseImageHidden: boolean;
+  isBaseImageLocked: boolean;
+  baseImageZIndex: number;
+  imagePerspectiveX: number;
+  imagePerspectiveY: number;
+  imageShadowBlur: number;
+  imageShadowOffsetY: number;
+  imageShadowColor: string;
+  isDrawingHidden: boolean;
+  isDrawingLocked: boolean;
+  drawingZIndex: number;
+  drawingCanvasDataUrl?: string | null;
+  hasDrawnStrokes: boolean;
+  /**
+   * The placed route layer. Part of the snapshot so undo restores it — before
+   * this field existed, undoing past a route edit silently dropped the layer.
+   */
+  routeOverlay: RouteOverlay | null;
+}
+
+/**
+ * Everything needed to rebuild a canvas from scratch: the snapshot undo uses,
+ * plus the four things that live outside it.
+ */
+export interface EditorDoc extends EditorSnapshot {
+  /** Kept even when the route is unplaced, so the Route tool survives reopen. */
+  routeGeometry: RouteGeometry | null;
+  lensFilter: string;
+  filterIntensity: number;
+  /** Frozen at save — the upstream activity may later change or vanish. */
+  statData: StatData;
+}
+
+/**
+ * A saved project: the document, and a small thumbnail to show for it.
+ *
+ * The two are deliberately separate. Storing only a flattened export — as this
+ * type used to — meant reopening a project handed you a baked bitmap as your
+ * background photo, with every layer fused into it.
+ */
 export interface SavedProject {
   id: string;
   title: string;
-  activityType: string;
-  date: string;
-  bgImage: string;
-  lensId: string;
-  elements: EditableLensElement[];
-  distance: string;
-  pace: string;
-  time: string;
+  /** ISO 8601. Relative phrasing is a render concern, and cannot be sorted. */
   updatedAt: string;
-  placedTextsCount: number;
+  doc: EditorDoc;
+  /** JPEG data URL, ≤320px on the long edge, ~40 KB. */
+  thumbnail: string;
+}
+
+/** The in-progress canvas, autosaved so an accidental exit costs nothing. */
+export interface EditorDraft {
+  key: "draft";
+  /** Set when the draft belongs to a project already saved. */
+  projectId: string | null;
+  title: string;
+  savedAt: string;
+  doc: EditorDoc;
 }
 
 export interface TemplateFamily {

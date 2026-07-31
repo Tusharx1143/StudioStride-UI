@@ -5,10 +5,36 @@
  */
 
 import type { ActivitySource, UnifiedActivity } from "../types";
+import { getDistanceUnit } from "../../utils/unitPreference";
+import {
+  distanceValue,
+  formatDistance as formatDistanceInUnit,
+  formatPace as formatPaceInUnit,
+  paceSuffix,
+} from "../../utils/units";
 
 // ---------------------------------------------------------------------------
 // Mock activities (preserved from HomeScreen's INITIAL_ACTIVITIES)
 // ---------------------------------------------------------------------------
+
+/** Re-derives the unit-dependent fields of a fixture. */
+function withCurrentUnit(activity: UnifiedActivity): UnifiedActivity {
+  const unit = getDistanceUnit();
+  const { distanceMeters, movingTime } = activity;
+
+  return {
+    ...activity,
+    displayDistance: formatDistanceInUnit(distanceMeters, unit),
+    displayDistanceUnit: unit,
+    displayPace: `${formatPaceInUnit(distanceMeters, movingTime, unit)} ${paceSuffix(unit)}`,
+    toStatData: () => ({
+      ...activity.toStatData(),
+      distance: distanceValue(distanceMeters, unit),
+      distanceUnit: unit,
+      pace: formatPaceInUnit(distanceMeters, movingTime, unit),
+    }),
+  };
+}
 
 const MOCK_ACTIVITIES: UnifiedActivity[] = [
   {
@@ -31,6 +57,13 @@ const MOCK_ACTIVITIES: UnifiedActivity[] = [
       distanceUnit: "km",
       pace: "6:12",
       time: "52:18",
+      metrics: {
+        avg_hr: { id: "avg_hr", label: "Avg Heart Rate", value: "154", unit: "BPM", category: "Performance", icon: "❤️" },
+        max_hr: { id: "max_hr", label: "Max Heart Rate", value: "178", unit: "BPM", category: "Performance", icon: "💥" },
+        calories: { id: "calories", label: "Calories", value: "640", unit: "kcal", category: "Performance", icon: "🔥" },
+        elev_gain: { id: "elev_gain", label: "Elevation Gain", value: "142", unit: "m", category: "Elevation", icon: "⛰️" },
+        kudos: { id: "kudos", label: "Kudos", value: "128", unit: "👍", category: "Achievements", icon: "👏" },
+      },
       title: "Morning Run",
     }),
   },
@@ -54,6 +87,13 @@ const MOCK_ACTIVITIES: UnifiedActivity[] = [
       distanceUnit: "km",
       pace: "2:59",
       time: "1:45:32",
+      metrics: {
+        power: { id: "power", label: "Avg Power", value: "245", unit: "W", category: "Ride", icon: "⚡" },
+        max_speed: { id: "max_speed", label: "Max Speed", value: "42.1", unit: "km/h", category: "Ride", icon: "🚀" },
+        elev_gain: { id: "elev_gain", label: "Elevation Gain", value: "612", unit: "m", category: "Elevation", icon: "⛰️" },
+        avg_hr: { id: "avg_hr", label: "Avg Heart Rate", value: "141", unit: "BPM", category: "Performance", icon: "❤️" },
+        calories: { id: "calories", label: "Calories", value: "1,180", unit: "kcal", category: "Performance", icon: "🔥" },
+      },
       title: "Cycling Sprint",
     }),
   },
@@ -77,6 +117,10 @@ const MOCK_ACTIVITIES: UnifiedActivity[] = [
       distanceUnit: "km",
       pace: "7:54",
       time: "48:12",
+      metrics: {
+        calories: { id: "calories", label: "Calories", value: "210", unit: "kcal", category: "Performance", icon: "🔥" },
+        avg_hr: { id: "avg_hr", label: "Avg Heart Rate", value: "98", unit: "BPM", category: "Performance", icon: "❤️" },
+      },
       title: "Evening Walk",
     }),
   },
@@ -100,6 +144,13 @@ const MOCK_ACTIVITIES: UnifiedActivity[] = [
       distanceUnit: "km",
       pace: "6:08",
       time: "1:18:45",
+      metrics: {
+        elev_gain: { id: "elev_gain", label: "Elevation Gain", value: "884", unit: "m", category: "Elevation", icon: "⛰️" },
+        max_elev: { id: "max_elev", label: "Max Elevation", value: "784", unit: "m", category: "Elevation", icon: "🏔️" },
+        avg_hr: { id: "avg_hr", label: "Avg Heart Rate", value: "167", unit: "BPM", category: "Performance", icon: "❤️" },
+        suffer_score: { id: "suffer_score", label: "Relative Effort", value: "184", unit: "", category: "Performance", icon: "😤" },
+        achievements: { id: "achievements", label: "Achievements", value: "6", unit: "🏅", category: "Achievements", icon: "🏆" },
+      },
       title: "Mountain Trail Run",
     }),
   },
@@ -120,5 +171,8 @@ export const MOCK_SOURCE: ActivitySource = {
   connect: () => {},
   disconnect: () => {},
 
-  fetchActivities: async () => [...MOCK_ACTIVITIES],
+  // Display strings are derived from the raw metres/seconds each fixture
+  // already carries, so the demo feed honours the user's unit rather than
+  // showing km to someone who has chosen miles.
+  fetchActivities: async () => MOCK_ACTIVITIES.map(withCurrentUnit),
 };

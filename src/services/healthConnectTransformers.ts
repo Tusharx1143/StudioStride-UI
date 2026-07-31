@@ -6,6 +6,9 @@
  * Strava and mock data also work with Health Connect data.
  */
 
+import type { DistanceUnit } from "../utils/units";
+import { distanceValue, formatPace as formatPaceInUnit } from "../utils/units";
+import { getDistanceUnit } from "../utils/unitPreference";
 import type { DailyHealthData, MetricOption, StatData } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -22,25 +25,22 @@ import type { DailyHealthData, MetricOption, StatData } from "../types";
  *   time        → derived from step count at ~100 steps/min walking pace
  *   title       → "Today's Activity"
  */
-export function dailyHealthToStatData(health: DailyHealthData): StatData {
+export function dailyHealthToStatData(
+  health: DailyHealthData,
+  unit: DistanceUnit = getDistanceUnit()
+): StatData {
   // Rough pace estimate: assume ~100 steps/min casual walking pace,
   // ~0.7m average step length
   const walkingMinutes = health.steps > 0
     ? Math.round(health.steps / 100)
     : 0;
-  const paceMinutes = health.distanceKm > 0
-    ? Math.round(walkingMinutes / health.distanceKm)
-    : 0;
-  const paceSeconds = health.distanceKm > 0
-    ? Math.round((walkingMinutes / health.distanceKm - paceMinutes) * 60)
-    : 0;
+  const meters = health.distanceKm * 1000;
+  const seconds = walkingMinutes * 60;
 
   return {
-    distance: health.distanceKm,
-    distanceUnit: "km",
-    pace: health.distanceKm > 0
-      ? `${paceMinutes}:${paceSeconds.toString().padStart(2, "0")}`
-      : "--:--",
+    distance: distanceValue(meters, unit),
+    distanceUnit: unit,
+    pace: formatPaceInUnit(meters, seconds, unit),
     time: formatWalkingTime(walkingMinutes),
     title: "Today's Activity",
   };

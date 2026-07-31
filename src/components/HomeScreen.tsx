@@ -1,16 +1,28 @@
-import React from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Activity, Target, ChevronRight, User, Home, Plus, Camera, FolderKanban,
-  Flame, Mountain, Heart, Footprints, Moon, RefreshCw, Zap, Loader2,
+  Flame, Mountain, Heart, Footprints, Moon, RefreshCw, Loader2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import BottomNav from "./BottomNav";
 import { useAuth } from "../contexts/AuthContext";
 import { useHealthConnect } from "../contexts/HealthConnectContext";
 import { useActivitySources } from "../contexts/ActivitySourcesContext";
 import SourceBadge from "./SourceBadge";
 import ActivityFilterBar from "./ActivityFilterBar";
 import type { UnifiedActivity } from "../sources/types";
+import { RouteThumbnail } from "./RouteThumbnail";
+import { partitionActivities } from "../utils/featuredActivity";
+import {
+  buildRecap,
+  recapSummary,
+  recapTitle,
+  recapToStatData,
+  type Recap,
+} from "../utils/recap";
+import { paceSuffix } from "../utils/units";
+import { useDistanceUnit } from "../utils/unitPreference";
 
 // ---------------------------------------------------------------------------
 // Component
@@ -18,10 +30,14 @@ import type { UnifiedActivity } from "../sources/types";
 
 export default function HomeScreen() {
   const navigate = useNavigate();
+  const distanceUnit = useDistanceUnit();
   const { athlete } = useAuth();
   const { state: hcState, daily: healthDaily, connect: hcConnect } = useHealthConnect();
   const {
     filteredActivities,
+    loadMore,
+    hasMore,
+    isLoadingMore,
     loading,
     refreshAll,
     activeSourceFilter,
@@ -33,45 +49,65 @@ export default function HomeScreen() {
 
   // ── Derive display data ───────────────────────────────────────────────
 
-  const activeActivity = filteredActivities[0] ?? null;
-  const previousActivities = filteredActivities.slice(1);
+  // Which activity the user has promoted into "Ready to share". Null means
+  // the default (newest); an id that a filter removes falls back to it.
+  const [featuredId, setFeaturedId] = useState<string | null>(null);
+
+  const { featured: activeActivity, previous: previousActivities } = partitionActivities(
+    filteredActivities,
+    featuredId
+  );
+
+  /**
+   * Promote a previous activity. The featured card lives above the list, so
+   * scroll it into view — otherwise tapping a row further down changes
+   * something the user cannot see and reads as nothing having happened.
+   */
+  const featureActivity = (activity: UnifiedActivity) => {
+    setFeaturedId(activity.id);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Aggregated from the same combined feed the list already uses.
+  const weekRecap = buildRecap(filteredActivities, "week");
+  const monthRecap = buildRecap(filteredActivities, "month");
+
+  /** Opens a recap in the editor as ordinary stats — no parallel pipeline. */
+  const openRecap = (recap: Recap) => {
+    const statData = recapToStatData(recap, distanceUnit);
+    navigate("/editor", {
+      state: {
+        title: statData.title,
+        distance: `${statData.distance} ${statData.distanceUnit}`,
+        pace: `${statData.pace} ${paceSuffix(distanceUnit)}`,
+        time: statData.time,
+        metrics: statData.metrics,
+        // The longest run's shape stands in for the period.
+        route: recap.longest?.route ?? recap.withRoutes[0]?.route,
+      },
+    });
+  };
 
   const greeting = athlete?.firstname
     ? `${athlete.firstname}'s Stride`
     : "STRIDE";
 
-  // ── Navigate to camera ────────────────────────────────────────────────
+  // ── Straight to the editor with this activity's stats ─────────────────
 
-  const openCamera = (activity: UnifiedActivity) => {
+  const openEditor = (activity: UnifiedActivity) => {
     const statData = activity.toStatData();
-    navigate("/camera", {
+    navigate("/editor", {
       state: {
         title: statData.title,
         distance: `${statData.distance} ${statData.distanceUnit}`,
-        pace: `${statData.pace} /km`,
+        pace: `${statData.pace} ${paceSuffix(distanceUnit)}`,
         time: statData.time,
-      },
-    });
-  };
-
-  // ── Quick Make — 1-tap straight to editor with defaults ──────────────
-
-  const quickMake = (activity: UnifiedActivity) => {
-    const statData = activity.toStatData();
-    const fallbackImage =
-      "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=1200&auto=format&fit=crop";
-    try {
-      sessionStorage.setItem("temp_captured_image", fallbackImage);
-    } catch { /* quota */ }
-    navigate("/camera", {
-      state: {
-        quickEditor: true,
-        capturedImage: fallbackImage,
-        selectedLensId: "minimal",
-        title: statData.title,
-        distance: `${statData.distance} ${statData.distanceUnit}`,
-        pace: `${statData.pace} /km`,
-        time: statData.time,
+        // Everything else the activity recorded — heart rate, elevation,
+        // watts, kudos. Without this the metric picker has nothing to offer.
+        metrics: statData.metrics,
+        // Absent for treadmill runs, gym sessions, and Health Connect
+        // activities — the editor hides the Route tool when it's missing.
+        route: activity.route,
       },
     });
   };
@@ -112,13 +148,13 @@ export default function HomeScreen() {
         <button
           onClick={() => {
             if (activeActivity) {
-              openCamera(activeActivity);
+              openEditor(activeActivity);
             } else {
-              navigate("/camera", {
+              navigate("/editor", {
                 state: {
                   title: "Ready to Move",
-                  distance: "0 km",
-                  pace: "--:-- /km",
+                  distance: `0 ${distanceUnit}`,
+                  pace: `--:-- ${paceSuffix(distanceUnit)}`,
                   time: "0:00",
                 },
               });
@@ -148,14 +184,24 @@ export default function HomeScreen() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ type: "spring", stiffness: 300, damping: 25 }}
               className="relative group cursor-pointer"
-              onClick={() => openCamera(activeActivity)}
+              onClick={() => openEditor(activeActivity)}
             >
               <div className="absolute inset-0 bg-ember opacity-20 blur-2xl rounded-2xl group-hover:opacity-30 transition-opacity"></div>
 
               <div className="bg-surface relative z-10 rounded-xl p-5 hairline-border shadow-[0_0_40px_rgba(255,122,26,0.12)]">
                 <div className="flex justify-between items-start mb-6">
                   <div className="w-12 h-12 rounded-sm bg-ember flex items-center justify-center shrink-0">
-                    {getBigIcon(activeActivity.iconType)}
+                    {activeActivity.route ? (
+                      // Ink on ember: the badge is solid orange.
+                      <RouteThumbnail
+                        geometry={activeActivity.route}
+                        size={40}
+                        strokeWidth={2}
+                        color="var(--color-ink, #101014)"
+                      />
+                    ) : (
+                      getBigIcon(activeActivity.iconType)
+                    )}
                   </div>
                   <span className="text-tool-caption text-text-secondary bg-surface-raised px-3 py-1 rounded-full hairline-border">
                     {activeActivity.displayTimeAgo}
@@ -190,18 +236,11 @@ export default function HomeScreen() {
 
                 <div className="mt-6 pt-4 hairline-border-t flex items-center justify-between gap-3">
                   <button
-                    onClick={(e) => { e.stopPropagation(); openCamera(activeActivity); }}
+                    onClick={(e) => { e.stopPropagation(); openEditor(activeActivity); }}
                     className="flex items-center gap-1.5 text-ember hover:opacity-80 transition-opacity"
                   >
                     <Plus className="w-4 h-4" />
                     <span className="text-stat-value">Create Story</span>
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); quickMake(activeActivity); }}
-                    className="flex items-center gap-1.5 text-text-secondary hover:text-ember transition-colors text-label font-semibold"
-                  >
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>Quick Make</span>
                   </button>
                 </div>
               </div>
@@ -330,6 +369,51 @@ export default function HomeScreen() {
           />
         )}
 
+        {/* ── In Review ─────────────────────────────────────────────────
+            Every stat in the app is single-activity. Recaps get shared on a
+            predictable cadence, which is the retention loop a story editor
+            wants — and they compose through the ordinary editor pipeline. */}
+        {(weekRecap.activityCount > 0 || monthRecap.activityCount > 0) && (
+          <section className="mb-section-v-rhythm">
+            <h2 className="text-section-header mb-4">In review</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[weekRecap, monthRecap]
+                .filter((r) => r.activityCount > 0)
+                .map((recap) => (
+                  <button
+                    key={recap.period}
+                    onClick={() => openRecap(recap)}
+                    className="bg-surface hairline-border rounded-xl p-4 text-left hover:bg-surface-raised hover:border-ember/40 transition-colors group"
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="min-w-0">
+                        <h3 className="text-stat-value truncate">{recapTitle(recap)}</h3>
+                        <p className="text-label text-text-secondary mt-0.5 truncate">
+                          {recapSummary(recap, distanceUnit)}
+                        </p>
+                      </div>
+                      <ChevronRight className="w-5 h-5 shrink-0 text-text-secondary group-hover:text-ember transition-colors" />
+                    </div>
+
+                    {/* RouteThumbnail makes the route grid almost free. */}
+                    {recap.withRoutes.length > 0 && (
+                      <div className="flex items-center gap-2 text-ember">
+                        {recap.withRoutes.slice(0, 5).map((a) => (
+                          <RouteThumbnail key={a.id} geometry={a.route!} size={28} strokeWidth={2} />
+                        ))}
+                        {recap.withRoutes.length > 5 && (
+                          <span className="text-tool-caption text-text-secondary">
+                            +{recap.withRoutes.length - 5}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </button>
+                ))}
+            </div>
+          </section>
+        )}
+
         {/* ── Previous Activities ───────────────────────────────────── */}
         {previousActivities.length > 0 && (
           <section className="mb-section-v-rhythm">
@@ -363,11 +447,17 @@ export default function HomeScreen() {
                     exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.2 } }}
                     whileHover={{ scale: 1.005 }}
                     whileTap={{ scale: 0.99 }}
-                    onClick={() => openCamera(item)}
+                    onClick={() => featureActivity(item)}
+                    aria-label={`Feature ${item.title}`}
                     className="bg-surface rounded-lg p-4 flex items-center hairline-border hover:bg-surface-raised transition-all text-left group"
                   >
-                    <div className="w-12 h-12 rounded-sm bg-ember-dim flex items-center justify-center shrink-0 mr-4 group-hover:bg-ember/20 transition-colors">
-                      {getIcon(item.iconType)}
+                    <div className="w-12 h-12 rounded-sm bg-ember-dim flex items-center justify-center shrink-0 mr-4 group-hover:bg-ember/20 transition-colors text-ember">
+                      {item.route ? (
+                        // currentColor picks up text-ember against the dim badge.
+                        <RouteThumbnail geometry={item.route} size={40} strokeWidth={2} />
+                      ) : (
+                        getIcon(item.iconType)
+                      )}
                     </div>
                     <div className="flex-grow min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
@@ -390,47 +480,31 @@ export default function HomeScreen() {
                 ))}
               </AnimatePresence>
             </motion.div>
+
+            {/* The feed used to stop dead at 20 with no way to reach anything
+                older, however much history the athlete had. */}
+            {hasMore && (
+              <button
+                onClick={loadMore}
+                disabled={isLoadingMore}
+                className="mt-4 w-full py-3 rounded-xl bg-surface hairline-border text-text-secondary hover:text-text-primary hover:bg-surface-raised transition-colors text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isLoadingMore ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Loading…</span>
+                  </>
+                ) : (
+                  <span>Load older activities</span>
+                )}
+              </button>
+            )}
           </section>
         )}
       </main>
 
       {/* ── Bottom Nav ─────────────────────────────────────────────── */}
-      <motion.nav
-        initial={{ y: 60, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.2, duration: 0.4, ease: "easeOut" }}
-        className="fixed bottom-0 w-full z-50 rounded-t-xl hairline-border-t bg-surface flex justify-around items-center px-4 py-3 pb-safe"
-        aria-label="Main navigation"
-      >
-        <button
-          className="flex flex-col items-center justify-center bg-surface-raised text-ember rounded-full p-3 transition-colors"
-          aria-label="Home"
-          aria-current="page"
-        >
-          <Home className="w-6 h-6" />
-        </button>
-        <button
-          onClick={() => navigate("/camera")}
-          className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-ember transition-colors"
-          aria-label="Camera"
-        >
-          <Camera className="w-6 h-6" />
-        </button>
-        <button
-          onClick={() => navigate("/projects")}
-          className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-ember transition-colors"
-          aria-label="Projects"
-        >
-          <FolderKanban className="w-6 h-6" />
-        </button>
-        <button
-          onClick={() => navigate("/profile")}
-          className="flex flex-col items-center justify-center text-text-secondary p-3 hover:text-text-primary transition-colors"
-          aria-label="Profile"
-        >
-          <User className="w-6 h-6" />
-        </button>
-      </motion.nav>
+      <BottomNav active="home" />
     </div>
   );
 }

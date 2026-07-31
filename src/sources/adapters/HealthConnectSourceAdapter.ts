@@ -12,6 +12,13 @@
 import type { ActivitySource, SourceFetchParams, SourceStats, UnifiedActivity } from "../types";
 import type { DailyHealthData } from "../../types";
 import { dailyHealthToStatData } from "../../services/healthConnectTransformers";
+import { getDistanceUnit } from "../../utils/unitPreference";
+import {
+  distanceValue,
+  formatDistance as formatDistanceInUnit,
+  formatPace as formatPaceInUnit,
+  paceSuffix,
+} from "../../utils/units";
 
 // ---------------------------------------------------------------------------
 // Health Connect plugin — lazy import (throws at runtime on web)
@@ -139,7 +146,7 @@ export function createHealthConnectSourceAdapter(
             const mapped = mapWorkoutType(w.workoutType);
             const distM = w.totalDistance ?? 0;
             const durS = w.duration ?? 0;
-            const avgSpeed = durS > 0 ? distM / durS : 0;
+            const unit = getDistanceUnit();
             results.push({
               id: `hcw_${w.platformId ?? results.length}`,
               sourceId: "healthconnect",
@@ -147,18 +154,18 @@ export function createHealthConnectSourceAdapter(
               subtitle: w.sourceName ?? "Health Connect",
               type: mapped.type,
               iconType: mapped.iconType,
-              displayDistance: (distM / 1000).toFixed(1),
-              displayDistanceUnit: "km",
+              displayDistance: formatDistanceInUnit(distM, unit),
+              displayDistanceUnit: unit,
               displayTime: formatDuration(durS),
-              displayPace: `${formatPace(avgSpeed)} /km`,
+              displayPace: `${formatPaceInUnit(distM, durS, unit)} ${paceSuffix(unit)}`,
               displayTimeAgo: timeAgo(w.startDate),
               date: w.startDate,
               distanceMeters: distM,
               movingTime: durS,
               toStatData: () => ({
-                distance: distM / 1000,
-                distanceUnit: "km",
-                pace: formatPace(avgSpeed),
+                distance: distanceValue(distM, unit),
+                distanceUnit: unit,
+                pace: formatPaceInUnit(distM, durS, unit),
                 time: formatDuration(durS),
                 title: mapped.type,
               }),
@@ -174,10 +181,9 @@ export function createHealthConnectSourceAdapter(
       if (daily && daily.steps > 0) {
         const today = new Date().toISOString();
         const walkingMinutes = Math.round(daily.steps / 100);
-        const paceMin = daily.distanceKm > 0
-          ? Math.round(walkingMinutes / daily.distanceKm) : 0;
-        const paceSec = daily.distanceKm > 0
-          ? Math.round((walkingMinutes / daily.distanceKm - paceMin) * 60) : 0;
+        const unit = getDistanceUnit();
+        const dailyMeters = daily.distanceKm * 1000;
+        const dailySeconds = walkingMinutes * 60;
 
         results.push({
           id: "hc_daily_steps",
@@ -186,12 +192,10 @@ export function createHealthConnectSourceAdapter(
           subtitle: `${daily.steps.toLocaleString()} steps`,
           type: "Walk",
           iconType: "activity",
-          displayDistance: daily.distanceKm > 0 ? daily.distanceKm.toFixed(1) : "0.0",
-          displayDistanceUnit: "km",
-          displayTime: formatDuration(walkingMinutes * 60),
-          displayPace: daily.distanceKm > 0
-            ? `${paceMin}:${paceSec.toString().padStart(2, "0")} /km`
-            : "--:-- /km",
+          displayDistance: formatDistanceInUnit(dailyMeters, unit),
+          displayDistanceUnit: unit,
+          displayTime: formatDuration(dailySeconds),
+          displayPace: `${formatPaceInUnit(dailyMeters, dailySeconds, unit)} ${paceSuffix(unit)}`,
           displayTimeAgo: "Today",
           date: today,
           distanceMeters: daily.distanceKm * 1000,
