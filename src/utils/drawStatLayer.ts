@@ -3,6 +3,7 @@ import type {
   StatData,
   StatSlotId,
   TemplateLayout,
+  TemplateStatDesign,
 } from "../types";
 import { getStatDesign } from "../data/templateStatDesigns";
 import { resolveSlotStyle } from "./metricSlots";
@@ -20,7 +21,9 @@ export async function drawStatLayer(
   canvas: { width: number; height: number },
   templateId: string,
   layout: TemplateLayout,
-  data: StatData
+  data: StatData,
+  /** Published design for this template. Omitted = use the hardcoded table. */
+  design: TemplateStatDesign = getStatDesign(templateId)
 ): Promise<void> {
   // ctx.font falls back silently when a webfont has not loaded yet.
   if (typeof document !== "undefined" && document.fonts?.ready) {
@@ -31,7 +34,6 @@ export async function drawStatLayer(
     }
   }
 
-  const design = getStatDesign(templateId);
   const scale = canvas.width / REFERENCE_WIDTH;
 
   for (const slot of Object.keys(layout) as StatSlotId[]) {

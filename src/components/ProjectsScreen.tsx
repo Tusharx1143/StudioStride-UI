@@ -16,13 +16,14 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import BottomNav from "./BottomNav";
-import { TEMPLATE_FAMILIES } from "../data/mockData";
+import { useContent } from "../contexts/ContentContext";
 import { SavedProject } from "../types";
 import { formatDistance, formatRelativeTime } from "../utils/projectDoc";
 import { deleteProject, listProjects } from "../utils/projectStore";
 
 export default function ProjectsScreen() {
   const navigate = useNavigate();
+  const { templateFamilies } = useContent();
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [projects, setProjects] = useState<SavedProject[]>([]);
@@ -153,8 +154,8 @@ export default function ProjectsScreen() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {projects.map((project) => {
               const family =
-                TEMPLATE_FAMILIES.find((f) => f.id === project.doc.templateId) ??
-                TEMPLATE_FAMILIES[0];
+                templateFamilies.find((f) => f.id === project.doc.templateId) ??
+                templateFamilies[0];
               const { statData } = project.doc;
 
               return (

@@ -22,7 +22,12 @@ import {
   type ReactNode,
 } from "react";
 import type { TemplateFamily, TemplateStatDesign, LensTemplate, PhotoSource } from "../types";
-import type { StickerItem, ContentBundle } from "../types/content";
+import type {
+  StickerItem,
+  ContentBundle,
+  FirestoreFont,
+  FirestoreColorPalette,
+} from "../types/content";
 import {
   getTemplateFamilies,
   getStatDesigns,
@@ -30,6 +35,8 @@ import {
   getStickers,
   getStockPhotos,
   getLensFilters,
+  getFonts,
+  getColorPalettes,
 } from "../services/contentService";
 import { TEMPLATE_FAMILIES, LENS_TEMPLATES_EXPANDED, SAMPLE_STUDIO_TEMPLATES, STOCK_PHOTOS, LENS_FILTER_MAP } from "../data/mockData";
 import { TEMPLATE_STAT_DESIGNS } from "../data/templateStatDesigns";
@@ -52,6 +59,52 @@ function loadMockStockPhotos(): PhotoSource[] {
 
 function loadMockFilters(): Record<string, string> {
   return LENS_FILTER_MAP;
+}
+
+/** Firebase wins when it has anything to say; silence means keep the mock. */
+function pickList<T>(fromFirebase: T[], fallback: T[]): T[] {
+  return fromFirebase.length > 0 ? fromFirebase : fallback;
+}
+
+/**
+ * Fold what Firestore returned onto the hardcoded library, per collection.
+ *
+ * Deliberately not all-or-nothing: a store with lenses but no stock photos
+ * must not blank the photo picker, and one configured stat design must not
+ * orphan the other 28 templates. Lists replace wholesale when non-empty, so
+ * unpublishing a lens really removes it; records merge, so an admin entry
+ * overrides its hardcoded namesake and the rest keep working.
+ */
+export function resolveBundle(
+  fromFirebase: ContentBundle,
+  mock: ContentBundle
+): ContentBundle {
+  return {
+    templateFamilies: pickList(fromFirebase.templateFamilies, mock.templateFamilies),
+    statDesigns: { ...mock.statDesigns, ...fromFirebase.statDesigns },
+    lensTemplates: pickList(fromFirebase.lensTemplates, mock.lensTemplates),
+    stickers: pickList(fromFirebase.stickers, mock.stickers),
+    stockPhotos: pickList(fromFirebase.stockPhotos, mock.stockPhotos),
+    lensFilters: { ...mock.lensFilters, ...fromFirebase.lensFilters },
+    fonts: fromFirebase.fonts,
+    colorPalettes: fromFirebase.colorPalettes,
+  };
+}
+
+/** The full mock bundle — tier 2, and the initial state before any fetch. */
+function loadMockBundle(): ContentBundle {
+  return {
+    templateFamilies: loadMockFamilies(),
+    statDesigns: TEMPLATE_STAT_DESIGNS,
+    lensTemplates: loadMockLenses(),
+    stickers: loadMockStickers(),
+    stockPhotos: loadMockStockPhotos(),
+    lensFilters: loadMockFilters(),
+    // No hardcoded equivalents — the editor keeps its own built-in font and
+    // colour lists, and these only add to them.
+    fonts: [],
+    colorPalettes: [],
+  };
 }
 
 function loadMockStickers(): StickerItem[] {
@@ -83,6 +136,18 @@ function loadMockStickers(): StickerItem[] {
     { id: "st_p_temp", content: "{value}{unit}", label: "Temperature", category: "Weather", type: "metric", statKey: "temp", format: "{value}{unit}", bgGradient: "from-sky-400 to-indigo-500" },
     { id: "st_p_dist", content: "{value} {unit}", label: "Distance", category: "Distance", type: "metric", statKey: "distance", format: "{value} {unit}", bgGradient: "from-blue-500 to-indigo-600" },
     { id: "st_p_pace", content: "{value}", label: "Pace", category: "Pace", type: "metric", statKey: "pace", bgGradient: "from-teal-500 to-cyan-600" },
+
+    // ── Editor's own built-in library (badges, locations, stat pills) ──
+    { id: "st_s1", content: "DISTANCE", label: "Distance", category: "Stats", type: "metric", bgGradient: "from-ember to-ember-lift text-ink", statKey: "distance" },
+    { id: "st_s2", content: "PACE", label: "Pace", category: "Stats", type: "metric", bgGradient: "from-sky-500 to-blue-600", statKey: "pace" },
+    { id: "st_s3", content: "TIME", label: "Time", category: "Stats", type: "metric", bgGradient: "from-rose-500 to-pink-600", statKey: "time" },
+    { id: "st_s4", content: "TITLE", label: "Activity Title", category: "Stats", type: "metric", bgGradient: "from-amber-500 to-orange-600", statKey: "title" },
+    { id: "st_2", content: "BEAST MODE 🔥", label: "Beast Mode", category: "Badges", type: "badge", bgGradient: "from-orange-600 to-red-500" },
+    { id: "st_5", content: "RUNNER'S HIGH ⚡", label: "Runner's High", category: "Badges", type: "badge", bgGradient: "from-cyan-500 to-blue-600" },
+    { id: "st_7", content: "FINISHER", label: "Finisher", category: "Badges", type: "badge", bgGradient: "from-yellow-400 to-amber-600" },
+    { id: "st_l1", content: "CENTRAL PARK", label: "Central Park", category: "Locations", type: "location", bgGradient: "from-emerald-600 to-green-500" },
+    { id: "st_l2", content: "SEA OCEAN TRAIL", label: "Sea Trail", category: "Locations", type: "location", bgGradient: "from-indigo-600 to-blue-500" },
+    { id: "st_l4", content: "GOLDEN GATE", label: "Golden Gate", category: "Locations", type: "location", bgGradient: "from-rose-600 to-orange-500" },
   ];
 }
 
@@ -114,36 +179,27 @@ interface ContentProviderProps {
 export function ContentProvider({ children }: ContentProviderProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [bundle, setBundle] = useState<ContentBundle>({
-    templateFamilies: [],
-    statDesigns: {},
-    lensTemplates: [],
-    stickers: [],
-    stockPhotos: [],
-    lensFilters: {},
-  });
+  // Seeded with the mock bundle rather than empties: consumers render on the
+  // very first frame, before the Firebase round-trip resolves, and none of
+  // them has to guard against an empty list that only exists for one tick.
+  const [bundle, setBundle] = useState<ContentBundle>(loadMockBundle);
 
   const loadContent = useCallback(async () => {
     setLoading(true);
     setError(null);
 
+    const mock = loadMockBundle();
+
     if (!USE_FIREBASE) {
       // Skip Firebase entirely — use mock data
-      setBundle({
-        templateFamilies: loadMockFamilies(),
-        statDesigns: TEMPLATE_STAT_DESIGNS,
-        lensTemplates: loadMockLenses(),
-        stickers: loadMockStickers(),
-        stockPhotos: loadMockStockPhotos(),
-        lensFilters: loadMockFilters(),
-      });
+      setBundle(mock);
       setLoading(false);
       return;
     }
 
     try {
       // Tier 1: Firebase
-      const [families, designs, lenses, stickers, photos, filters] =
+      const [families, designs, lenses, stickers, photos, filters, fonts, palettes] =
         await Promise.all([
           getTemplateFamilies(),
           getStatDesigns(),
@@ -151,43 +207,33 @@ export function ContentProvider({ children }: ContentProviderProps) {
           getStickers(),
           getStockPhotos(),
           getLensFilters(),
+          getFonts(),
+          getColorPalettes(),
         ]);
 
-      const hasContent =
-        families.length > 0 ||
-        Object.keys(designs).length > 0 ||
-        lenses.length > 0 ||
-        stickers.length > 0 ||
-        photos.length > 0 ||
-        Object.keys(filters).length > 0;
-
-      if (hasContent) {
-        setBundle({
-          templateFamilies: families,
-          statDesigns: designs,
-          lensTemplates: lenses,
-          stickers,
-          stockPhotos: photos,
-          lensFilters: filters,
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Firebase returned empty — fall through to mock data
+      setBundle(
+        resolveBundle(
+          {
+            templateFamilies: families,
+            statDesigns: designs,
+            lensTemplates: lenses,
+            stickers,
+            stockPhotos: photos,
+            lensFilters: filters,
+            fonts,
+            colorPalettes: palettes,
+          },
+          mock
+        )
+      );
+      setLoading(false);
+      return;
     } catch (err) {
       console.warn("[ContentContext] Firebase fetch failed, falling back to mock data", err);
     }
 
     // Tier 2: Mock data fallback
-    setBundle({
-      templateFamilies: loadMockFamilies(),
-      statDesigns: TEMPLATE_STAT_DESIGNS,
-      lensTemplates: loadMockLenses(),
-      stickers: loadMockStickers(),
-      stockPhotos: loadMockStockPhotos(),
-      lensFilters: loadMockFilters(),
-    });
+    setBundle(mock);
     setLoading(false);
   }, []);
 

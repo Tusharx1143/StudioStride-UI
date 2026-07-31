@@ -45,7 +45,10 @@ import {
   Image as ImageIcon
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LENS_TEMPLATES_EXPANDED, LENS_FILTER_MAP, STOCK_PHOTOS } from "../data/mockData";
+import { STOCK_PHOTOS } from "../data/mockData";
+import { useContent } from "../contexts/ContentContext";
+import { resolveStickerContent } from "../data/resolveStickerContent";
+import type { StickerItem } from "../types/content";
 import type {
   CommittedCrop,
   CustomLayouts,
@@ -99,7 +102,6 @@ import DraggableLayer from "./DraggableLayer";
 import SnapGuides from "./SnapGuides";
 import type { SnapLine } from "../utils/snapping";
 import { triggerHaptic } from "../utils/haptics";
-import { TEMPLATE_FAMILIES } from "../data/mockData";
 import {
   clearCustomLayout,
   hasCustomLayout,
@@ -122,35 +124,8 @@ import type { RouteGeometry, RouteOverlay } from "../types";
 // definitions, and three hand-maintained copies is exactly the drift that let
 // saved projects fall out of step with the canvas in the first place.
 
-// Pre-defined Sticker Item interface
-interface StickerItem {
-  id: string;
-  content: string;
-  label: string;
-  category: "Badges" | "Stats" | "Locations";
-  type: "badge" | "metric" | "location";
-  bgGradient?: string;
-  /** If set, replaces content with the stat value from statData on add. */
-  statKey?: string;
-}
-
-const STICKER_LIBRARY: StickerItem[] = [
-  // Activity Stats — dynamic values from the current activity
-  { id: "st_s1", content: "DISTANCE", label: "Distance", category: "Stats", type: "metric", bgGradient: "from-ember to-ember-lift text-ink", statKey: "distance" },
-  { id: "st_s2", content: "PACE", label: "Pace", category: "Stats", type: "metric", bgGradient: "from-sky-500 to-blue-600", statKey: "pace" },
-  { id: "st_s3", content: "TIME", label: "Time", category: "Stats", type: "metric", bgGradient: "from-rose-500 to-pink-600", statKey: "time" },
-  { id: "st_s4", content: "TITLE", label: "Activity Title", category: "Stats", type: "metric", bgGradient: "from-amber-500 to-orange-600", statKey: "title" },
-
-  // Badges & Milestones
-  { id: "st_2", content: "BEAST MODE 🔥", label: "Beast Mode", category: "Badges", type: "badge", bgGradient: "from-orange-600 to-red-500" },
-  { id: "st_5", content: "RUNNER'S HIGH ⚡", label: "Runner's High", category: "Badges", type: "badge", bgGradient: "from-cyan-500 to-blue-600" },
-  { id: "st_7", content: "FINISHER", label: "Finisher", category: "Badges", type: "badge", bgGradient: "from-yellow-400 to-amber-600" },
-
-  // Locations — without trailing emojis
-  { id: "st_l1", content: "CENTRAL PARK", label: "Central Park", category: "Locations", type: "location", bgGradient: "from-emerald-600 to-green-500" },
-  { id: "st_l2", content: "SEA OCEAN TRAIL", label: "Sea Trail", category: "Locations", type: "location", bgGradient: "from-indigo-600 to-blue-500" },
-  { id: "st_l4", content: "GOLDEN GATE", label: "Golden Gate", category: "Locations", type: "location", bgGradient: "from-rose-600 to-orange-500" },
-];
+// The sticker library now comes from ContentContext (Firestore, falling back
+// to the hardcoded set in that provider) — see loadMockStickers there.
 
 // Available Fonts
 const FONT_STYLES: { id: TextOverlay["fontStyle"]; label: string; className: string }[] = [
@@ -187,6 +162,37 @@ export default function EditorScreen() {
   const navigate = useNavigate();
   const canvasRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
+
+  // Everything the Content Manager owns. Never empty — the provider seeds
+  // itself with the hardcoded library, so these read like constants but track
+  // whatever is published in Firestore.
+  const {
+    templateFamilies,
+    statDesigns,
+    lensTemplates,
+    lensFilters,
+    stockPhotos,
+    stickers: stickerLibrary,
+    colorPalettes,
+  } = useContent();
+
+  // Admin palettes extend the built-in swatches rather than replacing them —
+  // the editor's own colours stay available whatever is published.
+  const colorPalette = React.useMemo(() => {
+    const published = colorPalettes.flatMap((p) =>
+      p.colors.map((hex) => ({ hex, name: p.name }))
+    );
+    const seen = new Set(COLOR_PALETTE.map((c) => c.hex.toUpperCase()));
+    return [
+      ...COLOR_PALETTE,
+      ...published.filter((c) => {
+        const key = c.hex.toUpperCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }),
+    ];
+  }, [colorPalettes]);
   // Router state is read once — later navigations never re-enter this screen
   // without a remount, and re-reading it would clobber edits in progress.
   const routeState = useRef<Record<string, unknown>>(
@@ -207,7 +213,7 @@ export default function EditorScreen() {
       const stored = sessionStorage.getItem("temp_captured_image");
       if (stored) return stored;
     }
-    return STOCK_PHOTOS[0].url;
+    return stockPhotos[0]?.url ?? STOCK_PHOTOS[0].url;
   });
 
   const [lensFilter, setLensFilter] = useState<string>(
@@ -224,7 +230,7 @@ export default function EditorScreen() {
   const composedFilter = scaleFilter(lensFilter, filterIntensity / 100);
   // Editor state, not a derived constant: undo has to be able to restore it.
   const [templateId, setTemplateId] = useState<string>(
-    (routeState.templateId as string | undefined) ?? TEMPLATE_FAMILIES[0].id
+    (routeState.templateId as string | undefined) ?? templateFamilies[0].id
   );
 
   // Activity stats carried in on the route. Both the short keys used by the
@@ -256,8 +262,9 @@ export default function EditorScreen() {
   );
   const [statLayout, setStatLayout] = useState<TemplateLayout>(() =>
     resolveLayout(
-      (routeState.templateId as string | undefined) ?? TEMPLATE_FAMILIES[0].id,
-      loadCustomLayouts()
+      (routeState.templateId as string | undefined) ?? templateFamilies[0].id,
+      loadCustomLayouts(),
+      statDesigns
     )
   );
 
@@ -294,6 +301,21 @@ export default function EditorScreen() {
     if (rect) setCanvasSize({ width: rect.width, height: rect.height });
   };
 
+  // The published library can drop the template this editor opened on — an
+  // admin unpublishing it mid-session, or a saved project naming one that no
+  // longer exists. Fall back to the first available rather than rendering a
+  // template that isn't in the strip.
+  useEffect(() => {
+    if (templateFamilies.some((t) => t.id === templateId)) return;
+    const fallback = templateFamilies[0];
+    if (!fallback) return;
+    setTemplateId(fallback.id);
+    setStatLayout(resolveLayout(fallback.id, customLayouts, statDesigns));
+    // customLayouts is deliberately not a dependency: this only has to run
+    // when the published library changes, not on every drag.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateFamilies, templateId, statDesigns]);
+
   // Switching template re-skins the stats and restores whatever arrangement
   // that template was last given.
   const handleSelectTemplate = (template: TemplateFamily) => {
@@ -301,7 +323,7 @@ export default function EditorScreen() {
     pushHistorySnapshot();
     setTemplateId(template.id);
     updateKit(pushRecentTemplate(brandKit, template.id));
-    setStatLayout(resolveLayout(template.id, customLayouts));
+    setStatLayout(resolveLayout(template.id, customLayouts, statDesigns));
     setHiddenSlots(new Set());
     setSelectedStatSlot((prev) => (prev && prev !== "accent" ? prev : "distance"));
   };
@@ -346,7 +368,7 @@ export default function EditorScreen() {
     const updated = clearCustomLayout(customLayouts, templateId);
     saveCustomLayouts(updated);
     setCustomLayouts(updated);
-    setStatLayout(resolveLayout(templateId, updated));
+    setStatLayout(resolveLayout(templateId, updated, statDesigns));
   };
 
   /**
@@ -778,6 +800,7 @@ export default function EditorScreen() {
       templateId: doc.templateId,
       statLayout: doc.statLayout,
       statData: doc.statData,
+      statDesign: statDesigns[doc.templateId],
       mimeType: "image/jpeg",
       quality: 0.7,
     });
@@ -1281,7 +1304,15 @@ export default function EditorScreen() {
     pushHistorySnapshot();
     // Interpolate stat data if this sticker references a stat
     let stickerContent = item.content;
-    if (item.statKey) {
+    if (item.statKey && item.format) {
+      // Admin-authored sticker: its `format` template drives the text.
+      stickerContent = resolveStickerContent(
+        item.content,
+        item.format,
+        item.statKey,
+        statData as unknown as Record<string, string | number | undefined>
+      );
+    } else if (item.statKey) {
       const statValue = statData[item.statKey as keyof StatData];
       if (statValue !== undefined && statValue !== null) {
         stickerContent = String(statValue).toUpperCase();
@@ -1508,10 +1539,21 @@ export default function EditorScreen() {
     }
   };
 
+  // Category tabs follow whatever the library actually contains, so a new
+  // admin category shows up without a code change.
+  const stickerCategories = React.useMemo(
+    () => ["All", ...Array.from(new Set(stickerLibrary.map((s) => s.category)))],
+    [stickerLibrary]
+  );
+
   // Filtered stickers for the picker modal
-  const filteredStickers = STICKER_LIBRARY.filter((item) => {
+  const filteredStickers = stickerLibrary.filter((item) => {
+    // An unpublished category leaves the picker on a tab that no longer
+    // exists — show everything rather than nothing.
     const matchesCategory =
-      selectedStickerCategory === "All" || item.category === selectedStickerCategory;
+      selectedStickerCategory === "All" ||
+      !stickerCategories.includes(selectedStickerCategory) ||
+      item.category === selectedStickerCategory;
     const matchesSearch =
       !stickerSearch.trim() ||
       item.label.toLowerCase().includes(stickerSearch.toLowerCase()) ||
@@ -2112,8 +2154,8 @@ export default function EditorScreen() {
           <div className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-xs font-semibold text-ember">
             <Sparkles className="w-3 h-3" />
             <span>
-              {LENS_TEMPLATES_EXPANDED.find(
-                (l) => LENS_FILTER_MAP[l.overlayType] === lensFilter
+              {lensTemplates.find(
+                (l) => lensFilters[l.overlayType] === lensFilter
               )?.name || "Filtered"}
             </span>
           </div>
@@ -2474,7 +2516,7 @@ export default function EditorScreen() {
 
               {/* BOTTOM ROW: Color Palette Swatches */}
               <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1 px-1 justify-between">
-                {COLOR_PALETTE.map((c) => {
+                {colorPalette.map((c) => {
                   const isSelected = selectedColor.toLowerCase() === c.hex.toLowerCase();
                   return (
                     <button
@@ -2583,11 +2625,10 @@ export default function EditorScreen() {
               {/* CATEGORY TABS */}
               <div className="w-full">
                 <GestureSwipeCarousel
-                  items={["All", "Badges", "Stats", "Locations"]}
-                  selectedIndex={["All", "Badges", "Stats", "Locations"].indexOf(selectedStickerCategory)}
+                  items={stickerCategories}
+                  selectedIndex={stickerCategories.indexOf(selectedStickerCategory)}
                   onSelectIndex={(index) => {
-                    const cats = ["All", "Badges", "Stats", "Locations"];
-                    setSelectedStickerCategory(cats[index]);
+                    setSelectedStickerCategory(stickerCategories[index]);
                   }}
                   itemGap={8}
                   selectedScale={1.05}
@@ -2651,7 +2692,7 @@ export default function EditorScreen() {
         {activeTool === "route" && routeOverlay && (
           <RouteLayerControls
             overlay={routeOverlay}
-            palette={COLOR_PALETTE}
+            palette={colorPalette}
             onChange={(next) => {
               pushHistorySnapshot();
               setRouteOverlay((prev) => (prev ? { ...prev, ...next } : prev));
@@ -2729,7 +2770,7 @@ export default function EditorScreen() {
               {/* Color Palette (hidden when Eraser selected) */}
               {brushType !== "eraser" ? (
                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 max-w-[55%]">
-                  {COLOR_PALETTE.map((c) => {
+                  {colorPalette.map((c) => {
                     const isSelected = brushColor.toLowerCase() === c.hex.toLowerCase();
                     return (
                       <button
@@ -3278,7 +3319,7 @@ export default function EditorScreen() {
       {/* 5. BOTTOM STACK — lens strip over the capture row */}
       <div className="relative z-20 w-full pb-safe pb-4 pt-2 flex flex-col items-center gap-1.5">
         <LensStrip
-          templates={TEMPLATE_FAMILIES}
+          templates={templateFamilies}
           selectedId={templateId}
           onSelect={handleSelectTemplate}
           favouriteIds={brandKit.favouriteTemplates}
@@ -3438,8 +3479,8 @@ export default function EditorScreen() {
                   </button>
 
                   {/* Lens filters as circular carousel */}
-                  {LENS_TEMPLATES_EXPANDED.map((lens) => {
-                    const filterVal = LENS_FILTER_MAP[lens.overlayType] || "";
+                  {lensTemplates.map((lens) => {
+                    const filterVal = lensFilters[lens.overlayType] || "";
                     const isActive = lensFilter === filterVal;
                     return (
                       <button

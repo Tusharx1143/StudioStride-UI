@@ -4,6 +4,7 @@ import type {
   StatData,
   StickerOverlay,
   TemplateLayout,
+  TemplateStatDesign,
   TextOverlay,
 } from "../types";
 import { drawStatLayer } from "./drawStatLayer";
@@ -46,6 +47,11 @@ export interface CompositeParams {
   templateId: string;
   statLayout: TemplateLayout;
   statData: StatData;
+  /**
+   * Published stat design for `templateId`. Omitted falls back to the
+   * hardcoded table, so the export matches whatever the canvas showed.
+   */
+  statDesign?: TemplateStatDesign;
   mimeType: string;
   quality: number;
 }
@@ -186,7 +192,7 @@ export async function renderComposite(p: CompositeParams): Promise<string> {
   // With the base image hidden there is no image pass to follow, so the
   // stats still need to land underneath everything else.
   if (p.isBaseImageHidden) {
-    await drawStatLayer(ctx, { width, height }, p.templateId, p.statLayout, p.statData);
+    await drawStatLayer(ctx, { width, height }, p.templateId, p.statLayout, p.statData, p.statDesign);
   }
 
   // Draw all layers sequentially
@@ -195,7 +201,7 @@ export async function renderComposite(p: CompositeParams): Promise<string> {
       await drawImageLayer();
       // Template stats sit directly on the photo, beneath anything the user
       // added afterwards.
-      await drawStatLayer(ctx, { width, height }, p.templateId, p.statLayout, p.statData);
+      await drawStatLayer(ctx, { width, height }, p.templateId, p.statLayout, p.statData, p.statDesign);
     } else if (layer.type === "draw" && p.drawingCanvas) {
       ctx.save();
       ctx.drawImage(p.drawingCanvas, 0, 0, width, height);

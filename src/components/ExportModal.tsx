@@ -22,6 +22,7 @@ import type {
   TextOverlay,
 } from "../types";
 import { renderComposite as composite } from "../utils/renderComposite";
+import { useContent } from "../contexts/ContentContext";
 import { exportFileStem, projectTitle, shareCaption } from "../utils/projectDoc";
 
 interface ExportModalProps {
@@ -70,6 +71,7 @@ export default function ExportModal({
   statLayout,
   statData,
 }: ExportModalProps) {
+  const { statDesigns } = useContent();
   const [format, setFormat] = useState<ExportFormat>("png");
   const [resolution, setResolution] = useState<ExportResolution>("1080p");
   const [quality, setQuality] = useState<number>(0.92);
@@ -133,6 +135,8 @@ export default function ExportModal({
       templateId,
       statLayout,
       statData,
+      // Export has to use the same published design the canvas rendered.
+      statDesign: statDesigns[templateId],
       mimeType:
         format === "jpeg" ? "image/jpeg" : format === "webp" ? "image/webp" : "image/png",
       quality,

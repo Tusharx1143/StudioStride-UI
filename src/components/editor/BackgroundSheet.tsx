@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Upload, X } from "lucide-react";
-import { STOCK_PHOTOS } from "../../data/mockData";
+import { useContent } from "../../contexts/ContentContext";
 
 interface BackgroundSheetProps {
   isOpen: boolean;
@@ -16,6 +16,8 @@ interface BackgroundSheetProps {
  */
 export default function BackgroundSheet({ isOpen, onSelect, onClose }: BackgroundSheetProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Stock library is Content Manager territory.
+  const { stockPhotos } = useContent();
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -85,7 +87,7 @@ export default function BackgroundSheet({ isOpen, onSelect, onClose }: Backgroun
                 Stock photos
               </h4>
               <div className="grid grid-cols-3 gap-2 pb-2">
-                {STOCK_PHOTOS.map((photo) => (
+                {stockPhotos.map((photo) => (
                   <button
                     key={photo.id}
                     onClick={() => onSelect(photo.url)}

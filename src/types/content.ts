@@ -288,4 +288,6 @@ export interface ContentBundle {
   stickers: StickerItem[];
   stockPhotos: import("../types").PhotoSource[];
   lensFilters: Record<string, string>;
+  fonts: FirestoreFont[];
+  colorPalettes: FirestoreColorPalette[];
 }

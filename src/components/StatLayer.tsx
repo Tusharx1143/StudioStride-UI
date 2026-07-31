@@ -9,6 +9,7 @@ import type {
   TemplateLayout,
 } from "../types";
 import { getStatDesign } from "../data/templateStatDesigns";
+import { useContent } from "../contexts/ContentContext";
 import { metricForSlot, resolveSlotStyle } from "../utils/metricSlots";
 import { commitDrag } from "../utils/statLayouts";
 import { computeSnap, type SnapLine } from "../utils/snapping";
@@ -63,7 +64,9 @@ export default function StatLayer({
   onGuidesChange,
   onSnap,
 }: StatLayerProps) {
-  const design = getStatDesign(templateId);
+  const { statDesigns } = useContent();
+  // Published design wins; the hardcoded table covers anything unconfigured.
+  const design = statDesigns[templateId] ?? getStatDesign(templateId);
   const slots = Object.keys(layout) as StatSlotId[];
 
   return (
