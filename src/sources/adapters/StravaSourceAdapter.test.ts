@@ -60,3 +60,27 @@ describe("toUnifiedActivity route geometry", () => {
     expect(unified.distanceMeters).toBe(8400);
   });
 });
+
+describe("toUnifiedActivity route on StatData", () => {
+  test("threads the same geometry object onto StatData", () => {
+    const unified = toUnifiedActivity(activity({ map: { summary_polyline: POLYLINE } }));
+
+    // Same object, not a second decode — one path, one source of truth.
+    expect(unified.toStatData().route).toBe(unified.route);
+  });
+
+  test("leaves StatData.route undefined when there is no route", () => {
+    // This is what gates chart slots: a treadmill run must skip the slot
+    // rather than render an empty box.
+    expect(toUnifiedActivity(activity()).toStatData().route).toBeUndefined();
+  });
+
+  test("carries the core stats alongside the route", () => {
+    const stat = toUnifiedActivity(
+      activity({ map: { summary_polyline: POLYLINE } })
+    ).toStatData();
+
+    expect(stat.title).toBe("Morning Run");
+    expect(stat.route).toBeDefined();
+  });
+});

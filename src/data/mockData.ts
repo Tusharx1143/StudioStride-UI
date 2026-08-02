@@ -856,5 +856,37 @@ export const TEMPLATE_FAMILIES: TemplateFamily[] = [
     tagline: "Retro film grain & timestamp",
     accentColor: "#D97706",
   },
+  {
+    id: "trace",
+    name: "Trace",
+    category: "Maps",
+    icon: "〰️",
+    tagline: "The route at full size, numbers out of the way",
+    accentColor: "#FFFFFF",
+  },
+  {
+    id: "tempo",
+    name: "Tempo",
+    category: "Data",
+    icon: "📶",
+    tagline: "Full-bleed splits with pace as the headline",
+    accentColor: "#F4E409",
+  },
+  {
+    id: "datanerd",
+    name: "Data Nerd",
+    category: "Data",
+    icon: "🔬",
+    tagline: "Route, splits and a metric grid — no photo",
+    accentColor: "#F4E409",
+  },
+  {
+    id: "bib",
+    name: "Bib",
+    category: "Classic",
+    icon: "🎽",
+    tagline: "Race-bib paper stock, ink-black charts",
+    accentColor: "#C2410C",
+  },
 ];
 

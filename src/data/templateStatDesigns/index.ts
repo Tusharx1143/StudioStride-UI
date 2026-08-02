@@ -1,5 +1,6 @@
 import type { TemplateStatDesign } from "../../types";
 import { BOLD_DESIGNS } from "./bold";
+import { CHART_DESIGNS } from "./chart";
 import { CLASSIC_DESIGNS } from "./classic";
 import { CLEAN_DESIGNS } from "./clean";
 import { SOCIAL_DESIGNS } from "./social";
@@ -49,6 +50,7 @@ export const TEMPLATE_STAT_DESIGNS: Record<string, TemplateStatDesign> = {
   ...CLEAN_DESIGNS,
   ...TECH_DESIGNS,
   ...SOCIAL_DESIGNS,
+  ...CHART_DESIGNS,
   default: DEFAULT_DESIGN,
 };
 

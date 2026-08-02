@@ -13,6 +13,8 @@
  */
 
 import type {
+  ChartSlotId,
+  ChartStyle,
   SlotBackground,
   SlotShadow,
   StatData,
@@ -80,11 +82,24 @@ export interface StorableSlotStyle {
  * accentRender/accentDraw are replaced by a string discriminator resolved
  * at runtime via `ACCENT_REGISTRY`.
  */
+/**
+ * Firestore-safe version of ChartStyle.
+ *
+ * Unlike slot styles and accents, this needs no resolution at all: `chart` is
+ * already the CHART_REGISTRY key and every other field is a primitive,
+ * SlotBackground or SlotShadow. It is stored and read back verbatim.
+ */
+export type StorableChartStyle = ChartStyle;
+
 export interface StorableTemplateStatDesign {
   /** Links to a template family document. */
   templateFamilyId: string;
   /** Per-slot design, keyed by text-slot id. */
   slots: Partial<Record<TextSlotId, StorableSlotStyle>>;
+  /** Chart slots this template draws, keyed by chart-slot id. */
+  charts?: Partial<Record<ChartSlotId, StorableChartStyle>>;
+  /** Chart slots without which the template is not offered to an activity. */
+  requires?: ChartSlotId[];
   /** Default x/y positions for each active slot. */
   defaultLayout: TemplateLayout;
   /** Named accent style, e.g. "lap_bars" | "trophy" | "none". */

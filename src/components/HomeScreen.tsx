@@ -108,6 +108,9 @@ export default function HomeScreen() {
         // Absent for treadmill runs, gym sessions, and Health Connect
         // activities — the editor hides the Route tool when it's missing.
         route: activity.route,
+        // Lets the editor fetch splits: the list endpoint this activity came
+        // from omits them, so chart slots need a detail call keyed by id.
+        activityId: activity.id,
       },
     });
   };

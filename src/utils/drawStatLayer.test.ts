@@ -2,7 +2,8 @@ import { describe, expect, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { drawStatLayer } from "./drawStatLayer";
 import { TEMPLATE_STAT_DESIGNS } from "../data/templateStatDesigns";
-import type { StatData } from "../types";
+import { toRouteGeometry } from "./routeGeometry";
+import type { StatData, TemplateStatDesign } from "../types";
 
 const SAMPLE: StatData = {
   distance: 5.24,
@@ -86,6 +87,96 @@ describe("drawStatLayer", () => {
 
       expect(calls.length, `${id} accent painted nothing`).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("chart slots", () => {
+  const ROUTE_DESIGN: TemplateStatDesign = {
+    slots: {},
+    charts: {
+      route: {
+        chart: "route_trace",
+        width: 100,
+        height: 100,
+        color: "#FFFFFF",
+        strokeWidth: 3,
+      },
+    },
+    requires: ["route"],
+    defaultLayout: { route: { x: 20, y: 30 } },
+  };
+
+  const WITH_ROUTE: StatData = {
+    ...SAMPLE,
+    route: toRouteGeometry([
+      [45.0, -73.6],
+      [45.1, -73.5],
+      [45.05, -73.4],
+    ])!,
+  };
+
+  test("draws a positioned chart slot", async () => {
+    const { ctx, calls } = fakeContext();
+
+    await drawStatLayer(
+      ctx,
+      { width: 390, height: 693 },
+      "__charttest",
+      { route: { x: 20, y: 30 } },
+      WITH_ROUTE,
+      ROUTE_DESIGN
+    );
+
+    expect(calls.filter((c) => c === "stroke")).toHaveLength(1);
+  });
+
+  test("skips a chart slot the activity has no data for", async () => {
+    const { ctx, calls } = fakeContext();
+
+    await drawStatLayer(
+      ctx,
+      { width: 390, height: 693 },
+      "__charttest",
+      { route: { x: 20, y: 30 } },
+      SAMPLE,
+      ROUTE_DESIGN
+    );
+
+    expect(calls.filter((c) => c === "stroke")).toEqual([]);
+  });
+
+  test("skips a chart slot naming a primitive the registry does not have", async () => {
+    const { ctx, calls } = fakeContext();
+
+    await drawStatLayer(
+      ctx,
+      { width: 390, height: 693 },
+      "__charttest",
+      { route: { x: 20, y: 30 } },
+      WITH_ROUTE,
+      {
+        ...ROUTE_DESIGN,
+        charts: { route: { ...ROUTE_DESIGN.charts!.route!, chart: "not_shipped_yet" } },
+      }
+    );
+
+    expect(calls.filter((c) => c === "stroke")).toEqual([]);
+  });
+
+  test("positions the chart at its percentage anchor", async () => {
+    const { ctx, calls } = fakeContext();
+
+    await drawStatLayer(
+      ctx,
+      { width: 390, height: 693 },
+      "__charttest",
+      { route: { x: 20, y: 30 } },
+      WITH_ROUTE,
+      ROUTE_DESIGN
+    );
+
+    // 20% of 390 and 30% of 693, handed to the entry as its box origin.
+    expect(calls.filter((c) => c === "translate")).toHaveLength(1);
   });
 });
 

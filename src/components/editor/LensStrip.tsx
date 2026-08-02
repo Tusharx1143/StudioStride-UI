@@ -12,6 +12,13 @@ interface LensStripProps {
   /** Recently used template ids, most recent first. */
   recentIds?: string[];
   onToggleFavourite?: (templateId: string) => void;
+  /**
+   * Template ids this activity cannot render — a chart template whose data is
+   * missing. Dimmed and unselectable rather than hidden: a tile that vanishes
+   * reads as a bug, where a dimmed one tells the user something true about
+   * their own activity.
+   */
+  disabledIds?: string[];
 }
 
 /**
@@ -49,6 +56,7 @@ export default function LensStrip({
   favouriteIds = [],
   recentIds = [],
   onToggleFavourite,
+  disabledIds = [],
 }: LensStripProps) {
   const ordered = orderTemplates(templates, favouriteIds, recentIds);
 
@@ -69,6 +77,7 @@ export default function LensStrip({
         {ordered.map((tmpl) => {
           const isActive = tmpl.id === selectedId;
           const isFavourite = favouriteIds.includes(tmpl.id);
+          const isDisabled = disabledIds.includes(tmpl.id);
           return (
             <motion.button
               key={tmpl.id}
@@ -76,8 +85,10 @@ export default function LensStrip({
                 hidden: { opacity: 0, y: 10, scale: 0.9 },
                 visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.25 } },
               }}
-              whileTap={{ scale: 0.92 }}
+              whileTap={isDisabled ? undefined : { scale: 0.92 }}
+              disabled={isDisabled}
               onClick={() => {
+                if (isDisabled) return;
                 onSelect(tmpl);
                 triggerHaptic("selection");
               }}
@@ -86,12 +97,22 @@ export default function LensStrip({
                 // declared in the types and never had a way to be set.
                 e.preventDefault();
                 e.stopPropagation();
+                if (isDisabled) return;
                 onToggleFavourite?.(tmpl.id);
               }}
-              className="flex flex-col items-center gap-1 shrink-0 relative w-[64px]"
-              aria-label={`${tmpl.name} template${isFavourite ? ", favourite" : ""}`}
+              className={`flex flex-col items-center gap-1 shrink-0 relative w-[64px] ${
+                isDisabled ? "opacity-35 cursor-not-allowed" : ""
+              }`}
+              aria-label={`${tmpl.name} template${isFavourite ? ", favourite" : ""}${
+                isDisabled ? ", unavailable for this activity" : ""
+              }`}
               aria-pressed={isActive}
-              title={`${tmpl.name} — double-tap to ${isFavourite ? "unfavourite" : "favourite"}`}
+              aria-disabled={isDisabled}
+              title={
+                isDisabled
+                  ? `${tmpl.name} — this activity has no route or splits data`
+                  : `${tmpl.name} — double-tap to ${isFavourite ? "unfavourite" : "favourite"}`
+              }
             >
               <div className="relative">
                 {isFavourite && (

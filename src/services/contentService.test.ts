@@ -123,3 +123,54 @@ describe("resolveStatDesign", () => {
     expect(resolved.defaultLayout).toEqual({});
   });
 });
+
+describe("resolveStatDesign with chart slots", () => {
+  const stored: StorableTemplateStatDesign = {
+    templateFamilyId: "trace",
+    slots: {},
+    charts: {
+      route: {
+        chart: "route_trace",
+        width: 250,
+        height: 250,
+        color: "#FFFFFF",
+        trackColor: "rgba(0,0,0,0.5)",
+        strokeWidth: 2.5,
+        options: { fit: "contain", casing: true },
+      },
+    },
+    requires: ["route"],
+    defaultLayout: { route: { x: 18, y: 26 } },
+    accentType: "none",
+  };
+
+  test("carries charts through unchanged", () => {
+    // No resolution step: a chart style holds no functions, so unlike slot
+    // formatters and accents it round-trips verbatim.
+    expect(resolveStatDesign(stored).charts?.route).toEqual(stored.charts!.route);
+  });
+
+  test("carries requires through unchanged", () => {
+    expect(resolveStatDesign(stored).requires).toEqual(["route"]);
+  });
+
+  test("preserves chart options rather than flattening them", () => {
+    const options = resolveStatDesign(stored).charts?.route?.options;
+
+    expect(options?.casing).toBe(true);
+    expect(options?.fit).toBe("contain");
+  });
+
+  test("a design without charts resolves to undefined, not an empty object", () => {
+    const plain: StorableTemplateStatDesign = {
+      templateFamilyId: "hero",
+      slots: {},
+      defaultLayout: {},
+      accentType: "none",
+    };
+    const resolved = resolveStatDesign(plain);
+
+    expect(resolved.charts).toBeUndefined();
+    expect(resolved.requires).toBeUndefined();
+  });
+});

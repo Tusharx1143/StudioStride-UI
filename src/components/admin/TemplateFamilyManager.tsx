@@ -13,7 +13,14 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef, type FormEvent } from "react";
-import type { TemplateFamily, TextSlotId, StatData, SlotPosition } from "../../types";
+import type {
+  ChartSlotId,
+  ChartStyle,
+  TemplateFamily,
+  TextSlotId,
+  StatData,
+  SlotPosition,
+} from "../../types";
 import type {
   TemplateFamilyFormData,
   StorableSlotStyle,
@@ -32,6 +39,13 @@ import {
 } from "../../services/contentService";
 import { FORMATTER_OPTIONS } from "../../data/formatterRegistry";
 import { ACCENT_OPTIONS } from "../../data/accentRegistry";
+import {
+  CHART_OPTIONS,
+  CHART_SLOTS_FOR,
+  defaultChartStyle,
+  isDecorativeSlot,
+} from "../../data/chartRegistry";
+import { toRouteGeometry } from "../../utils/routeGeometry";
 import { BUILT_IN_FONTS } from "../../data/builtInFonts";
 import StatLayer from "../StatLayer";
 import ContentListCard from "./shared/ContentListCard";
@@ -51,13 +65,52 @@ const FALLBACK_POS: Record<TextSlotId, SlotPosition> = {
   title: { x: 6, y: 86 },
 };
 
-/** Stand-in activity, so the preview reads like a real card. */
+/** Where a chart lands when it is first added — clear of the stat block. */
+const FALLBACK_CHART_POS: Record<ChartSlotId, SlotPosition> = {
+  route: { x: 22, y: 20 },
+  splits: { x: 6, y: 40 },
+  ruleTop: { x: 8, y: 20 },
+  ruleBottom: { x: 8, y: 74 },
+};
+
+/**
+ * A colour an `<input type="color">` will accept.
+ *
+ * Chart colours are often authored as rgba — a translucent bar track is the
+ * normal case — and the native picker only takes 6-digit hex, so anything else
+ * falls back rather than silently resetting the field to black.
+ */
+function hexOf(color: string): string {
+  return /^#[0-9a-f]{6}$/i.test(color) ? color : "#ffffff";
+}
+
+/**
+ * Stand-in activity, so the preview reads like a real card.
+ *
+ * Carries a route and splits as well as the core stats — without them a chart
+ * slot's `available` returns false and the admin authors against a blank box.
+ */
 const SAMPLE: StatData = {
   distance: 8.42,
   distanceUnit: "km",
   pace: "6:12",
   time: "52:18",
   title: "Morning Run",
+  route: toRouteGeometry([
+    [45.0, -73.6],
+    [45.04, -73.52],
+    [45.09, -73.48],
+    [45.07, -73.41],
+    [45.02, -73.44],
+    [44.98, -73.53],
+    [45.0, -73.6],
+  ]) ?? undefined,
+  splits: [372, 366, 381, 358, 370, 349, 377, 362].map((pace, i) => ({
+    index: i + 1,
+    distanceMeters: 1000,
+    elapsed: pace,
+    paceSecondsPerKm: pace,
+  })),
 };
 
 const emptyFamily = (): TemplateFamilyFormData => ({
@@ -160,6 +213,83 @@ export default function TemplateFamilyManager() {
     }));
   };
 
+  /**
+   * Adds a chart into the first free slot its primitive accepts.
+   *
+   * Most primitives have exactly one; a rule has two, so a template can carry
+   * both a top and a bottom perforation.
+   */
+  const addChart = (chart: string) => {
+    const candidates = CHART_SLOTS_FOR[chart] ?? [];
+    const slot = candidates.find((s) => !design.charts?.[s]) ?? candidates[0];
+    if (!slot) return;
+
+    setDesign((prev) => ({
+      ...prev,
+      charts: { ...prev.charts, [slot]: defaultChartStyle(chart, form.accentColor) },
+      defaultLayout: {
+        ...prev.defaultLayout,
+        [slot]: prev.defaultLayout[slot] ?? FALLBACK_CHART_POS[slot],
+      },
+    }));
+  };
+
+  const updateChart = (slot: ChartSlotId, updates: Partial<ChartStyle>) => {
+    setDesign((prev) => {
+      const current = prev.charts?.[slot];
+      if (!current) return prev;
+      return { ...prev, charts: { ...prev.charts, [slot]: { ...current, ...updates } } };
+    });
+  };
+
+  const updateChartOption = (
+    slot: ChartSlotId,
+    key: string,
+    value: string | number | boolean
+  ) => {
+    setDesign((prev) => {
+      const current = prev.charts?.[slot];
+      if (!current) return prev;
+      return {
+        ...prev,
+        charts: {
+          ...prev.charts,
+          [slot]: { ...current, options: { ...current.options, [key]: value } },
+        },
+      };
+    });
+  };
+
+  /** Drops the chart, its position, and any requirement that named it. */
+  const removeChart = (slot: ChartSlotId) => {
+    setDesign((prev) => {
+      const charts = { ...prev.charts };
+      delete charts[slot];
+      const defaultLayout = { ...prev.defaultLayout };
+      delete defaultLayout[slot];
+      return {
+        ...prev,
+        charts,
+        defaultLayout,
+        requires: (prev.requires ?? []).filter((s) => s !== slot),
+      };
+    });
+  };
+
+  const toggleRequires = (slot: ChartSlotId, required: boolean) => {
+    setDesign((prev) => {
+      const current = prev.requires ?? [];
+      return {
+        ...prev,
+        requires: required
+          ? current.includes(slot)
+            ? current
+            : [...current, slot]
+          : current.filter((s) => s !== slot),
+      };
+    });
+  };
+
   const toggleSlot = (slot: TextSlotId) => {
     setDesign((prev) => {
       const slots = { ...prev.slots };
@@ -196,8 +326,12 @@ export default function TemplateFamilyManager() {
       const familyId = editingId ?? (await createTemplateFamily(form)).id;
       if (editingId) await updateTemplateFamily(editingId, form);
 
-      const hasSlots = Object.keys(design.slots).length > 0;
-      if (hasSlots) {
+      // A chart-only design has no text slots at all, so gating the save on
+      // slots alone would silently discard it.
+      const hasContent =
+        Object.keys(design.slots).length > 0 ||
+        Object.keys(design.charts ?? {}).length > 0;
+      if (hasContent) {
         const payload = {
           ...design,
           templateFamilyId: familyId,
@@ -430,6 +564,103 @@ export default function TemplateFamilyManager() {
                       <select value={design.accentType} onChange={(e) => setDesign({ ...design, accentType: e.target.value })} className="w-full px-2 py-1.5 rounded-lg bg-surface border hairline-border text-white text-xs">
                         {ACCENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
+                    </div>
+
+                    {/* Chart slots — a template that draws a series, not just type. */}
+                    <div className="pt-2 border-t hairline-border">
+                      <label className="text-[10px] text-white/40 block mb-1">Chart slot</label>
+                      <select
+                        value=""
+                        onChange={(e) => e.target.value && addChart(e.target.value)}
+                        className="w-full px-2 py-1.5 rounded-lg bg-surface border hairline-border text-white text-xs"
+                      >
+                        <option value="">Add a chart…</option>
+                        {CHART_OPTIONS.filter((o) => o.value !== "none").map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+
+                      {(Object.keys(design.charts ?? {}) as ChartSlotId[]).map((slot) => {
+                        const chart = design.charts![slot]!;
+                        const isRoute = slot === "route";
+                        const isRule = isDecorativeSlot(slot);
+                        return (
+                          <div key={slot} className="mt-2 p-2 rounded-lg bg-surface border hairline-border">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-[11px] text-white/80 font-medium">
+                                {CHART_OPTIONS.find((o) => o.value === chart.chart)?.label ?? chart.chart}
+                              </span>
+                              <button type="button" onClick={() => removeChart(slot)} className="text-white/40 hover:text-white text-[10px]">Remove</button>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <label className="text-[10px] text-white/40">Width
+                                <input type="number" value={chart.width} onChange={(e) => updateChart(slot, { width: Number(e.target.value) })} className="w-full mt-0.5 px-2 py-1 rounded bg-surface-raised border hairline-border text-white text-xs" />
+                              </label>
+                              <label className="text-[10px] text-white/40">Height
+                                <input type="number" value={chart.height} onChange={(e) => updateChart(slot, { height: Number(e.target.value) })} className="w-full mt-0.5 px-2 py-1 rounded bg-surface-raised border hairline-border text-white text-xs" />
+                              </label>
+                              <label className="text-[10px] text-white/40">Colour
+                                <input type="color" value={hexOf(chart.color)} onChange={(e) => updateChart(slot, { color: e.target.value })} className="w-full mt-0.5 h-7 rounded bg-surface-raised border hairline-border" />
+                              </label>
+                              <label className="text-[10px] text-white/40">Accent
+                                <input type="color" value={hexOf(chart.accentColor ?? chart.color)} onChange={(e) => updateChart(slot, { accentColor: e.target.value })} className="w-full mt-0.5 h-7 rounded bg-surface-raised border hairline-border" />
+                              </label>
+                            </div>
+
+                            {isRule ? (
+                              <div className="mt-2 grid grid-cols-2 gap-2">
+                                <label className="text-[10px] text-white/40">Thickness
+                                  <input type="number" step="0.5" value={chart.strokeWidth ?? 1} onChange={(e) => updateChart(slot, { strokeWidth: Number(e.target.value) })} className="w-full mt-0.5 px-2 py-1 rounded bg-surface-raised border hairline-border text-white text-xs" />
+                                </label>
+                                <label className="text-[10px] text-white/40">Dash (0 = solid)
+                                  <input type="number" value={Number(chart.options?.dash ?? 0)} onChange={(e) => updateChartOption(slot, "dash", Number(e.target.value))} className="w-full mt-0.5 px-2 py-1 rounded bg-surface-raised border hairline-border text-white text-xs" />
+                                </label>
+                                <label className="text-[10px] text-white/40">Gap
+                                  <input type="number" value={Number(chart.options?.gap ?? chart.options?.dash ?? 0)} onChange={(e) => updateChartOption(slot, "gap", Number(e.target.value))} className="w-full mt-0.5 px-2 py-1 rounded bg-surface-raised border hairline-border text-white text-xs" />
+                                </label>
+                              </div>
+                            ) : isRoute ? (
+                              <div className="mt-2 space-y-1">
+                                <label className="text-[10px] text-white/40 block">Stroke width
+                                  <input type="number" step="0.5" value={chart.strokeWidth ?? 3} onChange={(e) => updateChart(slot, { strokeWidth: Number(e.target.value) })} className="w-full mt-0.5 px-2 py-1 rounded bg-surface-raised border hairline-border text-white text-xs" />
+                                </label>
+                                <label className="flex items-center gap-2 text-[10px] text-white/60 cursor-pointer">
+                                  <input type="checkbox" checked={chart.options?.casing === true} onChange={(e) => updateChartOption(slot, "casing", e.target.checked)} className="rounded border-white/20 bg-surface" />
+                                  Casing (dark stroke beneath — keeps it legible on a bright photo)
+                                </label>
+                                <label className="flex items-center gap-2 text-[10px] text-white/60 cursor-pointer">
+                                  <input type="checkbox" checked={chart.options?.showStartDot === true} onChange={(e) => updateChartOption(slot, "showStartDot", e.target.checked)} className="rounded border-white/20 bg-surface" />
+                                  Start dot
+                                </label>
+                                <label className="flex items-center gap-2 text-[10px] text-white/60 cursor-pointer">
+                                  <input type="checkbox" checked={chart.options?.showEndDot === true} onChange={(e) => updateChartOption(slot, "showEndDot", e.target.checked)} className="rounded border-white/20 bg-surface" />
+                                  End dot
+                                </label>
+                              </div>
+                            ) : (
+                              <div className="mt-2 space-y-1">
+                                <label className="text-[10px] text-white/40 block">Max bars
+                                  <input type="number" value={Number(chart.options?.maxBars ?? 12)} onChange={(e) => updateChartOption(slot, "maxBars", Number(e.target.value))} className="w-full mt-0.5 px-2 py-1 rounded bg-surface-raised border hairline-border text-white text-xs" />
+                                </label>
+                                <label className="flex items-center gap-2 text-[10px] text-white/60 cursor-pointer">
+                                  <input type="checkbox" checked={chart.options?.highlightFastest === true} onChange={(e) => updateChartOption(slot, "highlightFastest", e.target.checked)} className="rounded border-white/20 bg-surface" />
+                                  Highlight the fastest split
+                                </label>
+                              </div>
+                            )}
+
+                            {/* Decoration draws from its own style, so gating
+                                the template on it would disable it forever. */}
+                            {isRule ? null : (
+                              <label className="flex items-center gap-2 mt-2 pt-2 border-t hairline-border text-[10px] text-white/60 cursor-pointer">
+                                <input type="checkbox" checked={(design.requires ?? []).includes(slot)} onChange={(e) => toggleRequires(slot, e.target.checked)} className="rounded border-white/20 bg-surface" />
+                                Required — hide this template when the activity has no {slot}
+                              </label>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </>
                 )}

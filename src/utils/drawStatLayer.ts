@@ -7,6 +7,7 @@ import type {
   TemplateStatDesign,
 } from "../types";
 import { getStatDesign } from "../data/templateStatDesigns";
+import { getChartEntry, isChartSlot } from "../data/chartRegistry";
 import { applySlotOverride, resolveSlotStyle } from "./metricSlots";
 import { roundRectPath } from "../data/templateStatDesigns/shared";
 
@@ -50,6 +51,21 @@ export async function drawStatLayer(
       if (!design.accentDraw) continue;
       ctx.save();
       design.accentDraw(ctx, { x: originX, y: originY, scale }, data);
+      ctx.restore();
+      continue;
+    }
+
+    // Chart slots paint a series rather than typesetting a value. `available`
+    // gates them, so an activity without the data skips the slot instead of
+    // leaving an empty box — the same rule metric slots follow below.
+    if (isChartSlot(slot)) {
+      const chartStyle = design.charts?.[slot];
+      if (!chartStyle) continue;
+      const entry = getChartEntry(chartStyle.chart);
+      if (!entry || !entry.available(data)) continue;
+
+      ctx.save();
+      entry.draw(ctx, { x: originX, y: originY, scale }, data, chartStyle);
       ctx.restore();
       continue;
     }

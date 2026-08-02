@@ -55,6 +55,7 @@ import type {
   EditorDoc,
   EditorDraft,
   EditorSnapshot,
+  SplitSample,
   StatData,
   StatSlotId,
   StatSlotOverrides,
@@ -111,6 +112,10 @@ import {
   saveCustomLayouts,
   storeCustomLayout,
 } from "../utils/statLayouts";
+import { promoteRouteSlot } from "../utils/routePromotion";
+import { getStatDesign } from "../data/templateStatDesigns";
+import { fetchSplits } from "../services/splitsTransform";
+import { unavailableTemplateIds } from "../utils/templateAvailability";
 import BackgroundSheet from "./editor/BackgroundSheet";
 import CameraCaptureOverlay from "./editor/CameraCaptureOverlay";
 import LensStrip from "./editor/LensStrip";
@@ -355,6 +360,41 @@ export default function EditorScreen() {
   };
 
   const handleStatLayoutChange = (next: TemplateLayout) => {
+    // A dragged route slot becomes a real overlay. The template seeds the
+    // position; the moment the user moves it, the overlay owns it — the same
+    // template-default-versus-user-override split custom layouts already use.
+    // Promoting drops the slot, so the two can never draw at once.
+    const routeMoved =
+      next.route &&
+      statLayout.route &&
+      (next.route.x !== statLayout.route.x || next.route.y !== statLayout.route.y);
+
+    if (routeMoved && !routeOverlay && routeGeometry) {
+      const chartStyle = (statDesigns[templateId] ?? getStatDesign(templateId)).charts
+        ?.route;
+      const canvasEl = canvasRef.current;
+
+      if (chartStyle && canvasEl) {
+        pushHistorySnapshot();
+        setRouteOverlay(
+          promoteRouteSlot({
+            geometry: routeGeometry,
+            style: chartStyle,
+            pos: next.route!,
+            canvas: { width: canvasEl.clientWidth, height: canvasEl.clientHeight },
+          })
+        );
+
+        const { route: _promoted, ...withoutRoute } = { ...statLayout, ...next };
+        const promoted = withoutRoute as TemplateLayout;
+        setStatLayout(promoted);
+        const stored = storeCustomLayout(customLayouts, templateId, promoted);
+        saveCustomLayouts(stored);
+        setCustomLayouts(stored);
+        return;
+      }
+    }
+
     // `next` carries only the visible slots, so fold it onto the full layout —
     // otherwise dragging one stat would drop every hidden one.
     const resolved: TemplateLayout = { ...statLayout, ...next };
@@ -468,6 +508,60 @@ export default function EditorScreen() {
     (routeState.routeOverlay as RouteOverlay | undefined) ?? null
   );
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+
+  /**
+   * Splits for chart slots, fetched lazily.
+   *
+   * The activity list endpoint omits `splits_metric`, so these need a detail
+   * call. Non-blocking: the editor renders immediately and the bars appear
+   * when the response lands. A failure leaves them undefined, which the chart
+   * registry's `available` already treats as "skip this slot".
+   */
+  const [splits, setSplits] = useState<SplitSample[] | undefined>(
+    (routeState.splits as SplitSample[] | undefined) ?? undefined
+  );
+
+  useEffect(() => {
+    const raw = (routeState.activityId as string | undefined) ?? "";
+    const stravaId = Number(raw.replace(/^strava_/, ""));
+    if (!Number.isFinite(stravaId) || stravaId <= 0) return;
+
+    let cancelled = false;
+    fetchSplits(stravaId).then((result) => {
+      if (!cancelled && result) setSplits(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeState.activityId]);
+
+  /**
+   * The stats plus the series a chart slot needs.
+   *
+   * `statData` stays the persisted record — a reopened project restores the
+   * numbers frozen into its document. Route and splits are layered on top for
+   * rendering only, so a saved project never carries a stale series.
+   */
+  const chartStatData: StatData = React.useMemo(
+    () => ({
+      ...statData,
+      ...(routeGeometry ? { route: routeGeometry } : {}),
+      ...(splits ? { splits } : {}),
+    }),
+    [statData, routeGeometry, splits]
+  );
+
+  /**
+   * Chart templates this activity cannot fill.
+   *
+   * Presentational only — an already-applied template is never swapped out
+   * from under a saved project, it just cannot be re-picked from the strip.
+   */
+  const unavailableIds = React.useMemo(
+    () => unavailableTemplateIds(chartStatData, statDesigns),
+    [chartStatData, statDesigns]
+  );
 
   // Sticker Picker Modal state
   const [isStickerModalOpen, setIsStickerModalOpen] = useState<boolean>(false);
@@ -1739,7 +1833,7 @@ export default function EditorScreen() {
         {/* DRAGGABLE TEMPLATE STATS — sit under user-added text overlays */}
         <StatLayer
           templateId={templateId}
-          data={statData}
+          data={chartStatData}
           layout={visibleStatLayout}
           onLayoutChange={handleStatLayoutChange}
           constraintsRef={canvasRef}
@@ -3555,6 +3649,7 @@ export default function EditorScreen() {
           favouriteIds={brandKit.favouriteTemplates}
           recentIds={brandKit.recentTemplates}
           onToggleFavourite={handleToggleFavouriteTemplate}
+          disabledIds={unavailableIds}
         />
 
         <motion.div
@@ -3646,7 +3741,7 @@ export default function EditorScreen() {
         templateId={templateId}
         statLayout={statLayout}
         statSlotOverrides={statSlotOverrides}
-        statData={statData}
+        statData={chartStatData}
       />
 
       {/* 7. LENS FILTER PICKER BOTTOM SHEET */}

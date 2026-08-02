@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { TEMPLATE_STAT_DESIGNS, getStatDesign } from "./index";
 import { TEMPLATE_FAMILIES } from "../mockData";
-import type { StatData, StatSlotId, TextSlotId } from "../../types";
+import { getChartEntry, isChartSlot } from "../chartRegistry";
+import type { ChartSlotId, StatData, StatSlotId, TextSlotId } from "../../types";
 
 const SAMPLE: StatData = {
   distance: 5.24,
@@ -31,8 +32,59 @@ describe("design table coverage", () => {
   test("every positioned text slot has a matching style", () => {
     for (const [id, design] of Object.entries(TEMPLATE_STAT_DESIGNS)) {
       for (const slot of Object.keys(design.defaultLayout) as StatSlotId[]) {
-        if (slot === "accent") continue;
+        if (slot === "accent" || isChartSlot(slot)) continue;
         expect(design.slots[slot], `${id}.${slot} positioned without a style`).toBeDefined();
+      }
+    }
+  });
+
+  test("every positioned chart slot has a style and a known registry entry", () => {
+    for (const [id, design] of Object.entries(TEMPLATE_STAT_DESIGNS)) {
+      for (const slot of Object.keys(design.defaultLayout) as StatSlotId[]) {
+        if (!isChartSlot(slot)) continue;
+        const style = design.charts?.[slot];
+        expect(style, `${id}.${slot} positioned without a chart style`).toBeDefined();
+        expect(
+          getChartEntry(style!.chart),
+          `${id}.${slot} names unknown chart "${style!.chart}"`
+        ).not.toBeNull();
+      }
+    }
+  });
+
+  test("every styled chart slot has a position in the default layout", () => {
+    for (const [id, design] of Object.entries(TEMPLATE_STAT_DESIGNS)) {
+      for (const slot of Object.keys(design.charts ?? {}) as ChartSlotId[]) {
+        expect(
+          design.defaultLayout[slot],
+          `${id}.${slot} styled but unpositioned`
+        ).toBeDefined();
+      }
+    }
+  });
+
+  test("every required chart slot is one the template actually draws", () => {
+    for (const [id, design] of Object.entries(TEMPLATE_STAT_DESIGNS)) {
+      for (const slot of design.requires ?? []) {
+        expect(
+          design.charts?.[slot],
+          `${id} requires "${slot}" but never draws it`
+        ).toBeDefined();
+      }
+    }
+  });
+
+  test("no template gates itself on decoration", () => {
+    // A rule draws from its own style, so requiring one would disable the
+    // template forever while looking like a data requirement.
+    for (const [id, design] of Object.entries(TEMPLATE_STAT_DESIGNS)) {
+      for (const slot of design.requires ?? []) {
+        const style = design.charts?.[slot];
+        if (!style) continue;
+        expect(
+          getChartEntry(style.chart)?.decorative ?? false,
+          `${id} requires decorative slot "${slot}"`
+        ).toBe(false);
       }
     }
   });

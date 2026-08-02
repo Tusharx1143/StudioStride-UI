@@ -107,7 +107,10 @@ export function toUnifiedActivity(a: StravaActivity): UnifiedActivity {
     distanceMeters: a.distance,
     movingTime: a.moving_time || a.elapsed_time,
     ...(route ? { route } : {}),
-    toStatData: () => statData,
+    // Chart slots read `route` off StatData. Threaded from the geometry the
+    // adapter already decoded rather than decoded a second time inside
+    // activityToStatData — one decode, one source of truth for the path.
+    toStatData: () => (route ? { ...statData, route } : statData),
   };
 }
 

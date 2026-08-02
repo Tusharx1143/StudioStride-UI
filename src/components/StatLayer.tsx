@@ -11,6 +11,7 @@ import type {
   TemplateStatDesign,
 } from "../types";
 import { getStatDesign } from "../data/templateStatDesigns";
+import { getChartEntry, isChartSlot } from "../data/chartRegistry";
 import { useContent } from "../contexts/ContentContext";
 import { applySlotOverride, metricForSlot, resolveSlotStyle } from "../utils/metricSlots";
 import { commitDrag } from "../utils/statLayouts";
@@ -22,6 +23,8 @@ const CORE_SLOT_LABELS: Record<string, string> = {
   pace: "Pace",
   time: "Time",
   title: "Activity title",
+  route: "Route trace",
+  splits: "Splits chart",
 };
 
 /** Spoken name for a slot, so a screen reader announces more than "button". */
@@ -112,6 +115,47 @@ export default function StatLayer({
               onSnap={onSnap}
             >
               {design.accentRender(data)}
+            </StatChip>
+          );
+        }
+
+        // Chart slots draw a series. Shared with drawStatLayer: `available`
+        // gates them, so an activity missing the data skips the slot rather
+        // than leaving an empty box on the photo.
+        if (isChartSlot(slot)) {
+          const chartStyle = design.charts?.[slot];
+          if (!chartStyle) return null;
+          const entry = getChartEntry(chartStyle.chart);
+          if (!entry || !entry.available(data)) return null;
+
+          return (
+            <StatChip
+              key={slot}
+              slot={slot}
+              label={slotLabel(slot, data)}
+              pos={pos}
+              layout={layout}
+              onLayoutChange={onLayoutChange}
+              constraintsRef={constraintsRef}
+              interactive={interactive}
+              isSelected={selectedSlot === slot}
+              onSelectSlot={onSelectSlot}
+              onDragStart={onDragStart}
+              onGuidesChange={onGuidesChange}
+              onSnap={onSnap}
+            >
+              <div
+                style={{
+                  width: cqw(chartStyle.width),
+                  height: cqw(chartStyle.height),
+                  opacity: chartStyle.opacity ?? 1,
+                  transform: chartStyle.rotation
+                    ? `rotate(${chartStyle.rotation}deg)`
+                    : undefined,
+                }}
+              >
+                {entry.render(data, chartStyle)}
+              </div>
             </StatChip>
           );
         }

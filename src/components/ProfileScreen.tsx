@@ -218,6 +218,9 @@ export default function ProfileScreen() {
                         distance: `${statData.distance} ${statData.distanceUnit}`,
                         pace: `${statData.pace} ${paceSuffix(distanceUnit)}`,
                         time: statData.time,
+                        route: item.route,
+                        // Chart slots fetch splits by activity id.
+                        activityId: item.id,
                       },
                     });
                   }}

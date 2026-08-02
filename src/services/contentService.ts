@@ -166,6 +166,10 @@ export function resolveStatDesign(
 
   return {
     slots,
+    // No resolution step: a chart style holds no functions, so it round-trips
+    // verbatim — `chart` is already the CHART_REGISTRY key.
+    charts: stored.charts,
+    requires: stored.requires,
     defaultLayout: stored.defaultLayout,
     accentRender,
     accentDraw,
@@ -249,10 +253,12 @@ export async function getStatDesigns(): Promise<
   const raw = await statDesignRepo.getActive();
   const result: Record<string, TemplateStatDesign> = {};
   for (const doc of raw) {
-    const { templateFamilyId, slots, defaultLayout, accentType } = doc;
+    const { templateFamilyId, slots, charts, requires, defaultLayout, accentType } = doc;
     result[templateFamilyId] = resolveStatDesign({
       templateFamilyId,
       slots,
+      charts,
+      requires,
       defaultLayout,
       accentType: accentType ?? "none",
     });
@@ -290,6 +296,10 @@ export async function getStatDesignDocs(): Promise<
     result[doc.templateFamilyId] = {
       templateFamilyId: doc.templateFamilyId,
       slots: doc.slots ?? {},
+      // Carried through for the same reason the slots are: re-saving a design
+      // in the admin must not silently wipe fields the form did not load.
+      charts: doc.charts,
+      requires: doc.requires,
       defaultLayout: doc.defaultLayout ?? {},
       accentType: doc.accentType ?? "none",
     };

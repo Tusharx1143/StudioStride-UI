@@ -25,8 +25,21 @@ export type CoreSlotId = TextSlotId | "accent";
  */
 export type MetricSlotId = `metric:${string}`;
 
+/**
+ * Slots that draw rather than typeset.
+ *
+ * Mostly data — splits, the route — but `ruleTop` and `ruleBottom` are plain
+ * furniture, drawn from nothing but their own style. They earn a slot rather
+ * than an accent because a template needs two of them at independent
+ * positions, and an accent is one anchor that cannot see the canvas height.
+ *
+ * Closed, like `TextSlotId`: each needs a hand-written renderer and its canvas
+ * twin, so the set is bounded by what the registry implements.
+ */
+export type ChartSlotId = "splits" | "route" | "ruleTop" | "ruleBottom";
+
 /** The fixed set of draggable pieces every template decomposes into. */
-export type StatSlotId = CoreSlotId | MetricSlotId;
+export type StatSlotId = CoreSlotId | MetricSlotId | ChartSlotId;
 
 /** Position of a slot's top-left anchor, as a percentage of the canvas. */
 export interface SlotPosition {
@@ -76,6 +89,31 @@ export interface StatData {
    * the metric picker, so it never offers a stat that would render blank.
    */
   metrics?: Record<string, MetricValue>;
+  /**
+   * Per-unit splits, present only when the source supplied them.
+   *
+   * A treadmill run or a Health Connect walk has none, which is what gates
+   * chart slots — the same rule `metrics` above follows.
+   */
+  splits?: SplitSample[];
+  /** Normalized route path, present only when the activity recorded GPS. */
+  route?: RouteGeometry;
+}
+
+/**
+ * One split from an activity.
+ *
+ * Stored metric regardless of the athlete's unit preference — Strava's
+ * `splits_metric` is always metric, and `src/utils/units.ts` owns conversion
+ * at display time. Bar heights are ratios, so they read the same either way.
+ */
+export interface SplitSample {
+  /** 1-based split number. */
+  index: number;
+  distanceMeters: number;
+  /** Elapsed seconds for this split. */
+  elapsed: number;
+  paceSecondsPerKm: number;
 }
 
 export interface SlotBackground {
@@ -118,6 +156,31 @@ export interface SlotStyle {
   shadow?: SlotShadow;
 }
 
+/**
+ * A chart slot's look.
+ *
+ * `width` and `height` are authored against the same 390px reference width as
+ * `SlotStyle.fontSize`, so one table drives the viewfinder and the export.
+ */
+export interface ChartStyle {
+  /** Registry key naming the primitive to draw, e.g. "route_trace". */
+  chart: string;
+  width: number;
+  height: number;
+  color: string;
+  /** Bar track, route casing — the stroke drawn beneath the main one. */
+  trackColor?: string;
+  /** Emphasis colour, e.g. the fastest split. Falls back to `color`. */
+  accentColor?: string;
+  strokeWidth?: number;
+  opacity?: number;
+  rotation?: number;
+  bg?: SlotBackground;
+  shadow?: SlotShadow;
+  /** Chart-specific knobs. Each registry entry documents the keys it reads. */
+  options?: Record<string, string | number | boolean>;
+}
+
 /** Pixel origin and font scale handed to a template's accent painter. */
 export interface SlotBox {
   x: number;
@@ -127,6 +190,16 @@ export interface SlotBox {
 
 export interface TemplateStatDesign {
   slots: Partial<Record<TextSlotId, SlotStyle>>;
+  /** Chart slots this template draws. */
+  charts?: Partial<Record<ChartSlotId, ChartStyle>>;
+  /**
+   * Chart slots without which this template is not worth offering.
+   *
+   * Slot-level availability is not enough: a template whose whole composition
+   * *is* a chart would render as an empty box, and its text slots resolving
+   * says nothing about that. Absent or empty means it always renders.
+   */
+  requires?: ChartSlotId[];
   defaultLayout: TemplateLayout;
   /** Non-textual decoration (rings, bars, quote marks) rendered in the DOM. */
   accentRender?: (d: StatData) => ReactNode;
@@ -419,6 +492,14 @@ export interface StravaGear {
   distance: number;
 }
 
+/** One entry of a detailed activity's `splits_metric` array. */
+export interface StravaSplit {
+  distance: number; // meters
+  elapsed_time: number; // seconds
+  moving_time: number; // seconds
+  split: number; // 1-based
+}
+
 /** Summary activity from GET /athlete/activities */
 export interface StravaActivity {
   id: number;
@@ -436,6 +517,13 @@ export interface StravaActivity {
   has_heartrate: boolean;
   suffer_score?: number;
   map?: { summary_polyline?: string };
+  /**
+   * Per-kilometre splits, always metric regardless of athlete preference.
+   *
+   * Returned by GET /activities/{id} only — the list endpoint omits it, which
+   * is why splits need a detail fetch rather than coming free with the feed.
+   */
+  splits_metric?: StravaSplit[];
   total_elevation_gain?: number;
   calories?: number;
   kudos_count: number;
